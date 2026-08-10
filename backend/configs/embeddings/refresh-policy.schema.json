@@ -1,0 +1,93 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://astloom.local/schemas/embedding-refresh-policy.schema.json",
+  "title": "Astloom Embedding Refresh Policy",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "policy_id",
+    "version",
+    "owner",
+    "status",
+    "default_model",
+    "default_dims",
+    "skip_when_model_unchanged",
+    "states",
+    "tenant_isolation",
+    "sor",
+    "replica_sync"
+  ],
+  "properties": {
+    "policy_id": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "^[a-z][a-z0-9_-]*$"
+    },
+    "version": { "type": "integer", "minimum": 1 },
+    "title": { "type": "string" },
+    "owner": { "type": "string", "minLength": 1 },
+    "status": {
+      "type": "string",
+      "enum": ["draft", "active", "retired"]
+    },
+    "default_model": { "type": "string", "minLength": 1 },
+    "default_dims": { "type": "integer", "minimum": 1 },
+    "skip_when_model_unchanged": { "type": "boolean" },
+    "batch_size": { "type": "integer", "minimum": 1 },
+    "states": {
+      "type": "array",
+      "minItems": 4,
+      "uniqueItems": true,
+      "items": {
+        "type": "string",
+        "enum": ["pending", "running", "failed", "complete"]
+      }
+    },
+    "tenant_isolation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["scope_keys", "cross_tenant_forbidden"],
+      "properties": {
+        "scope_keys": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "type": "string", "minLength": 1 }
+        },
+        "cross_tenant_forbidden": { "type": "boolean" }
+      }
+    },
+    "sor": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["store", "vector_type"],
+      "properties": {
+        "store": { "type": "string", "const": "postgresql+pgvector" },
+        "vector_type": { "type": "string", "pattern": "^vector\\([0-9]+\\)$" },
+        "code_graph_table": { "type": "string" },
+        "memory_table": { "type": "string" }
+      }
+    },
+    "replica_sync": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["after_sor_write", "accelerator"],
+      "properties": {
+        "after_sor_write": { "type": "boolean" },
+        "accelerator": {
+          "type": "string",
+          "enum": ["off", "turbovec"]
+        },
+        "fail_open": { "type": "boolean" }
+      }
+    },
+    "regenerate_triggers": {
+      "type": "array",
+      "items": { "type": "string", "minLength": 1 }
+    },
+    "model_change_policy": {
+      "type": "string",
+      "enum": ["scoped_reembed", "wipe_and_rebuild", "manual"]
+    },
+    "change_reason": { "type": "string" }
+  }
+}

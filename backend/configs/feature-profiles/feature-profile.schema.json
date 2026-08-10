@@ -1,0 +1,43 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://astloom.local/schemas/feature-profile.schema.json",
+  "title": "Astloom FeatureProfile",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["profile_id", "version", "title", "features"],
+  "properties": {
+    "profile_id": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "^[a-z][a-z0-9_-]*$"
+    },
+    "version": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+([.-][A-Za-z0-9.-]+)?$"
+    },
+    "title": { "type": "string", "minLength": 1 },
+    "description": { "type": "string" },
+    "features": {
+      "type": "object",
+      "minProperties": 1,
+      "additionalProperties": {
+        "oneOf": [
+          { "type": "boolean" },
+          {
+            "type": "string",
+            "enum": [
+              "enabled",
+              "disabled",
+              "hidden",
+              "read_only",
+              "approval_required",
+              "shadow_mode",
+              "admin_only"
+            ]
+          }
+        ]
+      }
+    }
+  }
+}

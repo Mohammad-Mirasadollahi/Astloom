@@ -1,0 +1,61 @@
+============================= test session starts ==============================
+platform linux -- Python 3.12.3, pytest-9.1.1, pluggy-1.6.0 -- /opt/Astloom/.venv/bin/python
+cachedir: .pytest_cache
+rootdir: /opt/Astloom
+configfile: pyproject.toml
+plugins: timeout-2.4.0, anyio-4.14.1
+collecting ... collected 50 items
+
+tests/backend/services/code-graph-service/test_production_retrieval_challenge_live.py::test_chal_live_hybrid_adversarial[hyb0] PASSED [  2%]
+tests/backend/services/code-graph-service/test_production_retrieval_challenge_live.py::test_chal_live_hybrid_adversarial[hyb1] PASSED [  4%]
+tests/backend/services/code-graph-service/test_production_retrieval_challenge_live.py::test_chal_live_hybrid_adversarial[hyb2] PASSED [  6%]
+tests/backend/services/code-graph-service/test_production_retrieval_challenge_live.py::test_chal_live_hybrid_adversarial[hyb3] PASSED [  8%]
+tests/backend/services/code-graph-service/test_production_retrieval_challenge_live.py::test_chal_live_hybrid_adversarial[hyb4] PASSED [ 10%]
+tests/backend/services/code-graph-service/test_production_retrieval_challenge_live.py::test_chal_live_hybrid_adversarial[hyb5] PASSED [ 12%]
+tests/backend/services/code-graph-service/test_production_retrieval_challenge_live.py::test_chal_live_hybrid_adversarial[hyb6] PASSED [ 14%]
+tests/backend/services/code-graph-service/test_production_retrieval_challenge_live.py::test_chal_live_hybrid_adversarial[hyb7] PASSED [ 16%]
+tests/backend/services/code-graph-service/test_production_retrieval_challenge_live.py::test_chal_live_hybrid_adversarial[hyb8] PASSED [ 18%]
+tests/backend/services/code-graph-service/test_production_retrieval_challenge_live.py::test_chal_live_hybrid_adversarial[hyb9] PASSED [ 20%]
+tests/backend/services/code-graph-service/test_production_retrieval_challenge_live.py::test_chal_live_hybrid_adversarial[hyb10] PASSED [ 22%]
+tests/backend/services/code-graph-service/test_production_retrieval_challenge_live.py::test_chal_live_hybrid_adversarial[hyb11] PASSED [ 24%]
+tests/backend/services/code-graph-service/test_production_retrieval_challenge_live.py::test_chal_live_hybrid_adversarial[hyb12] PASSED [ 26%]
+tests/backend/services/code-graph-service/test_production_retrieval_challenge_live.py::test_chal_live_hybrid_adversarial[hyb13] PASSED [ 28%]
+tests/backend/services/code-graph-service/test_production_retrieval_challenge_live.py::test_chal_live_hybrid_adversarial[hyb14] PASSED [ 30%]
+tests/backend/services/code-graph-service/test_production_retrieval_challenge_live.py::test_chal_live_hybrid_adversarial[hyb15] PASSED [ 32%]
+tests/backend/services/code-graph-service/test_production_retrieval_challenge_live.py::test_chal_live_hybrid_adversarial[hyb16] PASSED [ 34%]
+tests/backend/services/code-graph-service/test_production_retrieval_challenge_live.py::test_chal_live_hybrid_adversarial[hyb17] PASSED [ 36%]
+tests/backend/services/code-graph-service/test_production_retrieval_challenge_live.py::test_chal_live_hybrid_adversarial[hyb18] PASSED [ 38%]
+tests/backend/services/code-graph-service/test_production_retrieval_challenge_live.py::test_chal_live_hybrid_adversarial[hyb19] PASSED [ 40%]
+tests/backend/services/code-graph-service/test_production_retrieval_challenge_live.py::test_chal_live_explore_adversarial[exp0] PASSED [ 42%]
+tests/backend/services/code-graph-service/test_production_retrieval_challenge_live.py::test_chal_live_explore_adversarial[exp1] PASSED [ 44%]
+tests/backend/services/code-graph-service/test_production_retrieval_challenge_live.py::test_chal_live_explore_adversarial[exp2] PASSED [ 46%]
+tests/backend/services/code-graph-service/test_production_retrieval_challenge_live.py::test_chal_live_explore_adversarial[exp3] PASSED [ 48%]
+tests/backend/services/code-graph-service/test_production_retrieval_challenge_live.py::test_chal_live_explore_adversarial[exp4] PASSED [ 50%]
+tests/backend/services/code-graph-service/test_production_retrieval_challenge_live.py::test_chal_live_explore_adversarial[exp5] PASSED [ 52%]
+tests/backend/services/code-graph-service/test_production_retrieval_challenge_live.py::test_chal_live_explore_adversarial[exp6] PASSED [ 54%]
+tests/backend/services/code-graph-service/test_production_retrieval_challenge_live.py::test_chal_live_explore_adversarial[exp7] PASSED [ 56%]
+tests/backend/services/code-graph-service/test_production_retrieval_challenge_live.py::test_chal_live_explore_adversarial[exp8] PASSED [ 58%]
+tests/backend/services/code-graph-service/test_production_retrieval_challenge_live.py::test_chal_live_explore_adversarial[exp9] PASSED [ 60%]
+tests/backend/services/code-graph-service/test_production_retrieval_challenge_live.py::test_chal_live_hybrid_top_k_clamp[topk1] PASSED [ 62%]
+tests/backend/services/code-graph-service/test_production_retrieval_challenge_live.py::test_chal_live_hybrid_top_k_clamp[topk2] PASSED [ 64%]
+tests/backend/services/code-graph-service/test_production_retrieval_challenge_live.py::test_chal_live_hybrid_top_k_clamp[topk7] PASSED [ 66%]
+tests/backend/services/code-graph-service/test_production_retrieval_challenge_live.py::test_chal_live_hybrid_top_k_clamp[topk25] PASSED [ 68%]
+tests/backend/services/code-graph-service/test_production_retrieval_challenge_live.py::test_chal_live_hybrid_top_k_clamp[topk50] PASSED [ 70%]
+tests/backend/services/code-graph-service/test_production_retrieval_challenge_live.py::test_chal_live_path_and_neighbors_depth[dep1] PASSED [ 72%]
+tests/backend/services/code-graph-service/test_production_retrieval_challenge_live.py::test_chal_live_path_and_neighbors_depth[dep2] PASSED [ 74%]
+tests/backend/services/code-graph-service/test_production_retrieval_challenge_live.py::test_chal_live_path_and_neighbors_depth[dep4] PASSED [ 76%]
+tests/backend/services/code-graph-service/test_production_retrieval_challenge_live.py::test_chal_live_path_and_neighbors_depth[dep8] PASSED [ 78%]
+tests/backend/services/code-graph-service/test_production_retrieval_challenge_live.py::test_chal_live_rrf_auth_beats_ui_noise PASSED [ 80%]
+tests/backend/services/code-graph-service/test_production_retrieval_challenge_live.py::test_chal_live_empty_and_whitespace_rejected PASSED [ 82%]
+tests/backend/services/code-graph-service/test_production_retrieval_challenge_live.py::test_chal_live_architecture_two_clusters PASSED [ 84%]
+tests/backend/services/code-graph-service/test_production_retrieval_challenge_live.py::test_chal_live_routes_or_tested_by_edges PASSED [ 86%]
+tests/backend/services/code-graph-service/test_production_retrieval_challenge_live.py::test_chal_live_detect_changes_mixed_paths PASSED [ 88%]
+tests/backend/services/code-graph-service/test_production_retrieval_challenge_live.py::test_chal_live_freshness_pending_banner PASSED [ 90%]
+tests/backend/services/code-graph-service/test_production_retrieval_challenge_live.py::test_chal_live_gds_off_forces_cypher_degree PASSED [ 92%]
+tests/backend/services/code-graph-service/test_production_retrieval_challenge_live.py::test_chal_live_postgres_fts_and_hybrid PASSED [ 94%]
+tests/backend/services/code-graph-service/test_production_retrieval_challenge_live.py::test_chal_live_random_bm25_soup_still_modes PASSED [ 96%]
+tests/backend/services/code-graph-service/test_production_retrieval_challenge_live.py::test_chal_live_degree_rank_method_when_gds_on PASSED [ 98%]
+tests/backend/services/code-graph-service/test_production_retrieval_challenge_live.py::test_chal_live_write_results_artifact PASSED [100%]
+
+- generated xml file: /opt/Astloom/tests/artifacts/code-graph-live/challenge-junit.xml -
+============================= 50 passed in 25.61s ==============================

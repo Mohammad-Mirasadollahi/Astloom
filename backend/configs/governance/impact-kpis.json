@@ -1,0 +1,89 @@
+{
+  "catalog_id": "astloom-impact-kpis",
+  "schema_version": "1.0.0",
+  "comparison_method": "with-or-without-astloom",
+  "required_report_fields": [
+    "definition",
+    "instrumentation",
+    "baseline",
+    "scope",
+    "time_range",
+    "sample_size",
+    "caveats",
+    "evidence_drilldown"
+  ],
+  "kpis": [
+    {
+      "kpi_id": "KPI-CODEGEN-SPEED",
+      "name": "initial_code_generation_speed",
+      "definition": "Time from task ready to first useful implementation artifact.",
+      "instrumentation": "task.ready and artifact.created events with duration percentiles",
+      "baseline": "pre-astloom or capability-disabled window",
+      "scope": "project",
+      "time_range": "rolling_28d",
+      "sample_size": "min_30_tasks",
+      "caveats": "Depends on task complexity mix and human idle time.",
+      "evidence_drilldown": "task_id, artifact_refs, duration_breakdown"
+    },
+    {
+      "kpi_id": "KPI-BUG-REDUCTION",
+      "name": "bug_reduction",
+      "definition": "Change in defect introduction or escape rate versus baseline.",
+      "instrumentation": "issue.created with severity and discovery_phase tags",
+      "baseline": "matched historical window",
+      "scope": "project_or_project_group",
+      "time_range": "rolling_90d",
+      "sample_size": "min_20_defects_or_equivalent_exposure",
+      "caveats": "Reporting quality and triage latency affect counts.",
+      "evidence_drilldown": "issue_id, severity, phase_found, linked_commits"
+    },
+    {
+      "kpi_id": "KPI-ARCH-QUALITY",
+      "name": "architecture_quality",
+      "definition": "Share of changes that pass architecture and contract gates without waiver.",
+      "instrumentation": "ci.gate and architecture.review outcomes",
+      "baseline": "pre-gate or waived-heavy period",
+      "scope": "platform",
+      "time_range": "rolling_28d",
+      "sample_size": "min_50_changes",
+      "caveats": "Gate strictness changes invalidate naive trend comparison.",
+      "evidence_drilldown": "change_id, failed_checks, waiver_refs"
+    },
+    {
+      "kpi_id": "KPI-REWORK-REDUCTION",
+      "name": "rework_reduction",
+      "definition": "Reduction in repeat work on the same acceptance criteria or failed checks.",
+      "instrumentation": "task.reopened, check.rerun, correction.feedback events",
+      "baseline": "matched historical window",
+      "scope": "project",
+      "time_range": "rolling_28d",
+      "sample_size": "min_30_tasks",
+      "caveats": "Product requirement churn can look like rework.",
+      "evidence_drilldown": "task_id, rework_reason, prior_attempt_refs"
+    },
+    {
+      "kpi_id": "KPI-TOKEN-CONSUMPTION",
+      "name": "token_consumption",
+      "definition": "Tokens and useful-context ratio for model-assisted workflows.",
+      "instrumentation": "llm.usage with cache_hit and context_pack_size fields",
+      "baseline": "capability-disabled or pre-optimization window",
+      "scope": "project",
+      "time_range": "rolling_28d",
+      "sample_size": "min_100_model_calls",
+      "caveats": "Must pair with quality and correction metrics.",
+      "evidence_drilldown": "run_id, model_tier, tokens_in, tokens_out, cache_hit"
+    },
+    {
+      "kpi_id": "KPI-DEAD-CODE-CLEANUP",
+      "name": "dead_code_cleanup",
+      "definition": "Share of replace/retire coding tasks that resolve proven unused candidates in the task neighborhood without verification regressions.",
+      "instrumentation": "unused_candidate.query, activity.cleanup, worklog.cleanup, and linked verification outcomes",
+      "baseline": "cleanup-guidance-disabled or pre-adoption window",
+      "scope": "project",
+      "time_range": "rolling_28d",
+      "sample_size": "min_30_coding_tasks",
+      "caveats": "Dynamic dispatch and public APIs inflate uncertain skips; blind deletes must not count as resolved.",
+      "evidence_drilldown": "task_id, candidate_refs, deleted_paths, blockers, verify_refs, freshness"
+    }
+  ]
+}

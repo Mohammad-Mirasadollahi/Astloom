@@ -1,0 +1,31 @@
+{
+  "schema_version": "1.0",
+  "description": "Guidance filesystem export layout profiles (AWG). Paths are profile data — not hard-coded product law.",
+  "layouts": {
+    "cursor": {
+      "agents_entry_paths": ["AGENTS.md"],
+      "always_rule_dir": ".cursor/rules",
+      "always_rule_ext": ".mdc",
+      "skill_dir": ".cursor/skills",
+      "skill_filename": "SKILL.md",
+      "cursor_mdc_frontmatter": true
+    },
+    "claude_compatible": {
+      "agents_entry_paths": ["AGENTS.md", "CLAUDE.md"],
+      "always_rule_dir": ".claude/rules",
+      "always_rule_ext": ".md",
+      "skill_dir": ".claude/skills",
+      "skill_filename": "SKILL.md",
+      "cursor_mdc_frontmatter": false
+    },
+    "generic_agents_md": {
+      "agents_entry_paths": ["AGENTS.md"],
+      "always_rule_dir": null,
+      "always_rule_ext": null,
+      "skill_dir": null,
+      "skill_filename": null,
+      "cursor_mdc_frontmatter": false,
+      "embed_catalog_in_agents_entry": true
+    }
+  }
+}

@@ -1,0 +1,25 @@
+{
+  "generator": "backend/tools/sdk-generation/generate.py",
+  "operation_count": 3,
+  "operations": [
+    {
+      "method": "GET",
+      "operation_id": "getHealth",
+      "path": "/api/v1/health",
+      "summary": "Liveness probe"
+    },
+    {
+      "method": "GET",
+      "operation_id": "listTasks",
+      "path": "/api/v1/projects/{project_id}/tasks",
+      "summary": "List tasks"
+    },
+    {
+      "method": "POST",
+      "operation_id": "createTask",
+      "path": "/api/v1/projects/{project_id}/tasks",
+      "summary": "Create a task"
+    }
+  ],
+  "source": "backend/tools/sdk-generation/openapi-stub.yaml"
+}

@@ -1,0 +1,37 @@
+openapi: "3.0.3"
+info:
+  title: Astloom Public API Stub
+  version: "0.1.2"
+paths:
+  /api/v1/health:
+    get:
+      operationId: getHealth
+      summary: Liveness probe
+      responses:
+        "200":
+          description: OK
+  /api/v1/projects/{project_id}/tasks:
+    post:
+      operationId: createTask
+      summary: Create a task
+      parameters:
+        - name: project_id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "201":
+          description: Created
+    get:
+      operationId: listTasks
+      summary: List tasks
+      parameters:
+        - name: project_id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: OK

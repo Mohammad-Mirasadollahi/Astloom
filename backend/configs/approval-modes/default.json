@@ -1,0 +1,18 @@
+{
+  "profile_id": "default-approval-mode",
+  "version": 1,
+  "mode": "manual",
+  "allowed_auto_classes": ["docs.low_risk", "memory.faq_candidate"],
+  "denied_auto_classes": [],
+  "max_auto_risk": "medium",
+  "hard_block_classes": [
+    "secret.exposure",
+    "authz.change",
+    "tenant.boundary",
+    "destructive.delete",
+    "production.deploy",
+    "compliance.gated"
+  ],
+  "updated_by": "platform",
+  "updated_at": "2026-07-23T00:00:00Z"
+}

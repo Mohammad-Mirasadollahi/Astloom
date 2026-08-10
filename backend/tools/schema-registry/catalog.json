@@ -1,0 +1,44 @@
+{
+  "catalog_id": "astloom-schema-registry",
+  "schema_version": "1.0.0",
+  "decision_ref": "docs/09-platform-governance-operations/12-schema-registry-architecture.md",
+  "shape": "repository_directory",
+  "schemas": [
+    {
+      "schema_id": "domain-pack",
+      "title": "DomainPack",
+      "path": "backend/configs/domain-packs/domain-pack.schema.json",
+      "owner": "product-architect",
+      "status": "active",
+      "compatibility": "backward",
+      "doc_ref": "docs/04-rule-engine-orchestration/08-domain-pack-feature-profile-and-rule-suggestion-schemas.md"
+    },
+    {
+      "schema_id": "feature-profile",
+      "title": "FeatureProfile",
+      "path": "backend/configs/feature-profiles/feature-profile.schema.json",
+      "owner": "product-architect",
+      "status": "active",
+      "compatibility": "backward",
+      "doc_ref": "docs/04-rule-engine-orchestration/08-domain-pack-feature-profile-and-rule-suggestion-schemas.md"
+    },
+    {
+      "schema_id": "rule-suggestion",
+      "title": "RuleSuggestion",
+      "path": "backend/configs/rule-packs/rule-suggestion.schema.json",
+      "owner": "product-architect",
+      "status": "active",
+      "compatibility": "backward",
+      "doc_ref": "docs/04-rule-engine-orchestration/08-domain-pack-feature-profile-and-rule-suggestion-schemas.md"
+    },
+    {
+      "schema_id": "model-routing-profile",
+      "title": "ModelRoutingProfile",
+      "path": "backend/configs/model-routing/model-routing-profile.schema.json",
+      "owner": "ai-platform-lead",
+      "status": "active",
+      "compatibility": "additive",
+      "doc_ref": "docs/13-technology-stack-and-platform-decisions/10-model-routing-profiles-with-litellm.md"
+    }
+  ]
+}

@@ -1,0 +1,9 @@
+{
+  "schema_version": "1.0",
+  "doc_id": "fixture.docs-drift.stale-anchor",
+  "symbol": "auth.hash_password",
+  "document_path": "docs/synthetic/auth-hashing.md",
+  "expected_drift": "stale_anchor",
+  "classification": "synthetic",
+  "notes": "Synthetic symbol/document pair for docs-sync drift unit tests. No secrets."
+}

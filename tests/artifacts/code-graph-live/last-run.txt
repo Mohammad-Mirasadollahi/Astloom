@@ -1,0 +1,19 @@
+============================= test session starts ==============================
+platform linux -- Python 3.12.3, pytest-9.1.1, pluggy-1.6.0 -- /opt/Astloom/.venv/bin/python
+cachedir: .pytest_cache
+rootdir: /opt/Astloom
+configfile: pyproject.toml
+plugins: timeout-2.4.0, anyio-4.14.1
+collecting ... collected 9 items
+
+tests/backend/services/code-graph-service/test_production_retrieval_live.py::test_live_simple_capabilities_and_gds_flag PASSED [ 11%]
+tests/backend/services/code-graph-service/test_production_retrieval_live.py::test_live_simple_ingest_hybrid_explore PASSED [ 22%]
+tests/backend/services/code-graph-service/test_production_retrieval_live.py::test_live_simple_path_architecture_freshness PASSED [ 33%]
+tests/backend/services/code-graph-service/test_production_retrieval_live.py::test_live_challenge_rrf_prefers_auth_over_noise PASSED [ 44%]
+tests/backend/services/code-graph-service/test_production_retrieval_live.py::test_live_challenge_fastapi_routes_and_tested_by PASSED [ 55%]
+tests/backend/services/code-graph-service/test_production_retrieval_live.py::test_live_challenge_two_communities_and_neighbors PASSED [ 66%]
+tests/backend/services/code-graph-service/test_production_retrieval_live.py::test_live_challenge_gds_disabled_forces_cypher_degree PASSED [ 77%]
+tests/backend/services/code-graph-service/test_production_retrieval_live.py::test_live_challenge_postgres_fts_channel PASSED [ 88%]
+tests/backend/services/code-graph-service/test_production_retrieval_live.py::test_live_challenge_results_artifact PASSED [100%]
+
+============================== 9 passed in 11.27s ==============================

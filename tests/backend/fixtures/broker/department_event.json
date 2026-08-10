@@ -1,0 +1,11 @@
+{
+  "schema_version": "1.0",
+  "event_type": "agent.work.completed",
+  "department": "security",
+  "summary": "Synthetic department workflow fan-out",
+  "payload": {
+    "seed": 0,
+    "auth": "fixture-auth-placeholder"
+  },
+  "classification": "synthetic"
+}

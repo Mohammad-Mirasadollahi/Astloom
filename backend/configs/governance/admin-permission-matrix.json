@@ -1,0 +1,11 @@
+{
+  "schema_version": "1.0",
+  "doc_id": "ac.gov.admin-permission-matrix",
+  "actions": [
+    {"action_id": "tenant.create", "roles_any": ["admin", "tenant_admin"], "permissions_any": ["tenant.create"]},
+    {"action_id": "project.create", "roles_any": ["admin", "tenant_admin", "workspace_admin"], "permissions_any": ["project.create"]},
+    {"action_id": "policy.approve", "roles_any": ["admin", "policy_approver"], "permissions_any": ["policy.approve"]},
+    {"action_id": "weight_profile.change", "roles_any": ["admin", "memory_admin"], "permissions_any": ["weight_profile.change"]},
+    {"action_id": "adapter.install", "roles_any": ["admin", "integration_admin"], "permissions_any": ["adapter.install"]}
+  ]
+}

@@ -1,0 +1,83 @@
+{
+  "schema_version": "1.0.0",
+  "policy": {
+    "no_secrets": true,
+    "no_customer_data": true,
+    "classification_allowed": ["synthetic", "sample", "negative"],
+    "families_allowed": ["graph", "memory", "rules", "broker", "docs-drift", "security"]
+  },
+  "fixtures": [
+    {
+      "id": "sample-repo-python-mini",
+      "path": "tests/backend/fixtures/sample_repos/python_mini",
+      "owner": "platform-engineering",
+      "scope": "unit",
+      "classification": "sample",
+      "families": ["graph"],
+      "description": "Tiny Python mini-repo for ingest and call-graph unit tests."
+    },
+    {
+      "id": "sample-repo-typescript-mini",
+      "path": "tests/backend/fixtures/sample_repos/typescript_mini",
+      "owner": "platform-engineering",
+      "scope": "unit",
+      "classification": "sample",
+      "families": ["graph"],
+      "description": "Tiny TypeScript mini-repo for cross-language graph unit tests."
+    },
+    {
+      "id": "multi-tenant-negative-pack",
+      "path": "tests/backend/fixtures/multi_tenant",
+      "owner": "platform-engineering",
+      "scope": "unit",
+      "classification": "negative",
+      "families": ["memory", "graph", "rules", "broker", "security"],
+      "description": "Cross-tenant and cross-project deny cases for isolation regressions."
+    },
+    {
+      "id": "synthetic-workflow-default",
+      "path": "tests/support/synthetic_workflow.py",
+      "owner": "platform-engineering",
+      "scope": "gate",
+      "classification": "synthetic",
+      "families": ["graph", "memory", "rules", "broker", "docs-drift", "security"],
+      "description": "Seed-based synthetic workflow generator consumed by runtime_scenario."
+    },
+    {
+      "id": "docs-drift-stale-anchor",
+      "path": "tests/backend/fixtures/docs_drift/stale_anchor.json",
+      "owner": "platform-engineering",
+      "scope": "unit",
+      "classification": "synthetic",
+      "families": ["docs-drift"],
+      "description": "Synthetic symbol/document pair that expects docs-sync drift findings."
+    },
+    {
+      "id": "memory-semantic-note",
+      "path": "tests/backend/fixtures/memory/semantic_note.json",
+      "owner": "platform-engineering",
+      "scope": "unit",
+      "classification": "synthetic",
+      "families": ["memory"],
+      "description": "Synthetic semantic memory item with evidence refs and no customer data."
+    },
+    {
+      "id": "rules-security-approval",
+      "path": "tests/backend/fixtures/rules/security_approval.json",
+      "owner": "platform-engineering",
+      "scope": "unit",
+      "classification": "synthetic",
+      "families": ["rules", "security"],
+      "description": "Synthetic rule that requires security approval on auth production changes."
+    },
+    {
+      "id": "broker-department-event",
+      "path": "tests/backend/fixtures/broker/department_event.json",
+      "owner": "platform-engineering",
+      "scope": "unit",
+      "classification": "synthetic",
+      "families": ["broker"],
+      "description": "Synthetic agent event payload that fans out department workflow tasks."
+    }
+  ]
+}

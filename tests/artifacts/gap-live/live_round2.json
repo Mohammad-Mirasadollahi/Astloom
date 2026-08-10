@@ -1,0 +1,82 @@
+{
+  "ok": true,
+  "checks": [
+    {
+      "name": "java_spring_di_edge",
+      "ok": true
+    },
+    {
+      "name": "wire_di_edge",
+      "ok": true
+    },
+    {
+      "name": "changeset_rollup_changes_requested",
+      "ok": true
+    },
+    {
+      "name": "changeset_approve_after_rollup",
+      "ok": true
+    },
+    {
+      "name": "fingerprint_projection",
+      "ok": true
+    },
+    {
+      "name": "retry_ingest",
+      "ok": true
+    },
+    {
+      "name": "timeout_outbox",
+      "ok": true
+    },
+    {
+      "name": "provider_rank_local",
+      "ok": true
+    },
+    {
+      "name": "trust_floor_escalate",
+      "ok": true
+    },
+    {
+      "name": "trust_floor_rationale",
+      "ok": true
+    },
+    {
+      "name": "admin_deny_viewer",
+      "ok": true
+    },
+    {
+      "name": "admin_allow_integration",
+      "ok": true
+    },
+    {
+      "name": "iam_authorize_deny",
+      "ok": true
+    },
+    {
+      "name": "iam_admin_audit_event",
+      "ok": true
+    },
+    {
+      "name": "mcp_initialize",
+      "ok": true
+    },
+    {
+      "name": "mcp_search",
+      "ok": true
+    },
+    {
+      "name": "mcp_write_callable",
+      "ok": true
+    },
+    {
+      "name": "mcp_guidance_resolve",
+      "ok": true
+    },
+    {
+      "name": "mcp_guidance_read_model_tag",
+      "ok": true
+    }
+  ],
+  "note": "re-verified after approve domain fix + neo4j CODE_REL query"
+}

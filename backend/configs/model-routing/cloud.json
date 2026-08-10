@@ -1,0 +1,129 @@
+{
+  "profile_id": "astloom-cloud-default",
+  "version": "1.0.0",
+  "title": "Astloom cloud ModelRoutingProfile",
+  "description": "Default LiteLLM aliases for cloud/API providers. Requires provider keys via LiteLLM env. Env task overrides still win.",
+  "environment": "cloud",
+  "routes": [
+    {
+      "task_class": "docs.generate",
+      "risk_level": "low",
+      "primary_model": "openai/gpt-4o-mini",
+      "fallback_models": ["openai/gpt-4o"],
+      "max_tokens": 512,
+      "timeout_ms": 60000,
+      "json_mode": false,
+      "allow_stub": true
+    },
+    {
+      "task_class": "docs.generate",
+      "risk_level": "medium",
+      "primary_model": "openai/gpt-4o",
+      "fallback_models": ["openai/gpt-4o-mini"],
+      "max_tokens": 768,
+      "timeout_ms": 90000,
+      "json_mode": false,
+      "allow_stub": false
+    },
+    {
+      "task_class": "docs.generate",
+      "risk_level": "high",
+      "primary_model": "openai/gpt-4o",
+      "fallback_models": ["anthropic/claude-sonnet-4-20250514"],
+      "max_tokens": 1024,
+      "timeout_ms": 120000,
+      "json_mode": false,
+      "allow_stub": false
+    },
+    {
+      "task_class": "rules.judge",
+      "risk_level": "low",
+      "primary_model": "openai/gpt-4o-mini",
+      "fallback_models": [],
+      "max_tokens": 512,
+      "timeout_ms": 60000,
+      "json_mode": true,
+      "allow_stub": true
+    },
+    {
+      "task_class": "rules.judge",
+      "risk_level": "medium",
+      "primary_model": "openai/gpt-4o",
+      "fallback_models": ["openai/gpt-4o-mini"],
+      "max_tokens": 768,
+      "timeout_ms": 90000,
+      "json_mode": true,
+      "allow_stub": false
+    },
+    {
+      "task_class": "rules.judge",
+      "risk_level": "high",
+      "primary_model": "anthropic/claude-sonnet-4-20250514",
+      "fallback_models": ["openai/gpt-4o"],
+      "max_tokens": 1024,
+      "timeout_ms": 120000,
+      "json_mode": true,
+      "allow_stub": false
+    },
+    {
+      "task_class": "codegen.synthesize",
+      "risk_level": "low",
+      "primary_model": "openai/gpt-4o-mini",
+      "fallback_models": [],
+      "max_tokens": 1024,
+      "timeout_ms": 90000,
+      "json_mode": false,
+      "allow_stub": true
+    },
+    {
+      "task_class": "codegen.synthesize",
+      "risk_level": "medium",
+      "primary_model": "openai/gpt-4o",
+      "fallback_models": ["openai/gpt-4o-mini"],
+      "max_tokens": 2048,
+      "timeout_ms": 120000,
+      "json_mode": false,
+      "allow_stub": false
+    },
+    {
+      "task_class": "codegen.synthesize",
+      "risk_level": "high",
+      "primary_model": "anthropic/claude-sonnet-4-20250514",
+      "fallback_models": ["openai/gpt-4o"],
+      "max_tokens": 4096,
+      "timeout_ms": 180000,
+      "json_mode": false,
+      "allow_stub": false
+    },
+    {
+      "task_class": "embed.symbol",
+      "risk_level": "low",
+      "primary_model": "openai/text-embedding-3-small",
+      "fallback_models": [],
+      "max_tokens": null,
+      "timeout_ms": 60000,
+      "json_mode": false,
+      "allow_stub": true
+    },
+    {
+      "task_class": "embed.symbol",
+      "risk_level": "medium",
+      "primary_model": "openai/text-embedding-3-small",
+      "fallback_models": [],
+      "max_tokens": null,
+      "timeout_ms": 60000,
+      "json_mode": false,
+      "allow_stub": true
+    },
+    {
+      "task_class": "embed.symbol",
+      "risk_level": "high",
+      "primary_model": "openai/text-embedding-3-large",
+      "fallback_models": ["openai/text-embedding-3-small"],
+      "max_tokens": null,
+      "timeout_ms": 90000,
+      "json_mode": false,
+      "allow_stub": false
+    }
+  ]
+}

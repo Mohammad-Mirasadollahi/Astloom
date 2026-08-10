@@ -1,0 +1,24 @@
+=== ROUND java/di ===
+PASS java_spring_di_edge 3
+PASS wire_di_edge {'wire', 'spring'}
+=== ROUND changeset ===
+PASS changeset_rollup_changes_requested changes_requested
+PASS changeset_approve_after_rollup approved
+PASS fingerprint_projection 
+=== ROUND trust/admin ===
+PASS retry_ingest 
+PASS timeout_outbox 
+PASS provider_rank_local 
+PASS trust_floor_escalate escalate
+PASS trust_floor_rationale ["trust level 'standard' below high-risk floor for 'Block unsafe production auth changes' (provider_rank=2) — require approval"]
+PASS admin_deny_viewer 
+PASS admin_allow_integration 
+PASS iam_authorize_deny {'allowed': False, 'subject': 'viewer@live', 'action': 'adapter.install', 'resource': 'connector', 'principal_id': 'prn_3e1b450a1c91', 'matched_roles': ['viewer']}
+PASS iam_admin_audit_event {'event_type': 'admin.authorize', 'allowed': False, 'subject': 'viewer@live', 'action': 'adapter.install', 'resource': 'connector', 'principal_id': 'prn_3e1b450a1c91', 'scope': {'tenant_id': 'mir', 'workspace_id': 'dev', 'project_id': 'gap-live-a07'}}
+=== ROUND mcp ===
+PASS mcp_initialize 
+PASS mcp_search {'content': [{'type': 'text', 'text': '{"results": [{"description": "Resolve Agent Workspace Guidance for this project: AGENTS entry, always-on rules, and skill catalog. Prefer calling before substant
+PASS mcp_write_callable {'content': [{'type': 'text', 'text': '{"backend": "in_process", "correlation_id": "1afbc98b-9e98-4693-98ec-cce4938b403f", "graph_mode": "memory", "maps_to": "platform.write", "memory": {"actor_id": "mcp-gateway", "body": "live probe memory", "confidence": 0.9, "correlation_id": "1afbc98b-9e98-4693-98ec-cce4938b403f", "created_at": "2026-07-25T07:37:55.904891+00:00", "evidence_refs": ["mcp:1afbc98b-9e98-4693-98ec-cce4938b403f"], "id": "982bd47e-92bc-495b-9581-72b21b453957", "kind": "semantic", "project_group_id": null, "project_id": "astloom", "source_refs": ["cursor-mcp"], "state": "active", "tags": ["cursor", "mcp"], "tenant_id": "mir", "title": "gap-live", "updated_at": "2026-07-25T07:37:55.904891+00:00", "version": 1, "workspace_id": "dev"}, "scope": {"project_id": "astloom", "tenant_id": "mir", "workspace_id": "dev"}, "store_mode": "postgres", "usage_profile": "programming-cursor-mcp", "written": "memory"}'}], 'structuredContent': {'maps_to': 'platform.write', 'usage_profile': 'programming-cursor-mcp', 'scope': {'tenant_id': 'mir', 'workspace_id': 'dev', 'project_id': 'astloom'}, 'correlation_id': '1afbc98b-9e98-4693-98ec-cce4938b403f', 'backend': 'in_process', 'store_mode': 'postgres', 'graph_mode': 'memory', 'written': 'memory', 'memory': {'id': '982bd47e-92bc-495b-9581-72b21b453957', 'tenant_id': 'mir', 'workspace_id': 'dev', 'project_id': 'astloom', 'project_group_id': None, 'actor_id': 'mcp-gateway', 'correlation_id': '1afbc98b-9e98-4693-98ec-cce4938b403f', 'kind': 'semantic', 'state': 'active', 'title': 'gap-live', 'body': 'live probe memory', 'tags': ['cursor', 'mcp'], 'evidence_refs': ['mcp:1afbc98b-9e98-4693-98ec-cce4938b403f'], 'source_refs': ['cursor-mcp'], 'confidence': 0.9, 'version': 1, 'created_at': '2026-07-25T07:37:55.904891+00:00', 'updated_at': '2026-07-25T07:37:55.904891+00:00'}}, 'isError': False}
+PASS mcp_guidance_resolve {"jsonrpc": "2.0", "id": 4, "result": {"content": [{"type": "text", "text": "{\"backend\": \"in_process\", \"bundle\": {\"agents_entry\": {\"body\": \"# Agent entry\\n\\n**Law:** always-on rule `mcp-first-astloom`.\\n\\n## Session start\\
+PASS mcp_guidance_read_model_tag {"jsonrpc": "2.0", "id": 4, "result": {"content": [{"type": "text", "text": "{\"backend\": \"in_process\", \"bundle\": {\"agents_entry\": {\"body\": \"# Agent entry\\n\\n**Law:** always-on rule `mcp-first-astloom`.\\n\\n## Session start\\n\\n1. Resolve workspace guidance via MCP when available.\\n2. Apply always-on rules from the bundle.\\n3. Load the matching skill before heavy memory, graph, d
+OVERALL OK

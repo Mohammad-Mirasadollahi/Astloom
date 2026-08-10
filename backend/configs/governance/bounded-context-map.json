@@ -1,0 +1,92 @@
+{
+  "schema_version": "1.0",
+  "doc_id": "ac.gov.bounded-context-map",
+  "contexts": [
+    {
+      "context_id": "work",
+      "owning_service": "core-data-service",
+      "entities": ["Activity", "WorkLog", "Decision", "Issue", "Task", "ChangeSet", "ReviewThread", "DiscussionComment", "WorkLabel"],
+      "allowed_readers": ["memory-service", "rule-engine-service", "orchestration-service", "mcp-gateway-service", "audit-service"],
+      "event_consumers": ["memory-service", "rule-engine-service", "audit-service"],
+      "migration_owner": "core-data-service"
+    },
+    {
+      "context_id": "memory",
+      "owning_service": "memory-service",
+      "entities": ["MemoryItem", "QuestionMemory", "WorkBatch", "ContextBundle", "MemoryEmbedding"],
+      "allowed_readers": ["mcp-gateway-service", "orchestration-service", "audit-service"],
+      "event_consumers": ["audit-service"],
+      "migration_owner": "memory-service"
+    },
+    {
+      "context_id": "documentation",
+      "owning_service": "docs-sync-service",
+      "entities": ["Document", "Anchor", "DocFlag", "DriftSignal"],
+      "allowed_readers": ["mcp-gateway-service", "core-data-service", "audit-service"],
+      "event_consumers": ["core-data-service", "audit-service"],
+      "migration_owner": "docs-sync-service"
+    },
+    {
+      "context_id": "code_graph",
+      "owning_service": "code-graph-service",
+      "entities": ["CodeSymbol", "CodeEdge", "Snapshot", "SymbolEmbedding"],
+      "allowed_readers": ["mcp-gateway-service", "docs-sync-service", "memory-service", "audit-service"],
+      "event_consumers": ["docs-sync-service", "audit-service"],
+      "migration_owner": "code-graph-service"
+    },
+    {
+      "context_id": "rule",
+      "owning_service": "rule-engine-service",
+      "entities": ["Rule", "Policy", "Evaluation", "Escalation"],
+      "allowed_readers": ["orchestration-service", "mcp-gateway-service", "audit-service"],
+      "event_consumers": ["core-data-service", "orchestration-service", "audit-service"],
+      "migration_owner": "rule-engine-service"
+    },
+    {
+      "context_id": "adapter",
+      "owning_service": "adapter-service",
+      "entities": ["Connector", "ExternalPayload", "Capability"],
+      "allowed_readers": ["orchestration-service", "mcp-gateway-service", "audit-service"],
+      "event_consumers": ["core-data-service", "audit-service"],
+      "migration_owner": "adapter-service"
+    },
+    {
+      "context_id": "configuration",
+      "owning_service": "project-profile-service",
+      "entities": ["UsageProfile", "PortAllocation", "FeatureFlag", "WeightProfile"],
+      "allowed_readers": ["*"],
+      "event_consumers": ["audit-service"],
+      "migration_owner": "project-profile-service"
+    },
+    {
+      "context_id": "audit",
+      "owning_service": "audit-service",
+      "entities": ["AuditRecord", "EvidenceBundle", "RetentionPolicy"],
+      "allowed_readers": ["reporting-service", "mcp-gateway-service"],
+      "event_consumers": [],
+      "migration_owner": "audit-service"
+    },
+    {
+      "context_id": "identity",
+      "owning_service": "identity-access-service",
+      "entities": ["Principal", "RoleBinding"],
+      "allowed_readers": ["mcp-gateway-service", "project-profile-service", "adapter-service"],
+      "event_consumers": ["audit-service"],
+      "migration_owner": "identity-access-service"
+    }
+  ],
+  "forbidden_persistence_imports": [
+    {
+      "from_service": "memory-service",
+      "must_not_import": "code_graph_service.postgres_store"
+    },
+    {
+      "from_service": "code-graph-service",
+      "must_not_import": "memory_service.postgres_store"
+    },
+    {
+      "from_service": "rule-engine-service",
+      "must_not_import": "core_data_service.postgres_store"
+    }
+  ]
+}

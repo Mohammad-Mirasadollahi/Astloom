@@ -1,0 +1,79 @@
+{
+  "kind_counts": {
+    "ghost_link": 5,
+    "stale_anchor": 3
+  },
+  "row_count": 8,
+  "deleteable_ge_0_8": 0,
+  "orphan_count": 0,
+  "blank_token_ghosts": 0,
+  "by_kind_samples": {
+    "ghost_link": [
+      {
+        "path": "docs/07-code-knowledge-graph/12-neo4j-runtime-plugins.md",
+        "score": 0.55,
+        "missing": [
+          "tests/backend/gates/neo4j-python-ingest/run_gate.py::main"
+        ]
+      },
+      {
+        "path": "docs/07-code-knowledge-graph/38-rpm-session-parallel-sync-high-level-design.md",
+        "score": 0.55,
+        "missing": [
+          "backend/packages/llm_gateway/gateway.py::LlmGateway",
+          "backend/packages/llm_gateway/rate_limit.py::RpmSessionGate",
+          "backend/services/code-graph-service/src/code_graph_service/application/ingest/parallel_files.py::run_parallel_file_jobs"
+        ]
+      },
+      {
+        "path": "docs/07-code-knowledge-graph/40-rpm-session-parallel-sync-risks-challenges-and-acceptance.md",
+        "score": 0.55,
+        "missing": [
+          "backend/packages/llm_gateway/rate_limit.py::RpmSessionGate",
+          "backend/services/code-graph-service/src/code_graph_service/application/ingest/parallel_files.py::run_parallel_file_jobs",
+          "backend/services/code-graph-service/src/code_graph_service/domain/dispatch_synth.py::synthesize_interface_dispatch"
+        ]
+      },
+      {
+        "path": "docs/07-code-knowledge-graph/41-hybrid-documentation-coverage.md",
+        "score": 0.55,
+        "missing": [
+          "tests/backend/tools/astloom-cli/test_docs_suggest_links.py::test_extract_evidence_from_path_citation",
+          "tests/backend/tools/astloom-cli/test_docs_suggest_links.py::test_primary_symbol_prefers_test_fn_in_test_files",
+          "tests/backend/services/code-graph-service/test_hybrid_doc_coverage.py::test_hybrid_coverage_prefers_human_over_living"
+        ]
+      },
+      {
+        "path": "docs/07-code-knowledge-graph/55-structural-isolation-and-architecture-overview-residuals.md",
+        "score": 0.55,
+        "missing": [
+          "backend/services/code-graph-service/src/code_graph_service/domain/structural_integrity.py::file_needs_contains_repair",
+          "backend/services/code-graph-service/src/code_graph_service/application/ingest/file_ingest.py::FileIngestMixin.ingest_file",
+          "backend/services/code-graph-service/src/code_graph_service/application/ingest/repo_ingest.py::RepoIngestMixin.sync_repo"
+        ]
+      }
+    ],
+    "stale_anchor": [
+      {
+        "path": "docs/07-code-knowledge-graph/72-live-ingest-remediation-verification-index.md",
+        "score": 0.55,
+        "missing": []
+      },
+      {
+        "path": "docs/07-code-knowledge-graph/73-live-audit-defect-remediation-record.md",
+        "score": 0.55,
+        "missing": []
+      },
+      {
+        "path": "docs/07-code-knowledge-graph/75-sync-semantic-integrity-and-recovery-evidence.md",
+        "score": 0.55,
+        "missing": []
+      }
+    ]
+  },
+  "known_false_positives_absent": {
+    "as.doc.ckg.context-pack-retrieval-and-agent-workflow": true,
+    "as.doc.ckg.dead-code-cleanup-loop": true,
+    "as.doc.ckg.stale-documentation-candidates-and-cleanup-loop": true
+  }
+}

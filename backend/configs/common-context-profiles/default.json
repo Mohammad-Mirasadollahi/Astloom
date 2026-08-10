@@ -1,0 +1,15 @@
+{
+  "profile_id": "default",
+  "version": "1.0.0",
+  "weights": {
+    "frequency": 0.2,
+    "recency": 0.15,
+    "confidence": 0.2,
+    "user_pinning": 0.15,
+    "task_similarity": 0.1,
+    "project_relevance": 0.1,
+    "effectiveness": 0.1
+  },
+  "default_token_budget": 800,
+  "approval_required": true
+}

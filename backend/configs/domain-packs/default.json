@@ -1,0 +1,13 @@
+{
+  "pack_id": "default",
+  "version": "1.0.0",
+  "title": "Default domain pack",
+  "description": "Baseline domain pack for Astloom projects until specialized packs are approved.",
+  "workflows": ["implementation", "review", "docs"],
+  "default_feature_profile": "default",
+  "default_rule_packs": ["default"],
+  "suggestions": {
+    "rule_suggestions": true,
+    "auto_activate_low_risk_rules": false
+  }
+}

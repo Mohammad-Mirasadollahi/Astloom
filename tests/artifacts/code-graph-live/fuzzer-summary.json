@@ -1,0 +1,35 @@
+{
+  "suite": "production_retrieval_fuzzer",
+  "date": "2026-07-21",
+  "collected": 50,
+  "passed": 50,
+  "failed": 0,
+  "skipped": 0,
+  "duration_seconds": 5.24,
+  "neo4j_port": 32287,
+  "postgres_port": 32232,
+  "unit": 39,
+  "live": 11,
+  "simple_examples": [
+    "tokenize empty/short",
+    "lucene login",
+    "bm25 login hit",
+    "gds concurrency 4",
+    "live hybrid login",
+    "empty query ValidationError"
+  ],
+  "challenge_examples": [
+    "persian + emoji tokenize",
+    "5000-char query",
+    "lucene AND/OR/wildcards",
+    "path traversal query",
+    "postgres FTS weird tokens",
+    "gds_enabled=false → cypher.degree",
+    "random 40-token BM25 soup"
+  ],
+  "artifacts": [
+    "tests/artifacts/code-graph-live/fuzzer-last-run.txt",
+    "tests/artifacts/code-graph-live/fuzzer-junit.xml",
+    "tests/artifacts/code-graph-live/FUZZER_SUMMARY.md"
+  ]
+}

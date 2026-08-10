@@ -1,0 +1,28 @@
+{
+  "suite": "production_retrieval_challenge_live",
+  "date": "2026-07-21",
+  "collected": 50,
+  "passed": 50,
+  "failed": 0,
+  "skipped": 0,
+  "duration_seconds": 25.61,
+  "neo4j_port": 32287,
+  "postgres_port": 32232,
+  "blocks": {
+    "hybrid_adversarial": 20,
+    "explore_adversarial": 10,
+    "top_k_extremes": 5,
+    "path_depth": 4,
+    "hard_singles": 11
+  },
+  "challenge_highlights": [
+    "RRF auth beats UI noise",
+    "Lucene/path-traversal/SQL/null-byte queries",
+    "Persian + emoji explore/hybrid",
+    "GDS off → cypher.degree",
+    "Postgres FTS weird tokens",
+    "two-cluster architecture",
+    "freshness pending banner",
+    "detect_changes mixed/missing paths"
+  ]
+}

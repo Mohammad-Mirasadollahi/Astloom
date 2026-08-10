@@ -1,0 +1,23 @@
+{
+  "generation_rc": 0,
+  "generation_ok": true,
+  "read_model_id": "code_graph.generation_context",
+  "payload_keys": [
+    "expansion",
+    "hybrid_documentation",
+    "polyglot",
+    "prompt_context",
+    "read_model_id",
+    "seed_symbol_id",
+    "symbol_count",
+    "symbols",
+    "uses_full_repository"
+  ],
+  "neo4j_di_count": 3,
+  "neo4j_frameworks": [
+    "spring",
+    "wire"
+  ],
+  "neo4j_di_ok": true,
+  "ok": true
+}

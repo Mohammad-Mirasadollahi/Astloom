@@ -1,0 +1,52 @@
+{
+  "pack_id": "multi-tenant-negative-v1",
+  "classification": "negative",
+  "families": ["memory", "graph", "rules", "broker", "security"],
+  "cases": [
+    {
+      "id": "cross-tenant-memory-read",
+      "family": "memory",
+      "actor_scope": {"tenant_id": "tenant-a", "workspace_id": "ws-1", "project_id": "proj-1"},
+      "foreign_scope": {"tenant_id": "tenant-b", "workspace_id": "ws-1", "project_id": "proj-1"},
+      "operation": "memory.retrieve",
+      "subject_ref": "mem-tenant-a-only",
+      "expected": "empty"
+    },
+    {
+      "id": "cross-project-graph-query",
+      "family": "graph",
+      "actor_scope": {"tenant_id": "tenant-a", "workspace_id": "ws-1", "project_id": "proj-1"},
+      "foreign_scope": {"tenant_id": "tenant-a", "workspace_id": "ws-1", "project_id": "proj-other"},
+      "operation": "code_graph.hybrid_search",
+      "subject_ref": "tenant_a_only",
+      "expected": "empty"
+    },
+    {
+      "id": "cross-workspace-rule-eval",
+      "family": "rules",
+      "actor_scope": {"tenant_id": "tenant-a", "workspace_id": "ws-1", "project_id": "proj-1"},
+      "foreign_scope": {"tenant_id": "tenant-a", "workspace_id": "ws-other", "project_id": "proj-1"},
+      "operation": "rules.evaluate",
+      "subject_ref": "rule-tenant-a-auth",
+      "expected": "deny"
+    },
+    {
+      "id": "broker-event-wrong-tenant",
+      "family": "broker",
+      "actor_scope": {"tenant_id": "tenant-a", "workspace_id": "ws-1", "project_id": "proj-1"},
+      "foreign_scope": {"tenant_id": "tenant-b", "workspace_id": "ws-1", "project_id": "proj-1"},
+      "operation": "adapter.publish_agent_event",
+      "subject_ref": "evt-tenant-a-release",
+      "expected": "error"
+    },
+    {
+      "id": "security-cross-tenant-symbol-get",
+      "family": "security",
+      "actor_scope": {"tenant_id": "tenant-a", "workspace_id": "ws-1", "project_id": "proj-1"},
+      "foreign_scope": {"tenant_id": "tenant-b", "workspace_id": "ws-1", "project_id": "proj-1"},
+      "operation": "code_graph.get_symbol",
+      "subject_ref": "tenant_a_only",
+      "expected": "error"
+    }
+  ]
+}

@@ -1,0 +1,229 @@
+{
+  "schema_version": "1.0",
+  "section_ref": "docs/11-logical-implementation-examples/00-index.md",
+  "checklist_ref": "docs/11-logical-implementation-examples/06-developer-implementation-checklist.md",
+  "required_subsystems": [
+    "core-data-and-orchestration",
+    "memory",
+    "docs-and-code-graph",
+    "rule-engine",
+    "interoperability"
+  ],
+  "examples": [
+    {
+      "example_id": "EX-001",
+      "title": "End-to-end password hashing migration",
+      "subsystem": "core-data-and-orchestration",
+      "doc_path": "docs/11-logical-implementation-examples/01-end-to-end-password-migration-example.md",
+      "inputs": [
+        "User request to replace SHA256 with Argon2",
+        "Auth code and test files under change"
+      ],
+      "processing_steps": [
+        "Create Task with HIGH risk and acceptance criteria",
+        "Record Activities for file edits and tests",
+        "Record Decision for Argon2 selection",
+        "Open Issue for legacy hash migration",
+        "Evaluate security policy and escalate if needed",
+        "Detect documentation drift before merge"
+      ],
+      "outputs": [
+        "Task, Activity, Decision, Issue records",
+        "Escalation ticket when policy requires approval",
+        "Broker events for task/issue/decision/drift/escalation"
+      ],
+      "state_changes": [
+        "Task moves through in-progress, blocked, or cancelled on reject",
+        "Issue remains open while legacy login is incomplete",
+        "Memory current-state updated only after approved migration"
+      ],
+      "edge_cases": [
+        "Legacy login fails",
+        "Security rejects change",
+        "Documentation not updated",
+        "Conflicting memory blocks high-risk context injection"
+      ],
+      "implementation_tasks": [
+        "Task and Issue state machines",
+        "Evidence refs for tests and diffs",
+        "Security approval linked to merge Activity",
+        "Drift detection before merge"
+      ],
+      "test_hooks": [
+        "tests/backend/services/core-data-service",
+        "tests/backend/services/rule-engine-service",
+        "tests/backend/services/docs-sync-service"
+      ]
+    },
+    {
+      "example_id": "EX-002",
+      "title": "Memory and context retrieval",
+      "subsystem": "memory",
+      "doc_path": "docs/11-logical-implementation-examples/02-memory-and-context-example.md",
+      "inputs": [
+        "Task to fix PayPal timeout handling",
+        "Semantic and episodic memory about payment gateways"
+      ],
+      "processing_steps": [
+        "Select WeightProfile for payments domain",
+        "Retrieve active SemanticFacts",
+        "Apply weights and omit deprecated Stripe memory",
+        "Boost dormant-but-important incident memory",
+        "Build ContextBundle with source refs"
+      ],
+      "outputs": [
+        "ContextBundle with included and omitted items",
+        "Prompt text limited to current PayPal facts"
+      ],
+      "state_changes": [
+        "Forgotten-memory classifier marks incident note DORMANT_BUT_IMPORTANT",
+        "Deprecated Stripe memory stays omitted from default context"
+      ],
+      "edge_cases": [
+        "Age alone must not hide incident-critical memory",
+        "Historical migration context only when task asks for history",
+        "Missing WeightProfile blocks prompt assembly"
+      ],
+      "implementation_tasks": [
+        "Externalized WeightProfile",
+        "Retrieval explain included/omitted",
+        "ContextBundle redaction and source refs"
+      ],
+      "test_hooks": [
+        "tests/backend/services/memory-service"
+      ]
+    },
+    {
+      "example_id": "EX-003",
+      "title": "Docs and code graph",
+      "subsystem": "docs-and-code-graph",
+      "doc_path": "docs/11-logical-implementation-examples/03-docs-and-code-graph-example.md",
+      "inputs": [
+        "Changed code symbol and AST hash",
+        "Related documentation frontmatter"
+      ],
+      "processing_steps": [
+        "Parse with tree-sitter and compute normalized hash",
+        "Upsert Neo4j or code_graph nodes and edges",
+        "Create DriftFinding for stale docs",
+        "Create Docs Agent Task",
+        "Validate generated code against known symbols"
+      ],
+      "outputs": [
+        "Graph upsert result with CALLS/IMPORTS confidence",
+        "DriftFinding and Docs Agent Task",
+        "Generation context for graph-guided code"
+      ],
+      "state_changes": [
+        "Symbol node hash updates when AST changes",
+        "DriftFinding opens until docs catch up"
+      ],
+      "edge_cases": [
+        "Formatting-only change should not alter normalized hash",
+        "Unknown symbol references rejected",
+        "Bloom filter negative lookup skips unnecessary queries"
+      ],
+      "implementation_tasks": [
+        "Idempotent graph upsert",
+        "DriftFinding before merge",
+        "Unknown-symbol validation"
+      ],
+      "test_hooks": [
+        "tests/backend/services/code-graph-service",
+        "tests/backend/services/docs-sync-service"
+      ]
+    },
+    {
+      "example_id": "EX-004",
+      "title": "Rule engine and human approval",
+      "subsystem": "rule-engine",
+      "doc_path": "docs/11-logical-implementation-examples/04-rule-engine-and-human-approval-example.md",
+      "inputs": [
+        "High-risk auth change",
+        "Security policy with evaluation mode"
+      ],
+      "processing_steps": [
+        "Run deterministic pre-checks",
+        "Invoke LLM Judge with evidence binding",
+        "Aggregate risk and confidence",
+        "Create escalation ticket when approval required",
+        "Apply approve, reject, or expire-fail-closed outcome"
+      ],
+      "outputs": [
+        "Structured judge result",
+        "Escalation ticket with options and deadline",
+        "Approval or rejection Activity"
+      ],
+      "state_changes": [
+        "Task blocked pending approval",
+        "Expired high-risk approvals fail closed",
+        "Approved change unblocks merge path"
+      ],
+      "edge_cases": [
+        "Low-confidence high-risk still escalates",
+        "Expired approval fails closed",
+        "Missing evidence rejects judge output"
+      ],
+      "implementation_tasks": [
+        "Deterministic pre-checks before LLM Judge",
+        "Escalation ticket schema",
+        "Fail-closed expiry handling"
+      ],
+      "test_hooks": [
+        "tests/backend/services/rule-engine-service"
+      ]
+    },
+    {
+      "example_id": "EX-005",
+      "title": "Interoperability and broker",
+      "subsystem": "interoperability",
+      "doc_path": "docs/11-logical-implementation-examples/05-interoperability-and-broker-example.md",
+      "inputs": [
+        "Universal Agent JSON message from backend agent",
+        "Subscriber capability profiles"
+      ],
+      "processing_steps": [
+        "Validate schema version",
+        "Persist before delivery",
+        "Route to authorized subscribers",
+        "Apply adapter capability profile",
+        "Dead-letter failed deliveries with replay eligibility"
+      ],
+      "outputs": [
+        "Persisted broker envelope",
+        "IDE and dashboard notifications",
+        "Dead-letter record on repeated failure"
+      ],
+      "state_changes": [
+        "Message moves persisted -> delivered or dead-lettered",
+        "Idempotent consumers ignore duplicate delivery"
+      ],
+      "edge_cases": [
+        "Unauthorized subscriber denied restricted payload",
+        "Dead-letter includes failure reason and replay eligibility",
+        "Consumer crash after ack must not double-apply side effects"
+      ],
+      "implementation_tasks": [
+        "Versioned Universal Agent JSON",
+        "Persist-before-delivery",
+        "Dead-letter replay path"
+      ],
+      "test_hooks": [
+        "tests/backend/services/adapter-service"
+      ]
+    }
+  ],
+  "checklist": {
+    "doc_path": "docs/11-logical-implementation-examples/06-developer-implementation-checklist.md",
+    "subsystem_sections": [
+      "Core Data Model Checklist",
+      "Memory and Context Checklist",
+      "Docs and Code Graph Checklist",
+      "Rule Engine Checklist",
+      "Interoperability Checklist",
+      "Software Engineering Checklist",
+      "Governance Checklist",
+      "Minimum Coding Readiness Criteria"
+    ]
+  }
+}

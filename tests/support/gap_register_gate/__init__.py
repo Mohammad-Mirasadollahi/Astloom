@@ -1,0 +1,1 @@
+"""Gap-register verification support."""

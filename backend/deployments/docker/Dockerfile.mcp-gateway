@@ -1,0 +1,48 @@
+# syntax=docker/dockerfile:1
+# Astloom MCP gateway image — installs Python deps from a host wheelhouse (no PyPI at build).
+#
+# Build (from repo root, after scripts/build-wheelhouse.sh):
+#   docker build \
+#     -f backend/deployments/docker/Dockerfile.mcp-gateway \
+#     --build-context wheelhouse=/opt/astloom-wheelhouse \
+#     -t astloom-mcp-gateway:local \
+#     .
+#
+FROM python:3.12-slim-bookworm
+
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    ASTLOOM_ROOT=/opt/Astloom \
+    PIP_DISABLE_PIP_VERSION_CHECK=1 \
+    PIP_NO_CACHE_DIR=1
+
+WORKDIR /opt/Astloom
+
+# Wheelhouse produced on the host from .venv (default /opt/astloom-wheelhouse).
+COPY --from=wheelhouse / /opt/astloom-wheelhouse/
+
+# Application source (services resolve via PYTHONPATH; astloom wheel provides CLI packages).
+COPY backend/packages /opt/Astloom/backend/packages
+COPY backend/services/mcp-gateway-service /opt/Astloom/backend/services/mcp-gateway-service
+COPY backend/services/core-data-service /opt/Astloom/backend/services/core-data-service
+COPY backend/services/memory-service /opt/Astloom/backend/services/memory-service
+COPY backend/services/code-graph-service /opt/Astloom/backend/services/code-graph-service
+COPY backend/services/docs-sync-service /opt/Astloom/backend/services/docs-sync-service
+COPY backend/services/common-context-service /opt/Astloom/backend/services/common-context-service
+COPY backend/configs /opt/Astloom/backend/configs
+COPY pyproject.toml README.md /opt/Astloom/
+
+RUN python -m pip install --upgrade pip \
+ && python -m pip install --no-index --find-links=/opt/astloom-wheelhouse \
+      -r /opt/astloom-wheelhouse/requirements.txt \
+ && test -x /usr/local/bin/astloom || python -m pip install --no-index --find-links=/opt/astloom-wheelhouse astloom
+
+ENV PYTHONPATH=/opt/Astloom/backend/services/mcp-gateway-service/src:/opt/Astloom/backend/packages:/opt/Astloom/backend/services/core-data-service/src:/opt/Astloom/backend/services/memory-service/src:/opt/Astloom/backend/services/code-graph-service/src:/opt/Astloom/backend/services/docs-sync-service/src:/opt/Astloom/backend/services/common-context-service/src
+
+EXPOSE 32500
+
+COPY backend/deployments/docker/entrypoint-mcp-gateway.sh /entrypoint.sh
+RUN chmod +x /entrypoint.sh
+
+ENTRYPOINT ["/entrypoint.sh"]
+CMD ["python", "-m", "mcp_gateway_service", "--http", "--host", "0.0.0.0", "--port", "32500"]

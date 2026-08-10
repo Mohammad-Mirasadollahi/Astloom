@@ -1,0 +1,49 @@
+{
+  "catalog_id": "astloom-governance-risks",
+  "schema_version": "1.0.0",
+  "risks": [
+    {
+      "risk_id": "RISK-001",
+      "title": "Unsafe autonomous code changes",
+      "severity": "high",
+      "owner": "platform-security",
+      "mitigation": "Human approval gates for high-severity rule impacts and generated patches.",
+      "review_date": "2026-08-01"
+    },
+    {
+      "risk_id": "RISK-002",
+      "title": "Cross-tenant context leakage",
+      "severity": "critical",
+      "owner": "platform-security",
+      "mitigation": "Enforce tenant and project scope before retrieval, prompt build, and graph query.",
+      "review_date": "2026-08-01"
+    },
+    {
+      "risk_id": "RISK-003",
+      "title": "Incomplete backup/restore of graph and memory",
+      "severity": "high",
+      "owner": "platform-ops",
+      "mitigation": "Project-scoped .asbak export/restore (astloom backup) covers Postgres analytical stores + Neo4j graph with checksum/schema/count gates; schedule restore drills and keep full-server DR for broker/volumes. See docs/09-platform-governance-operations/13-project-scoped-backup-and-restore.md.",
+      "review_date": "2026-09-01"
+    }
+  ],
+  "open_decisions": [
+    {
+      "decision_id": "DEC-001",
+      "title": "Default local vs remote model routing profiles",
+      "owner": "platform-architecture",
+      "proposed_resolution": "Published local + cloud ModelRoutingProfile JSON under backend/configs/model-routing; select via ASTLOOM_LITELLM_ROUTING_ENV.",
+      "status": "closed",
+      "review_date": "2026-07-23",
+      "closed_in": "docs/13-technology-stack-and-platform-decisions/10-model-routing-profiles-with-litellm.md"
+    },
+    {
+      "decision_id": "DEC-002",
+      "title": "Retention defaults for memory and audit evidence",
+      "owner": "platform-ops",
+      "proposed_resolution": "Publish retention profile with legal hold and restore validation steps.",
+      "status": "open",
+      "review_date": "2026-08-15"
+    }
+  ]
+}

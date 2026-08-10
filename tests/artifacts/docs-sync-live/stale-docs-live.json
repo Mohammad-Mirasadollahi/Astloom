@@ -1,0 +1,75 @@
+{
+  "http_mcp_ok": true,
+  "server_name": "Astloom-Programming",
+  "project_id": "staledocs-live",
+  "path_prefix": "docs/fixtures/stale_live",
+  "index_coverage": {
+    "status": "ok",
+    "pending_count": 0,
+    "safe_absence_claims": true,
+    "note": "docs-sync registry present for scoped absence claims"
+  },
+  "kpi_hints": {
+    "stale_docs_candidates_surfaced": 3,
+    "stale_docs_candidates_skipped_uncertain": 2,
+    "stale_docs_candidates_resolved": 0
+  },
+  "row_count": 5,
+  "finding_kinds": [
+    "duplicate_authority",
+    "ghost_link",
+    "orphan_doc",
+    "wiki_orphan"
+  ],
+  "by_doc_id": {
+    "as.doc.test.stale-live-orphan": {
+      "finding_kind": "orphan_doc",
+      "score": 0.9,
+      "safe_to_delete": true,
+      "safe_to_unlink": false,
+      "safe_to_update": false,
+      "blockers": []
+    },
+    "as.doc.test.stale-live-ghost": {
+      "finding_kind": "ghost_link",
+      "score": 0.8,
+      "safe_to_delete": true,
+      "safe_to_unlink": true,
+      "safe_to_update": false,
+      "blockers": []
+    },
+    "as.doc.test.stale-live-wiki-orphan": {
+      "finding_kind": "wiki_orphan",
+      "score": 0.8,
+      "safe_to_delete": false,
+      "safe_to_unlink": false,
+      "safe_to_update": true,
+      "blockers": []
+    },
+    "as.doc.test.stale-live-dup-a": {
+      "finding_kind": "duplicate_authority",
+      "score": 0.55,
+      "safe_to_delete": false,
+      "safe_to_unlink": false,
+      "safe_to_update": true,
+      "blockers": [
+        "normative_current_cap",
+        "needs_human_task"
+      ]
+    },
+    "as.doc.test.stale-live-dup-b": {
+      "finding_kind": "duplicate_authority",
+      "score": 0.55,
+      "safe_to_delete": false,
+      "safe_to_unlink": false,
+      "safe_to_update": true,
+      "blockers": [
+        "normative_current_cap",
+        "needs_human_task"
+      ]
+    }
+  },
+  "healthy_absent": true,
+  "related_absent": true,
+  "triage_engine": "local_rules"
+}

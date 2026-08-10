@@ -1,0 +1,35 @@
+{
+  "circular_claim_ban": "ADR-19: labels must not come from graph self-walk",
+  "generated_at": "2026-07-21T07:05:48Z",
+  "k": 10,
+  "label_source": "gold_queries",
+  "mean_ndcg": 0.4222,
+  "passes_threshold": false,
+  "queries": [
+    {
+      "ndcg": 0.6509,
+      "query": "login password check",
+      "ranked_top": [
+        "doc:eval-p:src.auth.login",
+        "sym:eval-p:src.auth.login",
+        "doc:eval-p:src.auth.check_password",
+        "sym:eval-p:src.auth.check_password",
+        "doc:eval-p:src.api.login_route"
+      ],
+      "relevant_found": 2
+    },
+    {
+      "ndcg": 0.1934,
+      "query": "verify password hash",
+      "ranked_top": [
+        "sym:eval-p:src.api.login_route",
+        "doc:eval-p:src.api.login_route",
+        "sym:eval-p:src.auth.check_password",
+        "doc:eval-p:src.auth.check_password",
+        "sym:eval-p:src.auth.login"
+      ],
+      "relevant_found": 2
+    }
+  ],
+  "threshold": 0.5
+}

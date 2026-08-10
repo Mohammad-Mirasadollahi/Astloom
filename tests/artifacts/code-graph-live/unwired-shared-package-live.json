@@ -1,0 +1,19 @@
+{
+  "http_mcp_ok": true,
+  "server_name": "Astloom-Programming",
+  "project_id": "astloom",
+  "path_prefix": "backend/packages/adapter_harness",
+  "freshness": "ok",
+  "graph_mode": "neo4j",
+  "package": {
+    "finding_kind": "unwired_shared_package",
+    "recommendation": "keep_public",
+    "path": "backend/packages/adapter_harness",
+    "score": 0.55,
+    "safe_to_delete": false,
+    "blockers": [
+      "unwired_shared_package",
+      "recent_file_cap"
+    ]
+  }
+}

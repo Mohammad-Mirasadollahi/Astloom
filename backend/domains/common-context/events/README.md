@@ -1,0 +1,3 @@
+# Common Context Events
+
+Expected events include CommonItemCreated, CommonItemUpdated, CommonItemPromotedFromRepeatedInstruction, CommonItemDeprecated, CommonItemSuppressedForTask, CommonContextBundleResolved, and CommonContextConflictDetected.

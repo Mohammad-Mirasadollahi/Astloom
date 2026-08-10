@@ -1,0 +1,1229 @@
+{
+  "profile_id": "programming-cursor-mcp",
+  "version": "1.3.1",
+  "title": "Programming with Cursor via MCP",
+  "audience": "software-engineering",
+  "description": "Configures Astloom for software engineering teams that connect Cursor IDE through MCP. Client surface is mcp-lazy style (mcp_search_tools / mcp_execute_tool only on tools/list). Explore-first: prefer astloom_code_graph_explore before wide Read/Grep; also memory, docs drift/write, tasks, and durable project writes.",
+  "domain_pack": "default",
+  "feature_profile": "default",
+  "connectors": [
+    {
+      "id": "cursor-mcp",
+      "type": "ide_mcp",
+      "vendor": "cursor",
+      "transport": "stdio",
+      "protocol": "mcp"
+    }
+  ],
+  "mcp": {
+    "server_name": "Astloom-Programming",
+    "tools": [
+      {
+        "name": "astloom_ping",
+        "description": "Confirm MCP connectivity and return active usage profile metadata for this project.",
+        "maps_to": "platform.ping",
+        "input_schema": {
+          "type": "object",
+          "properties": {},
+          "additionalProperties": false
+        }
+      },
+      {
+        "name": "astloom_get_effective_profile",
+        "description": "Return the effective Usage Profile (domain pack, feature profile, connectors, MCP tools) for the scoped project.",
+        "maps_to": "profile.effective",
+        "input_schema": {
+          "type": "object",
+          "properties": {},
+          "additionalProperties": false
+        }
+      },
+      {
+        "name": "astloom_code_graph_explore",
+        "description": "PRIMARY code-graph tool: answer how/X works or flows with one call — seeds + call path + budgeted source (sibling skeletonization). Prefer this over wide Read/Grep.",
+        "maps_to": "code_graph.explore",
+        "input_schema": {
+          "type": "object",
+          "properties": {
+            "query": {
+              "type": "string",
+              "description": "Natural-language or symbol terms (e.g. login auth flow)"
+            },
+            "top_k": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 40,
+              "default": 12
+            },
+            "max_depth": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 4,
+              "default": 2
+            },
+            "budget_chars": {
+              "type": "integer",
+              "minimum": 2000,
+              "maximum": 100000
+            }
+          },
+          "required": [
+            "query"
+          ],
+          "additionalProperties": false
+        }
+      },
+      {
+        "name": "astloom_code_graph_hybrid_search",
+        "description": "Hybrid lexical + semantic search merged with Reciprocal Rank Fusion (RRF).",
+        "maps_to": "code_graph.hybrid_search",
+        "input_schema": {
+          "type": "object",
+          "properties": {
+            "query": {
+              "type": "string"
+            },
+            "top_k": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 50,
+              "default": 10
+            }
+          },
+          "required": [
+            "query"
+          ],
+          "additionalProperties": false
+        }
+      },
+      {
+        "name": "astloom_code_graph_detect_changes",
+        "description": "Risk-scored review context for changed files: affected flows, test gaps, review priorities.",
+        "maps_to": "code_graph.detect_changes",
+        "input_schema": {
+          "type": "object",
+          "properties": {
+            "changed_files": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              },
+              "description": "Repo-relative or absolute paths that changed"
+            },
+            "include_flows": {
+              "type": "boolean",
+              "default": true
+            }
+          },
+          "required": [
+            "changed_files"
+          ],
+          "additionalProperties": false
+        }
+      },
+      {
+        "name": "astloom_code_graph_architecture_overview",
+        "description": "Communities, hubs, bridges, knowledge gaps, surprising connections, and suggested architecture questions.",
+        "maps_to": "code_graph.architecture_overview",
+        "input_schema": {
+          "type": "object",
+          "properties": {
+            "top_n": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 50,
+              "default": 10
+            }
+          },
+          "additionalProperties": false
+        }
+      },
+      {
+        "name": "astloom_memory_retrieve",
+        "description": "Retrieve current-state memory hints for a programming task (maps to memory retrieval capability).",
+        "maps_to": "memory.retrieve",
+        "input_schema": {
+          "type": "object",
+          "properties": {
+            "query": {
+              "type": "string",
+              "description": "Task or question text"
+            },
+            "include_history": {
+              "type": "boolean",
+              "default": false
+            }
+          },
+          "required": [
+            "query"
+          ],
+          "additionalProperties": false
+        }
+      },
+      {
+        "name": "astloom_context_compress",
+        "description": "Native Astloom context compression (Headroom-inspired, clean-room): shrink large JSON/text, store original under a tenant-scoped TTL handle for retrieve. Prefer for bulky tool/RAG blobs before LiteLLM — not a substitute for code-graph tools.",
+        "maps_to": "context.compress",
+        "input_schema": {
+          "type": "object",
+          "properties": {
+            "payload": {
+              "type": "string",
+              "description": "Raw text or JSON string to compress"
+            },
+            "content_type": {
+              "type": "string",
+              "enum": ["auto", "json", "text"],
+              "default": "auto"
+            },
+            "ttl_seconds": {
+              "type": "integer",
+              "minimum": 60,
+              "maximum": 86400,
+              "default": 3600,
+              "description": "TTL for stored original when compression runs"
+            }
+          },
+          "required": ["payload"],
+          "additionalProperties": false
+        }
+      },
+      {
+        "name": "astloom_context_retrieve",
+        "description": "Retrieve the original payload for a handle from astloom_context_compress (same tenant/workspace/project scope).",
+        "maps_to": "context.retrieve",
+        "input_schema": {
+          "type": "object",
+          "properties": {
+            "handle": {
+              "type": "string",
+              "description": "Handle returned by astloom_context_compress"
+            }
+          },
+          "required": ["handle"],
+          "additionalProperties": false
+        }
+      },
+      {
+        "name": "astloom_context_stats",
+        "description": "Process-local native context-compression counters: calls, chars saved, percent reduced, store entries. Use after compress calls on this MCP gateway; CLI equivalent: astloom context stats / measure.",
+        "maps_to": "context.stats",
+        "input_schema": {
+          "type": "object",
+          "properties": {},
+          "additionalProperties": false
+        }
+      },
+      {
+        "name": "astloom_code_graph_search",
+        "description": "Semantic search over the code-knowledge graph (Neo4j when configured) for symbols relevant to a programming query.",
+        "maps_to": "code_graph.search",
+        "input_schema": {
+          "type": "object",
+          "properties": {
+            "query": {
+              "type": "string"
+            },
+            "top_k": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 50,
+              "default": 5
+            }
+          },
+          "required": [
+            "query"
+          ],
+          "additionalProperties": false
+        }
+      },
+      {
+        "name": "astloom_code_graph_get_symbol",
+        "description": "Fetch one code-graph symbol by symbol_id or qualified_name (includes AI documentation fields).",
+        "maps_to": "code_graph.get_symbol",
+        "input_schema": {
+          "type": "object",
+          "properties": {
+            "symbol_id": {
+              "type": "string"
+            },
+            "qualified_name": {
+              "type": "string",
+              "description": "Exact qualified_name or short name"
+            }
+          },
+          "additionalProperties": false
+        }
+      },
+      {
+        "name": "astloom_code_graph_neighbors",
+        "description": "Return STRUCTURAL graph neighbors (CALLS/IMPORTS/…) for a symbol (reference_kind=structural). For IDE-precise find-references use astloom_code_graph_ide_references.",
+        "maps_to": "code_graph.neighbors",
+        "input_schema": {
+          "type": "object",
+          "properties": {
+            "symbol_id": {
+              "type": "string"
+            },
+            "qualified_name": {
+              "type": "string"
+            },
+            "rel_type": {
+              "type": "string",
+              "description": "Optional edge type filter, e.g. CALLS"
+            },
+            "max_depth": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 8,
+              "default": 1
+            }
+          },
+          "additionalProperties": false
+        }
+      },
+      {
+        "name": "astloom_code_graph_impact",
+        "description": "Directed multi-hop impact / blast radius around a symbol (upstream callers, downstream callees, or both). Prefer before wide file reads. Includes escalate_hint.",
+        "maps_to": "code_graph.impact",
+        "input_schema": {
+          "type": "object",
+          "properties": {
+            "symbol_id": {
+              "type": "string"
+            },
+            "qualified_name": {
+              "type": "string"
+            },
+            "direction": {
+              "type": "string",
+              "enum": ["upstream", "downstream", "both"],
+              "default": "both"
+            },
+            "rel_type": {
+              "type": "string"
+            },
+            "rel_types": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "min_confidence": {
+              "type": "string",
+              "description": "exact|probable|ambiguous|external|unresolved floor"
+            },
+            "max_depth": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 8,
+              "default": 3
+            },
+            "top_k": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 500,
+              "default": 50
+            }
+          },
+          "additionalProperties": false
+        }
+      },
+      {
+        "name": "astloom_code_graph_callers",
+        "description": "Ranked inbound callers (fan-in) for a symbol. Prefer for 'who calls X' before Grep. Includes escalate_hint.",
+        "maps_to": "code_graph.callers",
+        "input_schema": {
+          "type": "object",
+          "properties": {
+            "symbol_id": {
+              "type": "string"
+            },
+            "qualified_name": {
+              "type": "string"
+            },
+            "top_k": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 200,
+              "default": 20
+            },
+            "max_depth": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 8,
+              "default": 1
+            },
+            "min_confidence": {
+              "type": "string"
+            },
+            "rel_types": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          },
+          "additionalProperties": false
+        }
+      },
+      {
+        "name": "astloom_code_graph_community",
+        "description": "Leiden/Louvain community membership for one symbol (label, size, members). Prefer for module-boundary questions.",
+        "maps_to": "code_graph.community",
+        "input_schema": {
+          "type": "object",
+          "properties": {
+            "symbol_id": {
+              "type": "string"
+            },
+            "qualified_name": {
+              "type": "string"
+            },
+            "member_limit": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 200,
+              "default": 30
+            }
+          },
+          "additionalProperties": false
+        }
+      },
+      {
+        "name": "astloom_code_graph_call_path",
+        "description": "Compact outbound call-path pack from a seed symbol (CALLS/HTTP_CALLS/ASYNC_CALLS). Prefer for 'what does X call' before wide Grep. Includes escalate_hint.",
+        "maps_to": "code_graph.call_path",
+        "input_schema": {
+          "type": "object",
+          "properties": {
+            "symbol_id": {
+              "type": "string"
+            },
+            "qualified_name": {
+              "type": "string"
+            },
+            "max_depth": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 8,
+              "default": 4
+            },
+            "max_nodes": {
+              "type": "integer",
+              "minimum": 2,
+              "maximum": 200,
+              "default": 40
+            }
+          },
+          "additionalProperties": false
+        }
+      },
+      {
+        "name": "astloom_code_graph_unused_candidates",
+        "description": "Scored dead-code candidates from the code graph (numeric score, evidence, finding_kind). Includes unwired_shared_package for backend/packages trees with recommendation wire|keep_public|retire (never safe_to_delete). Default scope_mode=task_neighborhood after replace/retire; optional project_scan for ranked discovery (prefer path_prefix to scope a package); optional disk_search/coverage_hits/flag_states/triage. Astloom never deletes files — prove then delete locally. Anchors required except project_scan. Prefer min_confidence=0.8 before safe deletes. Graph is SoT — do not treat Memory as a candidate queue.",
+        "maps_to": "code_graph.unused_candidates",
+        "input_schema": {
+          "type": "object",
+          "properties": {
+            "project_id": {
+              "type": "string",
+              "description": "Optional; must match active MCP project scope when set"
+            },
+            "scope_mode": {
+              "type": "string",
+              "enum": ["task_neighborhood", "changed_symbols", "explicit_paths", "project_scan"],
+              "default": "task_neighborhood"
+            },
+            "anchor_symbols": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              },
+              "description": "Symbol ids, qualified names, or short names in the change neighborhood"
+            },
+            "anchor_paths": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              },
+              "description": "Repo-relative path prefixes for explicit_paths / anchors"
+            },
+            "path_prefix": {
+              "type": "string",
+              "description": "Optional repo-relative directory/file prefix; report candidates only under this path while liveness still uses the full project graph"
+            },
+            "max_results": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 200,
+              "default": 50
+            },
+            "include_uncertain": {
+              "type": "boolean",
+              "default": false
+            },
+            "min_confidence": {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 1,
+              "default": 0,
+              "description": "Minimum numeric score to include; use 0.8 when acting on safe_to_delete"
+            },
+            "triage": {
+              "type": "boolean",
+              "default": false,
+              "description": "Advisory triage (local rules; optional LLM judge later); cannot raise safe_to_delete"
+            },
+            "disk_search": {
+              "type": "boolean",
+              "default": false,
+              "description": "Optional bounded disk string-name search (requires repo_root); soft-blocks safe_to_delete"
+            },
+            "repo_root": {
+              "type": "string",
+              "description": "Absolute or workspace root for optional disk_search"
+            },
+            "coverage_hits": {
+              "type": "object",
+              "additionalProperties": {
+                "type": "integer"
+              },
+              "description": "Optional map symbol_id→hit_count; hits>0 block delete; 0 is evidence only"
+            },
+            "flag_states": {
+              "type": "object",
+              "additionalProperties": {
+                "type": "object"
+              },
+              "description": "Optional feature-flag states for flag_controlled_dead findings (constant_for_days>=90)"
+            }
+          },
+          "required": ["scope_mode"],
+          "additionalProperties": false
+        }
+      },
+      {
+        "name": "astloom_code_graph_path",
+        "description": "Shortest path between two symbols (ids or qualified names) on the code graph.",
+        "maps_to": "code_graph.path",
+        "input_schema": {
+          "type": "object",
+          "properties": {
+            "start_id": {
+              "type": "string"
+            },
+            "end_id": {
+              "type": "string"
+            },
+            "max_depth": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 30,
+              "default": 12
+            }
+          },
+          "required": [
+            "start_id",
+            "end_id"
+          ],
+          "additionalProperties": false
+        }
+      },
+      {
+        "name": "astloom_code_graph_freshness",
+        "description": "Report or mark pending file sync (stale banners for explore/review).",
+        "maps_to": "code_graph.freshness",
+        "input_schema": {
+          "type": "object",
+          "properties": {
+            "file_path": {
+              "type": "string",
+              "description": "If set, mark this path pending until next ingest"
+            }
+          },
+          "additionalProperties": false
+        }
+      },
+      {
+        "name": "astloom_code_graph_ide_references",
+        "description": "IDE-semantic find-references via local Language Server (reference_kind=ide_semantic). Does NOT write durable CODE_REL. Prefer astloom_code_graph_neighbors for structural graph edges.",
+        "maps_to": "code_graph.ide_references",
+        "input_schema": {
+          "type": "object",
+          "properties": {
+            "root_path": { "type": "string" },
+            "file_path": { "type": "string" },
+            "line": { "type": "integer", "minimum": 0 },
+            "character": { "type": "integer", "minimum": 0 },
+            "language": { "type": "string" }
+          },
+          "required": ["root_path", "file_path", "line", "character"],
+          "additionalProperties": false
+        }
+      },
+      {
+        "name": "astloom_code_graph_ide_definition",
+        "description": "IDE-semantic go-to-definition via local Language Server (reference_kind=ide_semantic). Not a durable graph edge lookup.",
+        "maps_to": "code_graph.ide_definition",
+        "input_schema": {
+          "type": "object",
+          "properties": {
+            "root_path": { "type": "string" },
+            "file_path": { "type": "string" },
+            "line": { "type": "integer", "minimum": 0 },
+            "character": { "type": "integer", "minimum": 0 },
+            "language": { "type": "string" }
+          },
+          "required": ["root_path", "file_path", "line", "character"],
+          "additionalProperties": false
+        }
+      },
+      {
+        "name": "astloom_code_graph_ide_rename",
+        "description": "IDE-semantic rename via local Language Server, then AST reconcile_after_edit (reference_kind=ide_semantic). Never dual-writes CODE_REL from LSP.",
+        "maps_to": "code_graph.ide_rename",
+        "input_schema": {
+          "type": "object",
+          "properties": {
+            "root_path": { "type": "string" },
+            "file_path": { "type": "string" },
+            "line": { "type": "integer", "minimum": 0 },
+            "character": { "type": "integer", "minimum": 0 },
+            "new_name": { "type": "string" },
+            "language": { "type": "string" },
+            "apply": { "type": "boolean", "default": true },
+            "run_sync": { "type": "boolean", "default": true },
+            "idempotency_key": { "type": "string" }
+          },
+          "required": ["root_path", "file_path", "line", "character", "new_name"],
+          "additionalProperties": false
+        }
+      },
+      {
+        "name": "astloom_code_graph_reconcile_after_edit",
+        "description": "After IDE/LSP edits: mark paths pending and optionally AST re-ingest (reference_kind=structural converge). ADR 48 one-way reconcile.",
+        "maps_to": "code_graph.reconcile_after_edit",
+        "input_schema": {
+          "type": "object",
+          "properties": {
+            "file_paths": { "type": "array", "items": { "type": "string" } },
+            "file_path": { "type": "string" },
+            "root_path": { "type": "string" },
+            "run_sync": { "type": "boolean", "default": false },
+            "idempotency_key": { "type": "string" }
+          },
+          "additionalProperties": false
+        }
+      },
+      {
+        "name": "astloom_code_graph_generation_context",
+        "description": "Build a generation context pack for coding agents: seed symbol, related symbols, and hybrid_documentation layers (human → living → rationale → AST). Prefer human docs when DOCUMENTED_BY exists; never invents edges.",
+        "maps_to": "code_graph.generation_context",
+        "input_schema": {
+          "type": "object",
+          "properties": {
+            "symbol_id": {
+              "type": "string"
+            },
+            "qualified_name": {
+              "type": "string"
+            },
+            "max_symbols": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 64,
+              "default": 12
+            }
+          },
+          "additionalProperties": false
+        }
+      },
+      {
+        "name": "astloom_code_graph_ingest_file",
+        "description": "Index one source file into the code-knowledge graph (symbols, edges, docs). Use to populate Neo4j from the IDE.",
+        "maps_to": "code_graph.ingest_file",
+        "input_schema": {
+          "type": "object",
+          "properties": {
+            "file_path": {
+              "type": "string"
+            },
+            "source": {
+              "type": "string",
+              "description": "Full file source text"
+            },
+            "language": {
+              "type": "string",
+              "default": "python"
+            },
+            "idempotency_key": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "file_path",
+            "source"
+          ],
+          "additionalProperties": false
+        }
+      },
+      {
+        "name": "astloom_code_graph_ingest_repo",
+        "description": "Walk a local repository root and index all supported source files into the code-knowledge graph (Python/TS/JS/Go/Rust). Skips node_modules/.git/.venv/etc. Prefer astloom_code_graph_sync for normal use.",
+        "maps_to": "code_graph.ingest_repo",
+        "input_schema": {
+          "type": "object",
+          "properties": {
+            "root_path": {
+              "type": "string",
+              "description": "Absolute or expandable path to the repository root"
+            },
+            "include_extensions": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              },
+              "description": "Optional extension allow-list (e.g. [\".py\", \".ts\"]); default = language matrix"
+            },
+            "exclude_dirs": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              },
+              "description": "Directory names to skip (default includes node_modules, .git, .venv, …)"
+            },
+            "max_files": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 20000,
+              "default": 2000
+            },
+            "max_file_bytes": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "include_outcomes": {
+              "type": "boolean",
+              "default": true
+            },
+            "idempotency_key": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "root_path"
+          ],
+          "additionalProperties": false
+        }
+      },
+      {
+        "name": "astloom_code_graph_sync",
+        "description": "Sync a repository into the code graph. File mode is chosen automatically (full vs incremental). Optional embedding_refresh_mode=full matches CLI `astloom sync heal` (whole-scope missing/mismatch + orphans); default touched scopes embeddings to this run.",
+        "maps_to": "code_graph.sync",
+        "input_schema": {
+          "type": "object",
+          "properties": {
+            "root_path": {
+              "type": "string",
+              "description": "Repository root to sync"
+            },
+            "max_files": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 20000,
+              "default": 2000
+            },
+            "embedding_refresh_mode": {
+              "type": "string",
+              "enum": ["touched", "full"],
+              "default": "touched",
+              "description": "touched = embeddings for files this run (noop capped backlog). full = uncapped project heal (CLI: astloom sync heal)."
+            },
+            "idempotency_key": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "root_path"
+          ],
+          "additionalProperties": false
+        }
+      },
+      {
+        "name": "astloom_code_graph_purge",
+        "description": "Wipe all graph data for the current project scope. Requires confirm=true. Run sync afterward to rebuild.",
+        "maps_to": "code_graph.purge",
+        "input_schema": {
+          "type": "object",
+          "properties": {
+            "confirm": {
+              "type": "boolean",
+              "description": "Must be true to execute the wipe"
+            }
+          },
+          "required": [
+            "confirm"
+          ],
+          "additionalProperties": false
+        }
+      },
+      {
+        "name": "astloom_backup_status",
+        "description": "Return the last local project backup/restore job summary (no bundle transfer).",
+        "maps_to": "backup.status",
+        "input_schema": {
+          "type": "object",
+          "properties": {},
+          "additionalProperties": false
+        }
+      },
+      {
+        "name": "astloom_backup_dry_run",
+        "description": "Validate a server-local .asbak path and report conflict/remap outcome without writing. Large bundles stay on disk — use CLI for export/restore.",
+        "maps_to": "backup.dry_run",
+        "input_schema": {
+          "type": "object",
+          "properties": {
+            "bundle_path": {
+              "type": "string",
+              "description": "Absolute path to a .asbak file on the Astloom server host"
+            },
+            "replace": {
+              "type": "boolean",
+              "description": "If true, dry-run assumes --replace wipe policy"
+            },
+            "remap_tenant": {
+              "type": "string"
+            },
+            "remap_workspace": {
+              "type": "string"
+            },
+            "remap_project": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "bundle_path"
+          ],
+          "additionalProperties": false
+        }
+      },
+      {
+        "name": "astloom_code_graph_language_profile",
+        "description": "Return polyglot language/profile stats for symbols currently in the project graph.",
+        "maps_to": "code_graph.language_profile",
+        "input_schema": {
+          "type": "object",
+          "properties": {},
+          "additionalProperties": false
+        }
+      },
+      {
+        "name": "astloom_create_task",
+        "description": "Create a durable Task record for follow-up engineering work.",
+        "maps_to": "core_data.create_task",
+        "input_schema": {
+          "type": "object",
+          "properties": {
+            "title": {
+              "type": "string"
+            },
+            "instructions": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "title"
+          ],
+          "additionalProperties": false
+        }
+      },
+      {
+        "name": "astloom_quality_audit",
+        "description": "Categorized docs+code quality findings (standards, size, linking, revision, never-ingested/stale code). Call at session start and after material edits. Returns summary, top findings with fix_hint, and must_remediate. Optional create_tasks writes durable CoreData tasks for high/medium findings (stable fingerprints). create_tasks implies reconcile_tasks; set reconcile_tasks alone to cancel cleared mcp-quality Tasks and purge terminal ones past retention.",
+        "maps_to": "quality.audit",
+        "input_schema": {
+          "type": "object",
+          "properties": {
+            "top_n": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100,
+              "default": 25,
+              "description": "Max findings to return"
+            },
+            "severities": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "enum": ["high", "medium", "low"]
+              },
+              "description": "Optional severity filter"
+            },
+            "create_tasks": {
+              "type": "boolean",
+              "default": false,
+              "description": "If true, create durable automated follow-up Tasks for high/medium findings (implies reconcile_tasks)"
+            },
+            "reconcile_tasks": {
+              "type": "boolean",
+              "default": false,
+              "description": "Cancel open mcp-quality automated Tasks whose fingerprint is no longer in the active finding set; purge terminal automated Tasks older than ASTLOOM_FOLLOWUP_TASK_RETENTION_DAYS. Implied when create_tasks is true."
+            }
+          },
+          "additionalProperties": false
+        }
+      },
+      {
+        "name": "astloom_write",
+        "description": "Write durable Astloom records from Cursor: memory notes, tasks, activity, or decisions for the scoped project.",
+        "maps_to": "platform.write",
+        "input_schema": {
+          "type": "object",
+          "properties": {
+            "resource": {
+              "type": "string",
+              "enum": [
+                "memory",
+                "task",
+                "activity",
+                "decision"
+              ],
+              "description": "Which Astloom resource to create"
+            },
+            "title": {
+              "type": "string",
+              "description": "Short title (memory/task/decision)"
+            },
+            "body": {
+              "type": "string",
+              "description": "Full text body (memory) or decision statement"
+            },
+            "instructions": {
+              "type": "string",
+              "description": "Task instructions (resource=task)"
+            },
+            "summary": {
+              "type": "string",
+              "description": "Activity action summary (resource=activity)"
+            },
+            "action_type": {
+              "type": "string",
+              "description": "Activity action type (resource=activity)",
+              "default": "cursor_note"
+            },
+            "tags": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              },
+              "description": "Optional tags for memory"
+            },
+            "confidence": {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 1,
+              "default": 0.9,
+              "description": "Memory confidence 0..1"
+            }
+          },
+          "required": [
+            "resource"
+          ],
+          "additionalProperties": false
+        }
+      },
+      {
+        "name": "astloom_docs_drift_check",
+        "description": "Request a documentation drift check for changed symbols (docs-sync capability).",
+        "maps_to": "docs_sync.drift_check",
+        "input_schema": {
+          "type": "object",
+          "properties": {
+            "symbol": {
+              "type": "string"
+            },
+            "file_path": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "symbol"
+          ],
+          "additionalProperties": false
+        }
+      },
+      {
+        "name": "astloom_docs_stale_candidates",
+        "description": "Scored stale-documentation candidates (orphan_doc/ghost_link/stale_anchor/superseded_retrieval_risk/wiki_orphan/duplicate_authority; optional coverage_gap). Default scope_mode=task_neighborhood; optional project_scan with path_prefix. Prefer safe_to_update/safe_to_unlink over safe_to_delete; act only when score>=0.8 and blockers empty. wiki_orphan and duplicate_authority never auto-delete. Astloom never deletes Markdown. Graph/docs registry are SoT — not Memory.",
+        "maps_to": "docs.stale_candidates",
+        "input_schema": {
+          "type": "object",
+          "properties": {
+            "project_id": {
+              "type": "string",
+              "description": "Optional; must match active MCP project scope when set"
+            },
+            "scope_mode": {
+              "type": "string",
+              "enum": ["task_neighborhood", "changed_symbols", "explicit_paths", "project_scan"],
+              "default": "task_neighborhood"
+            },
+            "anchor_symbols": {
+              "type": "array",
+              "items": { "type": "string" },
+              "description": "Symbol ids or paths in the change neighborhood"
+            },
+            "anchor_paths": {
+              "type": "array",
+              "items": { "type": "string" },
+              "description": "Code or doc path prefixes"
+            },
+            "path_prefix": {
+              "type": "string",
+              "description": "Optional docs-root relative prefix; report candidates only under this path"
+            },
+            "max_results": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 200,
+              "default": 50
+            },
+            "include_uncertain": {
+              "type": "boolean",
+              "default": false
+            },
+            "min_confidence": {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 1,
+              "description": "Minimum score; use 0.8 for destructive remediations; project_scan omit→0.50"
+            },
+            "triage": {
+              "type": "boolean",
+              "default": false,
+              "description": "Advisory triage; cannot raise act flags"
+            },
+            "include_coverage_gaps": {
+              "type": "boolean",
+              "default": false,
+              "description": "Opt-in missing human-doc findings for doc_required symbols"
+            }
+          },
+          "required": ["scope_mode"],
+          "additionalProperties": false
+        }
+      },
+      {
+        "name": "astloom_docs_write",
+        "description": "Documentation workflow from Cursor: Body-tier validate frontmatter, index a doc note, or create a review draft for a symbol via docs-sync. For Full-tier product Markdown rules call astloom_docs_authoring_standards first.",
+        "maps_to": "docs_sync.write",
+        "input_schema": {
+          "type": "object",
+          "properties": {
+            "mode": {
+              "type": "string",
+              "enum": [
+                "validate",
+                "note",
+                "draft",
+                "index"
+              ],
+              "description": "validate=check frontmatter only; note/index=index a document; draft=create documentation draft for a symbol"
+            },
+            "title": {
+              "type": "string"
+            },
+            "body": {
+              "type": "string",
+              "description": "Markdown body"
+            },
+            "symbol": {
+              "type": "string",
+              "description": "Symbol path for draft/note linking (e.g. auth.hash_password)"
+            },
+            "file_path": {
+              "type": "string",
+              "description": "Source file path for the symbol"
+            },
+            "path": {
+              "type": "string",
+              "description": "Logical docs path for note/index (e.g. docs/modules/auth.md)"
+            },
+            "owner": {
+              "type": "string",
+              "description": "Frontmatter owner (default mcp-gateway)"
+            },
+            "doc_id": {
+              "type": "string",
+              "description": "Optional stable doc_id"
+            },
+            "status": {
+              "type": "string",
+              "enum": [
+                "draft",
+                "active",
+                "deprecated",
+                "archived"
+              ],
+              "default": "draft"
+            },
+            "frontmatter": {
+              "type": "object",
+              "description": "Optional full frontmatter object (validate/index). When set, overrides generated fields."
+            }
+          },
+          "required": [
+            "mode"
+          ],
+          "additionalProperties": false
+        }
+      },
+      {
+        "name": "astloom_docs_status",
+        "description": "Return documentation coverage and missing-doc gaps for the scoped project (docs-as-code sync). For Full-tier product Markdown authoring rules, call astloom_docs_authoring_standards.",
+        "maps_to": "docs_sync.status",
+        "input_schema": {
+          "type": "object",
+          "properties": {},
+          "additionalProperties": false
+        }
+      },
+      {
+        "name": "astloom_docs_authoring_standards",
+        "description": "Return Full-tier Astloom/ThinkingSOC documentation authoring law: required frontmatter, lanes, Mermaid+flow tables, size budgets, procedure 10, and CLI gates. Call when the user asks how documentation works or before writing/remediating product Markdown under docs/. Docs-sync validate is Body-tier only.",
+        "maps_to": "docs_sync.authoring_standards",
+        "input_schema": {
+          "type": "object",
+          "properties": {},
+          "additionalProperties": false
+        }
+      },
+      {
+        "name": "astloom_docs_catalog",
+        "description": "Cached documentation catalog built from this software's scanned Markdown frontmatter. Vocabularies (tags/lanes/doc_type/…) are observed — not a global hardcoded enum. Use filters to narrow which paths to Read. Does not invent DOCUMENTED_BY. Optional refresh/roots rebuild the cache.",
+        "maps_to": "docs_sync.catalog",
+        "input_schema": {
+          "type": "object",
+          "properties": {
+            "refresh": {
+              "type": "boolean",
+              "default": false,
+              "description": "Rebuild catalog cache from disk"
+            },
+            "roots": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              },
+              "description": "Optional doc roots to scan (product-specific). Omit to use ASTLOOM_DOCS_CATALOG_ROOTS or defaults."
+            },
+            "tag": {
+              "type": "string",
+              "description": "Filter by frontmatter tag observed in this software"
+            },
+            "concern_lane": {
+              "type": "string"
+            },
+            "lifecycle_lane": {
+              "type": "string"
+            },
+            "audience_lane": {
+              "type": "string"
+            },
+            "phase": {
+              "type": "string"
+            },
+            "doc_type": {
+              "type": "string"
+            },
+            "query": {
+              "type": "string",
+              "description": "Substring on path/title/summary/tags/doc_id"
+            },
+            "has_linked_symbols": {
+              "type": "boolean",
+              "description": "If set, only docs with or without linked_symbols"
+            },
+            "limit": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 500,
+              "default": 50
+            }
+          },
+          "additionalProperties": false
+        }
+      },
+      {
+        "name": "astloom_guidance_resolve",
+        "description": "Resolve Agent Workspace Guidance for this project: AGENTS entry, always-on rules, and skill catalog. Prefer calling before substantive coding. Seeds MCP-first guidance when empty.",
+        "maps_to": "guidance.resolve",
+        "input_schema": {
+          "type": "object",
+          "properties": {
+            "task_summary": {
+              "type": "string",
+              "description": "Optional task summary for applicability scoring"
+            },
+            "workflow_type": {
+              "type": "string",
+              "description": "Workflow type (default coding)"
+            },
+            "include_skill_bodies": {
+              "type": "boolean",
+              "default": false,
+              "description": "If true, include skill bodies in the catalog (prefer get_skill instead)"
+            },
+            "budget_overrides": {
+              "type": "object",
+              "description": "Optional budget slice overrides"
+            }
+          },
+          "additionalProperties": false
+        }
+      },
+      {
+        "name": "astloom_guidance_list_skills",
+        "description": "List Astloom skill catalog descriptors without always-on rule bodies.",
+        "maps_to": "guidance.list_skills",
+        "input_schema": {
+          "type": "object",
+          "properties": {
+            "query": {
+              "type": "string",
+              "description": "Optional filter over skill name/description"
+            }
+          },
+          "additionalProperties": false
+        }
+      },
+      {
+        "name": "astloom_guidance_get_skill",
+        "description": "Fetch one Agent Workspace Guidance skill body by skill_id or name.",
+        "maps_to": "guidance.get_skill",
+        "input_schema": {
+          "type": "object",
+          "properties": {
+            "skill_id": {
+              "type": "string"
+            },
+            "name": {
+              "type": "string"
+            },
+            "bundle_id": {
+              "type": "string",
+              "description": "Optional correlation to a prior guidance resolve"
+            }
+          },
+          "additionalProperties": false
+        }
+      }
+    ]
+  },
+  "defaults": {
+    "isolation": "strict",
+    "ide": "cursor"
+  }
+}

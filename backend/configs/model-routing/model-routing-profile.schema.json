@@ -1,0 +1,79 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://astloom.local/schemas/model-routing-profile.schema.json",
+  "title": "Astloom ModelRoutingProfile",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["profile_id", "version", "title", "environment", "routes"],
+  "properties": {
+    "profile_id": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "^[a-z][a-z0-9_-]*$"
+    },
+    "version": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+([.-][A-Za-z0-9.-]+)?$"
+    },
+    "title": { "type": "string", "minLength": 1 },
+    "description": { "type": "string" },
+    "environment": {
+      "type": "string",
+      "enum": ["local", "cloud"]
+    },
+    "routes": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "$ref": "#/$defs/route" }
+    }
+  },
+  "$defs": {
+    "route": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "task_class",
+        "risk_level",
+        "primary_model",
+        "fallback_models",
+        "json_mode",
+        "allow_stub"
+      ],
+      "properties": {
+        "task_class": {
+          "type": "string",
+          "enum": [
+            "docs.generate",
+            "rules.judge",
+            "codegen.synthesize",
+            "embed.symbol"
+          ]
+        },
+        "risk_level": {
+          "type": "string",
+          "enum": ["low", "medium", "high"]
+        },
+        "primary_model": {
+          "type": "string",
+          "description": "LiteLLM model alias (may be empty when allow_stub is true)"
+        },
+        "fallback_models": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 },
+          "uniqueItems": true
+        },
+        "max_tokens": {
+          "type": ["integer", "null"],
+          "minimum": 1
+        },
+        "timeout_ms": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "json_mode": { "type": "boolean" },
+        "allow_stub": { "type": "boolean" }
+      }
+    }
+  }
+}

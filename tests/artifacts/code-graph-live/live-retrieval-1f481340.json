@@ -1,0 +1,30 @@
+{
+  "capabilities": {
+    "apoc": true,
+    "fulltext": true,
+    "gds": false,
+    "gds_concurrency": 4,
+    "gds_enabled": true
+  },
+  "community_algorithm": "scikit_network_leiden",
+  "community_count": 2,
+  "hybrid_mode": "hybrid_rrf_fts_semantic_bm25",
+  "hybrid_top": [
+    {
+      "file_path": "src/auth.py",
+      "kind": "function",
+      "qualified_name": "src.auth.login",
+      "score": 0.048916,
+      "symbol_id": "sym:artifact-0ea3e4cb72:src.auth.login"
+    },
+    {
+      "file_path": "src/auth.py",
+      "kind": "documentation",
+      "qualified_name": "src.auth.login::__doc__",
+      "score": 0.048652,
+      "symbol_id": "doc:artifact-0ea3e4cb72:src.auth.login"
+    }
+  ],
+  "scope": "artifact-0ea3e4cb72",
+  "ts": "2026-07-28T16:23:53.422170+00:00"
+}

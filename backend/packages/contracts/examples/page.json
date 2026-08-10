@@ -1,0 +1,9 @@
+{
+  "items": [],
+  "page": {
+    "next_page_token": null,
+    "page_size": 50,
+    "has_more": false
+  },
+  "correlation_id": "corr_example"
+}

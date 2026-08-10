@@ -1,0 +1,32 @@
+{
+  "profile_id": "default-memory-profile",
+  "version": 1,
+  "title": "Default memory WeightProfile",
+  "owner": "memory-platform",
+  "status": "active",
+  "domain": "software-engineering",
+  "task_type": "retrieve",
+  "risk_level": "medium",
+  "feature_weights": {
+    "semantic_weight": 3.0,
+    "episodic_weight": 1.0,
+    "working_weight": 2.0,
+    "evidence_weight": 1.5,
+    "recency_weight": 0.25,
+    "current_state_boost": 2.0,
+    "episodic_penalty": 1.5
+  },
+  "thresholds": {
+    "min_relevance_score": 2.0,
+    "faq_min_observations": 2,
+    "faq_min_evidence": 1,
+    "context_token_budget": 1200,
+    "curiosity_min_observations": 2,
+    "documentation_draft_min_confidence": 0.75,
+    "documentation_task_min_confidence": 0.4
+  },
+  "retention_overrides": {},
+  "approved_by": "memory-platform",
+  "approved_at": "2026-07-23T00:00:00Z",
+  "change_reason": "GAP-006 baseline"
+}

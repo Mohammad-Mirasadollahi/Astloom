@@ -1,0 +1,32 @@
+{
+  "profile_id": "conservative-memory-profile",
+  "version": 1,
+  "title": "Conservative memory WeightProfile",
+  "owner": "memory-platform",
+  "status": "active",
+  "domain": "software-engineering",
+  "task_type": "retrieve",
+  "risk_level": "high",
+  "feature_weights": {
+    "semantic_weight": 2.0,
+    "episodic_weight": 0.5,
+    "working_weight": 1.5,
+    "evidence_weight": 2.5,
+    "recency_weight": 0.1,
+    "current_state_boost": 1.5,
+    "episodic_penalty": 2.0
+  },
+  "thresholds": {
+    "min_relevance_score": 3.0,
+    "faq_min_observations": 3,
+    "faq_min_evidence": 2,
+    "context_token_budget": 800,
+    "curiosity_min_observations": 3,
+    "documentation_draft_min_confidence": 0.85,
+    "documentation_task_min_confidence": 0.55
+  },
+  "retention_overrides": {},
+  "approved_by": "memory-platform",
+  "approved_at": "2026-07-23T00:00:00Z",
+  "change_reason": "Higher evidence bar for risky retrieval"
+}

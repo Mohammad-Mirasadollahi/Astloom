@@ -1,0 +1,138 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://astloom.local/schemas/context-bundle-audit.schema.json",
+  "title": "Astloom ContextBundle Audit",
+  "description": "Public ContextBundle shape emitted by memory-service for prompt-context audit (GAP-T04).",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "bundle_id",
+    "tenant_id",
+    "workspace_id",
+    "project_id",
+    "query",
+    "token_budget",
+    "weight_profile",
+    "prompt_cache",
+    "items",
+    "excluded",
+    "built_at"
+  ],
+  "properties": {
+    "bundle_id": { "type": "string", "minLength": 1 },
+    "tenant_id": { "type": "string", "minLength": 1 },
+    "workspace_id": { "type": "string", "minLength": 1 },
+    "project_id": { "type": "string", "minLength": 1 },
+    "query": { "type": "string", "minLength": 1 },
+    "token_budget": { "type": "integer", "minimum": 1 },
+    "weight_profile": { "$ref": "#/$defs/profileRef" },
+    "prompt_cache": { "$ref": "#/$defs/profileRef" },
+    "items": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/includedItem" }
+    },
+    "excluded": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/excludedItem" }
+    },
+    "built_at": { "type": "string", "minLength": 1 }
+  },
+  "$defs": {
+    "profileRef": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["profile_id", "version"],
+      "properties": {
+        "profile_id": { "type": "string", "minLength": 1 },
+        "version": { "type": "integer", "minimum": 1 }
+      }
+    },
+    "includedItem": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["memory", "score", "selection_reason", "token_estimate"],
+      "properties": {
+        "memory": { "$ref": "#/$defs/memoryPublic" },
+        "score": { "type": "number" },
+        "selection_reason": { "type": "string", "minLength": 1 },
+        "token_estimate": { "type": "integer", "minimum": 1 },
+        "dense_retrieval": {
+          "type": ["string", "null"],
+          "description": "Optional Stage-1/Stage-2 attribution (pgvector / turbovec) when dense recall contributed."
+        }
+      }
+    },
+    "excludedItem": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "reason", "score"],
+      "properties": {
+        "id": { "type": "string", "minLength": 1 },
+        "reason": { "type": "string", "minLength": 1 },
+        "score": { "type": "number" }
+      }
+    },
+    "memoryPublic": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "tenant_id",
+        "workspace_id",
+        "project_id",
+        "actor_id",
+        "correlation_id",
+        "kind",
+        "state",
+        "title",
+        "body",
+        "tags",
+        "evidence_refs",
+        "source_refs",
+        "confidence",
+        "pinned",
+        "expires_at",
+        "version",
+        "created_at",
+        "updated_at"
+      ],
+      "properties": {
+        "id": { "type": "string", "minLength": 1 },
+        "tenant_id": { "type": "string", "minLength": 1 },
+        "workspace_id": { "type": "string", "minLength": 1 },
+        "project_id": { "type": "string", "minLength": 1 },
+        "project_group_id": { "type": ["string", "null"] },
+        "actor_id": { "type": "string", "minLength": 1 },
+        "correlation_id": { "type": "string", "minLength": 1 },
+        "kind": {
+          "type": "string",
+          "enum": ["working", "episodic", "semantic", "restricted", "deprecated"]
+        },
+        "state": {
+          "type": "string",
+          "enum": ["candidate", "active", "restricted", "stale", "deprecated", "archived"]
+        },
+        "title": { "type": "string" },
+        "body": { "type": "string" },
+        "tags": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "evidence_refs": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 }
+        },
+        "source_refs": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 }
+        },
+        "confidence": { "type": "number", "minimum": 0, "maximum": 1 },
+        "pinned": { "type": "boolean" },
+        "expires_at": { "type": ["string", "null"], "minLength": 1 },
+        "version": { "type": "integer", "minimum": 1 },
+        "created_at": { "type": "string", "minLength": 1 },
+        "updated_at": { "type": "string", "minLength": 1 }
+      }
+    }
+  }
+}

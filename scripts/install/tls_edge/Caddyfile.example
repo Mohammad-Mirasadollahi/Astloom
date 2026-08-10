@@ -1,0 +1,23 @@
+# Astloom HTTPS edge — example Caddy site block.
+# Copy or include from your Caddyfile. Run ensure_certs.sh first to export cert paths.
+#
+# Required env (ensure_certs.sh sets cert/key; operator sets hostname):
+#   ASTLOOM_PUBLIC_HOSTNAME — public DNS name clients use (default: localhost)
+#   ASTLOOM_TLS_CERT         — leaf certificate PEM path
+#   ASTLOOM_TLS_KEY          — leaf private key PEM path
+#
+# Optional backend ports (defaults match Astloom port profile):
+#   ASTLOOM_MCP_HTTP_PORT=32500
+#   ASTLOOM_PROJECT_PROFILE_PORT=32194
+
+{$ASTLOOM_PUBLIC_HOSTNAME:localhost} {
+	tls {$ASTLOOM_TLS_CERT} {$ASTLOOM_TLS_KEY}
+
+	handle /mcp* {
+		reverse_proxy 127.0.0.1:{$ASTLOOM_MCP_HTTP_PORT:32500}
+	}
+
+	handle /api/* {
+		reverse_proxy 127.0.0.1:{$ASTLOOM_PROJECT_PROFILE_PORT:32194}
+	}
+}

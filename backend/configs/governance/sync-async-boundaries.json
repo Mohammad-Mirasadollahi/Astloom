@@ -1,0 +1,57 @@
+{
+  "schema_version": "1.0",
+  "doc_id": "ac.gov.sync-async-boundaries",
+  "default_retry": {"max_attempts": 3, "backoff_seconds": [1, 5, 30]},
+  "default_timeout_seconds": {"sync": 30, "async": 600},
+  "operations": [
+    {
+      "operation_id": "code_graph.ingest_file",
+      "mode": "sync",
+      "durable_delivery": true,
+      "timeout_seconds": 60,
+      "entrypoint": "code_graph_service.application.ingest.file_ingest"
+    },
+    {
+      "operation_id": "code_graph.sync_repo",
+      "mode": "async",
+      "durable_delivery": true,
+      "timeout_seconds": 600,
+      "entrypoint": "code_graph_service.application.ingest.sync.SyncMixin.sync_repo"
+    },
+    {
+      "operation_id": "memory.retrieve_context",
+      "mode": "sync",
+      "durable_delivery": false,
+      "timeout_seconds": 15,
+      "entrypoint": "memory_service.core.MemoryService.retrieve_context"
+    },
+    {
+      "operation_id": "memory.consolidate_memory",
+      "mode": "sync",
+      "durable_delivery": true,
+      "timeout_seconds": 30,
+      "entrypoint": "memory_service.core.MemoryService.consolidate_memory"
+    },
+    {
+      "operation_id": "outbox.relay",
+      "mode": "async",
+      "durable_delivery": true,
+      "timeout_seconds": 120,
+      "entrypoint": "outbox_relay"
+    },
+    {
+      "operation_id": "rule.evaluate_rules",
+      "mode": "sync",
+      "durable_delivery": true,
+      "timeout_seconds": 45,
+      "entrypoint": "rule_engine_service.application.service"
+    },
+    {
+      "operation_id": "adapter.sync_connector",
+      "mode": "async",
+      "durable_delivery": true,
+      "timeout_seconds": 300,
+      "entrypoint": "adapter_service"
+    }
+  ]
+}

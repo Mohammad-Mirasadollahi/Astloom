@@ -1,0 +1,33 @@
+{
+  "fail_closed_from_log": true,
+  "cli_ingest_ok": true,
+  "generation_rc": 1,
+  "generation_has_payload": true,
+  "soft_write_ok": true,
+  "ok": true,
+  "gen_tail": "error: qualified_name not found: OrdersService\n",
+  "ingest_tail": "   \"status\": \"ok\",\n        \"symbols_changed\": 7,\n        \"symbols_documented\": 7,\n        \"symbols_indexed\": 8\n      }\n    ],\n    \"root_path\": \"/opt/Astloom/.astloom/gap-live-fixtures\",\n    \"symbols_changed\": 7,\n    \"symbols_documented\": 7,\n    \"symbols_indexed\": 8,\n    \"truncated\": false\n  }\n}\n",
+  "generation_com_acme": {
+    "generation_rc": 0,
+    "generation_ok": true,
+    "read_model_id": "code_graph.generation_context",
+    "payload_keys": [
+      "expansion",
+      "hybrid_documentation",
+      "polyglot",
+      "prompt_context",
+      "read_model_id",
+      "seed_symbol_id",
+      "symbol_count",
+      "symbols",
+      "uses_full_repository"
+    ],
+    "neo4j_di_count": 3,
+    "neo4j_frameworks": [
+      "spring",
+      "wire"
+    ],
+    "neo4j_di_ok": true,
+    "ok": true
+  }
+}

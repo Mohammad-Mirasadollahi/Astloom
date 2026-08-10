@@ -1,0 +1,35 @@
+# Optional TurboVec adapter contract (GAP-T03 / ADR 08).
+# Installs astloom[turbovec] and runs @pytest.mark.turbovec tests.
+name: turbovec-contract
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - "backend/packages/vector_index/**"
+      - "tests/backend/packages/test_vector_index.py"
+      - "pyproject.toml"
+  pull_request:
+    paths:
+      - "backend/packages/vector_index/**"
+      - "tests/backend/packages/test_vector_index.py"
+      - "pyproject.toml"
+
+jobs:
+  turbovec:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install Astloom with turbovec extra
+        run: |
+          python -m pip install -U pip
+          pip install -e ".[dev,turbovec]"
+      - name: Run turbovec-marked contract tests
+        env:
+          PYTHONPATH: backend/packages
+          ASTLOOM_RAG_ANN_ACCELERATOR: turbovec
+        run: |
+          python -m pytest tests/backend/packages/test_vector_index.py -q -m turbovec --tb=short

@@ -1,0 +1,112 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://astloom.local/schemas/rule-suggestion.schema.json",
+  "title": "Astloom RuleSuggestion",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "suggestion_id",
+    "title",
+    "proposed_rule",
+    "scope",
+    "risk",
+    "confidence",
+    "evidence",
+    "status"
+  ],
+  "properties": {
+    "suggestion_id": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "^[a-zA-Z0-9][a-zA-Z0-9:_-]*$"
+    },
+    "title": { "type": "string", "minLength": 1 },
+    "proposed_rule": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["category", "statement"],
+      "properties": {
+        "category": {
+          "type": "string",
+          "enum": [
+            "workflow",
+            "documentation",
+            "code_review",
+            "memory",
+            "feature",
+            "domain",
+            "security",
+            "connector",
+            "reporting"
+          ]
+        },
+        "statement": { "type": "string", "minLength": 1 },
+        "severity": {
+          "type": "string",
+          "enum": ["low", "medium", "high", "critical"]
+        }
+      }
+    },
+    "scope": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind"],
+      "properties": {
+        "kind": {
+          "type": "string",
+          "enum": [
+            "organization",
+            "workspace",
+            "project",
+            "project_group",
+            "team",
+            "role",
+            "user",
+            "agent",
+            "domain_pack",
+            "environment"
+          ]
+        },
+        "id": { "type": "string", "minLength": 1 }
+      }
+    },
+    "risk": {
+      "type": "string",
+      "enum": ["low", "medium", "high", "critical"]
+    },
+    "confidence": {
+      "type": "number",
+      "minimum": 0,
+      "maximum": 1
+    },
+    "evidence": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["summary"],
+        "properties": {
+          "summary": { "type": "string", "minLength": 1 },
+          "source": { "type": "string" },
+          "count": { "type": "integer", "minimum": 1 }
+        }
+      }
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "draft",
+        "dry_run",
+        "pending_approval",
+        "active",
+        "rejected",
+        "rolled_back"
+      ]
+    },
+    "test_examples": {
+      "type": "array",
+      "items": { "type": "string", "minLength": 1 }
+    }
+  }
+}

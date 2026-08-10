@@ -1,0 +1,11 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Security vulnerability
+    url: https://github.com/Mohammad-Mirasadollahi/Astloom/blob/main/SECURITY.md
+    about: Do not file public issues for security reports. Follow SECURITY.md.
+  - name: Documentation map
+    url: https://github.com/Mohammad-Mirasadollahi/Astloom/blob/main/docs/README.md
+    about: Read the phase docs before requesting undocumented product changes.
+  - name: Contributing guide
+    url: https://github.com/Mohammad-Mirasadollahi/Astloom/blob/main/CONTRIBUTING.md
+    about: Setup, coding rules, and pull request expectations.

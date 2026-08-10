@@ -1,0 +1,10 @@
+phase: done
+suite: challenge_live_50
+collected: 50
+passed: 50
+failed: 0
+skipped: 0
+errors: 0
+status: passed_after_rootfix
+updated: 2026-07-21T09:39:30+03:30
+note: root cause was AuthError/rate-limit cascade + missing pythonpath; loop stopped

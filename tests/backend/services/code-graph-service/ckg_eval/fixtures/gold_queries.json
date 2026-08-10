@@ -1,0 +1,14 @@
+[
+  {
+    "query": "check_password",
+    "relevant_names": ["check_password"]
+  },
+  {
+    "query": "hash_password",
+    "relevant_names": ["hash_password"]
+  },
+  {
+    "query": "login password",
+    "relevant_names": ["login", "check_password"]
+  }
+]

@@ -1,0 +1,41 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://astloom.local/schemas/approval-mode-profile.schema.json",
+  "title": "Astloom ApprovalModeProfile",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["profile_id", "version", "mode", "updated_by", "updated_at"],
+  "properties": {
+    "profile_id": { "type": "string", "minLength": 1 },
+    "version": { "type": "integer", "minimum": 1 },
+    "tenant_id": { "type": "string" },
+    "workspace_id": { "type": "string" },
+    "project_id": { "type": "string" },
+    "mode": {
+      "type": "string",
+      "enum": ["manual", "auto_approve", "system_routed"]
+    },
+    "routing_profile_ref": { "type": "string" },
+    "allowed_auto_classes": {
+      "type": "array",
+      "items": { "type": "string", "minLength": 1 },
+      "uniqueItems": true
+    },
+    "denied_auto_classes": {
+      "type": "array",
+      "items": { "type": "string", "minLength": 1 },
+      "uniqueItems": true
+    },
+    "max_auto_risk": {
+      "type": "string",
+      "enum": ["low", "medium", "high", "critical"]
+    },
+    "hard_block_classes": {
+      "type": "array",
+      "items": { "type": "string", "minLength": 1 },
+      "uniqueItems": true
+    },
+    "updated_by": { "type": "string", "minLength": 1 },
+    "updated_at": { "type": "string", "minLength": 1 }
+  }
+}

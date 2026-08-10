@@ -1,0 +1,15 @@
+{
+  "schema_version": "1.0",
+  "doc_id": "ac.gov.ide-product-boundary",
+  "actions": [
+    {"action_id": "guidance.resolve", "surfaces": ["mcp", "cli"], "phase_status": "implemented"},
+    {"action_id": "memory.write", "surfaces": ["mcp", "api"], "phase_status": "implemented"},
+    {"action_id": "graph.sync", "surfaces": ["cli", "api"], "phase_status": "implemented"},
+    {"action_id": "docs.drift", "surfaces": ["cli", "api", "mcp"], "phase_status": "implemented"},
+    {"action_id": "admin.tenant.create", "surfaces": ["cli", "api"], "phase_status": "implemented"},
+    {"action_id": "ide.banner", "surfaces": ["ide_plugin"], "phase_status": "deferred_no_ui"},
+    {"action_id": "web.dashboard", "surfaces": ["web_ui"], "phase_status": "deferred_no_ui"},
+    {"action_id": "changeset.diff_viewer", "surfaces": ["web_ui", "ide_plugin"], "phase_status": "deferred_no_ui"}
+  ],
+  "guidance_resolve_required_env": "ASTLOOM_GUIDANCE_RESOLVE_REQUIRED"
+}

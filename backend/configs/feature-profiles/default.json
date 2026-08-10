@@ -1,0 +1,14 @@
+{
+  "profile_id": "default",
+  "version": "1.0.0",
+  "title": "Default feature profile",
+  "features": {
+    "memory_retrieval": "enabled",
+    "docs_drift_gate": "enabled",
+    "rule_engine_escalation": "approval_required",
+    "common_context": "enabled",
+    "impact_reporting": "enabled",
+    "code_intelligence": "enabled",
+    "rule_suggestion": "enabled"
+  }
+}

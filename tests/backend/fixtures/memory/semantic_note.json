@@ -1,0 +1,11 @@
+{
+  "schema_version": "1.0",
+  "kind": "semantic",
+  "title": "Password hashing decision",
+  "body": "Use Argon2 for password hashing; do not store plaintext.",
+  "tags": ["security", "auth", "argon2"],
+  "evidence_refs": ["diff-auth"],
+  "source_refs": ["decision-argon2"],
+  "confidence": 0.95,
+  "classification": "synthetic"
+}

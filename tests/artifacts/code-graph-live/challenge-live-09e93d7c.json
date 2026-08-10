@@ -1,0 +1,52 @@
+{
+  "capabilities": {
+    "apoc": true,
+    "fulltext": true,
+    "gds": false,
+    "gds_concurrency": 4,
+    "gds_enabled": true
+  },
+  "community_algorithm": "scikit_network_leiden",
+  "community_count": 7,
+  "hybrid_mode": "bm25",
+  "hybrid_top": [
+    {
+      "file_path": "auth.py",
+      "kind": "documentation",
+      "qualified_name": "auth.login::__doc__",
+      "score": 0.032266,
+      "symbol_id": "doc:chal-a5e1906e93:auth.login"
+    },
+    {
+      "file_path": "api.py",
+      "kind": "route",
+      "qualified_name": "route:POST:/login",
+      "score": 0.032266,
+      "symbol_id": "route:chal-a5e1906e93:POST_/login"
+    },
+    {
+      "file_path": "auth.py",
+      "kind": "function",
+      "qualified_name": "auth.login",
+      "score": 0.032258,
+      "symbol_id": "sym:chal-a5e1906e93:auth.login"
+    },
+    {
+      "file_path": "tests/test_auth.py",
+      "kind": "documentation",
+      "qualified_name": "tests.test_auth::__import__::583d81e0::__doc__",
+      "score": 0.03125,
+      "symbol_id": "doc:chal-a5e1906e93:tests.test_auth::__import__::583d81e0"
+    },
+    {
+      "file_path": "api.py",
+      "kind": "function",
+      "qualified_name": "api.login_route",
+      "score": 0.03009,
+      "symbol_id": "sym:chal-a5e1906e93:api.login_route"
+    }
+  ],
+  "scope": "chal-a5e1906e93",
+  "suite": "challenge_live_50",
+  "ts": "2026-07-28T14:16:59.983157+00:00"
+}

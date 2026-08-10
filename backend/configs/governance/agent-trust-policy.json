@@ -1,0 +1,23 @@
+{
+  "schema_version": "1.0",
+  "doc_id": "ac.gov.agent-trust-policy",
+  "levels": ["untrusted", "standard", "elevated", "privileged"],
+  "default_level": "standard",
+  "provider_rank": {
+    "local": 3,
+    "standard": 2,
+    "elevated": 1,
+    "untrusted": 0
+  },
+  "earn": {
+    "successful_tasks": 5,
+    "promote_to": "elevated"
+  },
+  "demote": {
+    "failed_tasks": 3,
+    "demote_to": "untrusted"
+  },
+  "revoke_on": ["security_violation", "admin_revoke"],
+  "high_risk_min_level": "elevated",
+  "sensitive_domains": ["secrets", "production_apply", "admin"]
+}

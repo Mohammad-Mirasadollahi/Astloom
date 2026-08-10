@@ -1,0 +1,8 @@
+{
+  "environment": "prod",
+  "version": "1.0.0",
+  "technology_profile": "default",
+  "port_profile": "astloom-dev",
+  "feature_profile": "default",
+  "debug": false
+}

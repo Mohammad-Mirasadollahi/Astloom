@@ -1,0 +1,241 @@
+{
+  "ok": true,
+  "checks": [
+    {
+      "name": "java_spring_di_edge",
+      "ok": true,
+      "detail": 3
+    },
+    {
+      "name": "wire_di_edge",
+      "ok": true,
+      "detail": "{'spring', 'wire'}"
+    },
+    {
+      "name": "changeset_rollup_changes_requested",
+      "ok": true,
+      "detail": "changes_requested"
+    },
+    {
+      "name": "changeset_approve_after_rollup",
+      "ok": true,
+      "detail": "approved"
+    },
+    {
+      "name": "fingerprint_projection",
+      "ok": true,
+      "detail": null
+    },
+    {
+      "name": "retry_ingest",
+      "ok": true,
+      "detail": null
+    },
+    {
+      "name": "timeout_outbox",
+      "ok": true,
+      "detail": null
+    },
+    {
+      "name": "provider_rank_local",
+      "ok": true,
+      "detail": null
+    },
+    {
+      "name": "trust_floor_escalate",
+      "ok": true,
+      "detail": "escalate"
+    },
+    {
+      "name": "trust_floor_rationale",
+      "ok": true,
+      "detail": [
+        "trust level 'standard' below high-risk floor for 'Block unsafe production auth changes' (provider_rank=2) \u2014 require approval"
+      ]
+    },
+    {
+      "name": "admin_deny_viewer",
+      "ok": true,
+      "detail": null
+    },
+    {
+      "name": "admin_allow_integration",
+      "ok": true,
+      "detail": null
+    },
+    {
+      "name": "iam_authorize_deny",
+      "ok": true,
+      "detail": {
+        "allowed": false,
+        "subject": "viewer@live",
+        "action": "adapter.install",
+        "resource": "connector",
+        "principal_id": "prn_a79f5dc38c93",
+        "matched_roles": [
+          "viewer"
+        ]
+      }
+    },
+    {
+      "name": "iam_admin_audit_event",
+      "ok": true,
+      "detail": {
+        "event_type": "admin.authorize",
+        "allowed": false,
+        "subject": "viewer@live",
+        "action": "adapter.install",
+        "resource": "connector",
+        "principal_id": "prn_a79f5dc38c93",
+        "scope": {
+          "tenant_id": "mir",
+          "workspace_id": "dev",
+          "project_id": "gap-live-a07"
+        }
+      }
+    },
+    {
+      "name": "mcp_initialize",
+      "ok": true,
+      "detail": null
+    },
+    {
+      "name": "mcp_search",
+      "ok": true,
+      "detail": "{'content': [{'type': 'text', 'text': '{\"results\": [{\"description\": \"Resolve Agent Workspace Guidance for this project: AGENTS entry, always-on rules, and skill catalog. Prefer calling before substant"
+    },
+    {
+      "name": "mcp_write_callable",
+      "ok": true,
+      "detail": {
+        "content": [
+          {
+            "type": "text",
+            "text": "{\"backend\": \"in_process\", \"correlation_id\": \"21006ab9-4031-4b53-9bef-da370a499fd1\", \"graph_mode\": \"neo4j\", \"maps_to\": \"platform.write\", \"memory\": {\"actor_id\": \"mcp-gateway\", \"body\": \"live probe memory\", \"confidence\": 0.9, \"correlation_id\": \"21006ab9-4031-4b53-9bef-da370a499fd1\", \"created_at\": \"2026-07-25T07:46:26.033697+00:00\", \"evidence_refs\": [\"mcp:21006ab9-4031-4b53-9bef-da370a499fd1\"], \"id\": \"98db0c1d-51fe-48f4-abfc-6300991f660a\", \"kind\": \"semantic\", \"project_group_id\": null, \"project_id\": \"astloom\", \"source_refs\": [\"cursor-mcp\"], \"state\": \"active\", \"tags\": [\"cursor\", \"mcp\"], \"tenant_id\": \"mir\", \"title\": \"gap-live\", \"updated_at\": \"2026-07-25T07:46:26.033697+00:00\", \"version\": 1, \"workspace_id\": \"dev\"}, \"scope\": {\"project_id\": \"astloom\", \"tenant_id\": \"mir\", \"workspace_id\": \"dev\"}, \"store_mode\": \"postgres\", \"usage_profile\": \"programming-cursor-mcp\", \"written\": \"memory\"}"
+          }
+        ],
+        "structuredContent": {
+          "maps_to": "platform.write",
+          "usage_profile": "programming-cursor-mcp",
+          "scope": {
+            "tenant_id": "mir",
+            "workspace_id": "dev",
+            "project_id": "astloom"
+          },
+          "correlation_id": "21006ab9-4031-4b53-9bef-da370a499fd1",
+          "backend": "in_process",
+          "store_mode": "postgres",
+          "graph_mode": "neo4j",
+          "written": "memory",
+          "memory": {
+            "id": "98db0c1d-51fe-48f4-abfc-6300991f660a",
+            "tenant_id": "mir",
+            "workspace_id": "dev",
+            "project_id": "astloom",
+            "project_group_id": null,
+            "actor_id": "mcp-gateway",
+            "correlation_id": "21006ab9-4031-4b53-9bef-da370a499fd1",
+            "kind": "semantic",
+            "state": "active",
+            "title": "gap-live",
+            "body": "live probe memory",
+            "tags": [
+              "cursor",
+              "mcp"
+            ],
+            "evidence_refs": [
+              "mcp:21006ab9-4031-4b53-9bef-da370a499fd1"
+            ],
+            "source_refs": [
+              "cursor-mcp"
+            ],
+            "confidence": 0.9,
+            "version": 1,
+            "created_at": "2026-07-25T07:46:26.033697+00:00",
+            "updated_at": "2026-07-25T07:46:26.033697+00:00"
+          }
+        },
+        "isError": false
+      }
+    },
+    {
+      "name": "mcp_guidance_resolve",
+      "ok": true,
+      "detail": "{\"jsonrpc\": \"2.0\", \"id\": 4, \"result\": {\"content\": [{\"type\": \"text\", \"text\": \"{\\\"backend\\\": \\\"in_process\\\", \\\"bundle\\\": {\\\"agents_entry\\\": {\\\"body\\\": \\\"# Agent entry\\\\n\\\\n**Law:** always-on rule `mcp-first-astloom`.\\\\n\\\\n## Session start\\\\"
+    },
+    {
+      "name": "mcp_guidance_read_model_tag",
+      "ok": true,
+      "detail": "{\"jsonrpc\": \"2.0\", \"id\": 4, \"result\": {\"content\": [{\"type\": \"text\", \"text\": \"{\\\"backend\\\": \\\"in_process\\\", \\\"bundle\\\": {\\\"agents_entry\\\": {\\\"body\\\": \\\"# Agent entry\\\\n\\\\n**Law:** always-on rule `mcp-first-astloom`.\\\\n\\\\n## Session start\\\\n\\\\n1. Resolve workspace guidance via MCP when available.\\\\n2. Apply always-on rules from the bundle.\\\\n3. Load the matching skill before heavy memory, graph, d"
+    }
+  ],
+  "java_di_edges": [
+    {
+      "framework": "wire"
+    },
+    {
+      "framework": "wire"
+    },
+    {
+      "framework": "spring"
+    }
+  ],
+  "changeset": {
+    "id": "bbd27da1-bb7a-4dab-9536-f53ac7ab1261",
+    "final": "approved"
+  },
+  "mcp_write": {
+    "jsonrpc": "2.0",
+    "id": 3,
+    "result": {
+      "content": [
+        {
+          "type": "text",
+          "text": "{\"backend\": \"in_process\", \"correlation_id\": \"21006ab9-4031-4b53-9bef-da370a499fd1\", \"graph_mode\": \"neo4j\", \"maps_to\": \"platform.write\", \"memory\": {\"actor_id\": \"mcp-gateway\", \"body\": \"live probe memory\", \"confidence\": 0.9, \"correlation_id\": \"21006ab9-4031-4b53-9bef-da370a499fd1\", \"created_at\": \"2026-07-25T07:46:26.033697+00:00\", \"evidence_refs\": [\"mcp:21006ab9-4031-4b53-9bef-da370a499fd1\"], \"id\": \"98db0c1d-51fe-48f4-abfc-6300991f660a\", \"kind\": \"semantic\", \"project_group_id\": null, \"project_id\": \"astloom\", \"source_refs\": [\"cursor-mcp\"], \"state\": \"active\", \"tags\": [\"cursor\", \"mcp\"], \"tenant_id\": \"mir\", \"title\": \"gap-live\", \"updated_at\": \"2026-07-25T07:46:26.033697+00:00\", \"version\": 1, \"workspace_id\": \"dev\"}, \"scope\": {\"project_id\": \"astloom\", \"tenant_id\": \"mir\", \"workspace_id\": \"dev\"}, \"store_mode\": \"postgres\", \"usage_profile\": \"programming-cursor-mcp\", \"written\": \"memory\"}"
+        }
+      ],
+      "structuredContent": {
+        "maps_to": "platform.write",
+        "usage_profile": "programming-cursor-mcp",
+        "scope": {
+          "tenant_id": "mir",
+          "workspace_id": "dev",
+          "project_id": "astloom"
+        },
+        "correlation_id": "21006ab9-4031-4b53-9bef-da370a499fd1",
+        "backend": "in_process",
+        "store_mode": "postgres",
+        "graph_mode": "neo4j",
+        "written": "memory",
+        "memory": {
+          "id": "98db0c1d-51fe-48f4-abfc-6300991f660a",
+          "tenant_id": "mir",
+          "workspace_id": "dev",
+          "project_id": "astloom",
+          "project_group_id": null,
+          "actor_id": "mcp-gateway",
+          "correlation_id": "21006ab9-4031-4b53-9bef-da370a499fd1",
+          "kind": "semantic",
+          "state": "active",
+          "title": "gap-live",
+          "body": "live probe memory",
+          "tags": [
+            "cursor",
+            "mcp"
+          ],
+          "evidence_refs": [
+            "mcp:21006ab9-4031-4b53-9bef-da370a499fd1"
+          ],
+          "source_refs": [
+            "cursor-mcp"
+          ],
+          "confidence": 0.9,
+          "version": 1,
+          "created_at": "2026-07-25T07:46:26.033697+00:00",
+          "updated_at": "2026-07-25T07:46:26.033697+00:00"
+        }
+      },
+      "isError": false
+    }
+  }
+}

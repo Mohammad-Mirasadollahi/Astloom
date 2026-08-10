@@ -1,0 +1,35 @@
+{
+  "schema_version": "1.0",
+  "doc_id": "ac.gov.tenancy-deployment-modes",
+  "default_mode": "shared_scoped",
+  "modes": [
+    {
+      "mode_id": "shared_scoped",
+      "description": "Shared services with tenant/workspace/project scoped rows (lab default).",
+      "requires_env": [],
+      "cost": "low",
+      "isolation": "row"
+    },
+    {
+      "mode_id": "db_per_tenant",
+      "description": "Isolated PostgreSQL database per tenant.",
+      "requires_env": ["ASTLOOM_TENANT_DATABASE_URL_TEMPLATE"],
+      "cost": "medium",
+      "isolation": "database"
+    },
+    {
+      "mode_id": "graph_per_tenant",
+      "description": "Isolated Neo4j database/graph per tenant.",
+      "requires_env": ["ASTLOOM_TENANT_NEO4J_DATABASE_TEMPLATE"],
+      "cost": "medium",
+      "isolation": "graph"
+    },
+    {
+      "mode_id": "deploy_per_customer",
+      "description": "Fully isolated deployment per enterprise customer.",
+      "requires_env": ["ASTLOOM_CUSTOMER_DEPLOYMENT_ID"],
+      "cost": "high",
+      "isolation": "deployment"
+    }
+  ]
+}

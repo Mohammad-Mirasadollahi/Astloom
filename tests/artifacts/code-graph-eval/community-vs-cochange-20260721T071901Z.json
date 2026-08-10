@@ -1,0 +1,9 @@
+{
+  "algorithm": "scikit_network_leiden",
+  "circular_claim_ban": "ADR-19: labels must not come from graph self-walk",
+  "generated_at": "2026-07-21T07:19:01Z",
+  "label_source": "git_cochange",
+  "pair_count_scored": 2,
+  "same_community_pairs": 0,
+  "same_community_rate": 0.0
+}

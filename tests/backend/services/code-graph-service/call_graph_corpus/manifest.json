@@ -1,0 +1,46 @@
+{
+  "version": 1,
+  "thresholds": {
+    "precision": 0.7,
+    "recall": 0.7
+  },
+  "cases": [
+    {
+      "id": "exact_direct",
+      "source_file": "exact_direct.py",
+      "language": "python",
+      "evidence_class": "exact",
+      "gold_calls": [
+        {"caller": "run", "callee": "helper"}
+      ]
+    },
+    {
+      "id": "exact_chain",
+      "source_file": "exact_chain.py",
+      "language": "python",
+      "evidence_class": "exact",
+      "gold_calls": [
+        {"caller": "entry", "callee": "mid"},
+        {"caller": "mid", "callee": "leaf"}
+      ]
+    },
+    {
+      "id": "ambiguous_overloads",
+      "source_file": "ambiguous_overloads.py",
+      "language": "python",
+      "evidence_class": "ambiguous",
+      "gold_calls": [
+        {"caller": "dispatch", "callee": "target"}
+      ],
+      "notes": "Two target() functions in different scopes; gold accepts either resolved target name."
+    },
+    {
+      "id": "unresolved_external",
+      "source_file": "unresolved_external.py",
+      "language": "python",
+      "evidence_class": "unresolved",
+      "gold_calls": [],
+      "allow_unresolved_refs": ["missing_lib_call"]
+    }
+  ]
+}

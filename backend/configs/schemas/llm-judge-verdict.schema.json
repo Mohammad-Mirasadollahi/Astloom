@@ -1,0 +1,50 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://astloom.local/schemas/llm-judge-verdict.schema.json",
+  "title": "Astloom LLM Judge Verdict",
+  "description": "Structured JSON object returned by the LLM Judge (temperature 0, json_object mode).",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "verdict",
+    "confidence",
+    "rationale",
+    "matched_examples",
+    "missing_evidence",
+    "recommended_action"
+  ],
+  "properties": {
+    "verdict": {
+      "type": "string",
+      "enum": ["allow", "warn", "block", "escalate"]
+    },
+    "confidence": {
+      "type": "number",
+      "minimum": 0,
+      "maximum": 1
+    },
+    "rationale": {
+      "type": "string",
+      "minLength": 1
+    },
+    "matched_examples": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "missing_evidence": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "recommended_action": {
+      "type": "string"
+    },
+    "evidence_refs": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "policy_refs": {
+      "type": "array",
+      "items": { "type": "string" }
+    }
+  }
+}

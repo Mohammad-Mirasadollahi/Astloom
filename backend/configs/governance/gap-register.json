@@ -1,0 +1,507 @@
+{
+  "schema_version": "1.0",
+  "register_ref": "docs/10-gap-analysis/01-gap-register.md",
+  "triage_ref": "docs/10-gap-analysis/05-gap-triage-and-resolution-process.md",
+  "status_values": [
+    "OPEN",
+    "UNDER_REVIEW",
+    "DECISION_NEEDED",
+    "PLANNED",
+    "PARTIALLY_RESOLVED",
+    "CLOSED",
+    "ACCEPTED_RISK"
+  ],
+  "categories": [
+    "Architecture",
+    "Technical Implementation",
+    "Product and Workflow",
+    "Security",
+    "Memory and Retrieval",
+    "Developer Experience",
+    "Contract Governance",
+    "Product Architecture and Configuration Governance",
+    "Governance and Operations"
+  ],
+  "gaps": [
+    {
+      "gap_id": "GAP-001",
+      "title": "Storage Boundary Finalization",
+      "category": "Architecture",
+      "severity": "High",
+      "owner": "Platform Architect",
+      "status": "CLOSED",
+      "linked_phase_gates": [
+        3,
+        4,
+        7
+      ],
+      "proposed_resolution_artifact": "docs/13-technology-stack-and-platform-decisions/13-storage-ownership-matrix.md",
+      "documentation_ref": "docs/13-technology-stack-and-platform-decisions/13-storage-ownership-matrix.md",
+      "decision_needed": "Define the authoritative storage location for every entity type and event type.",
+      "resolution_path": "Storage ownership matrix published; product-per-role baseline unchanged.",
+      "closed_in": "docs/13-technology-stack-and-platform-decisions/13-storage-ownership-matrix.md",
+      "approver": "Platform Architect",
+      "review_date": "2026-07-23"
+    },
+    {
+      "gap_id": "GAP-002",
+      "title": "First Supported Language Set",
+      "category": "Technical Implementation",
+      "severity": "High",
+      "owner": "Code Graph Lead",
+      "status": "CLOSED",
+      "linked_phase_gates": [
+        7
+      ],
+      "proposed_resolution_artifact": "docs/07-code-knowledge-graph/10-language-support-policy.md",
+      "documentation_ref": "docs/07-code-knowledge-graph/10-language-support-policy.md",
+      "decision_needed": "None \u2014 Java parser + Spring/Wire DI extraction shipped.",
+      "resolution_path": "Java tree-sitter parser + Spring/Wire DI + package manifests + confidence_policy.",
+      "closed_in": "java_lang.py + di_injections Spring/Wire + language policy 1.1.0 (2026-07-25)",
+      "approver": "Code Graph Lead",
+      "review_date": "2026-07-25"
+    },
+    {
+      "gap_id": "GAP-003",
+      "title": "LLM Provider and Local Model Strategy",
+      "category": "Technical Implementation",
+      "severity": "High",
+      "owner": "AI Platform Lead",
+      "status": "CLOSED",
+      "linked_phase_gates": [
+        5,
+        11
+      ],
+      "proposed_resolution_artifact": "docs/13-technology-stack-and-platform-decisions/10-model-routing-profiles-with-litellm.md",
+      "documentation_ref": "docs/13-technology-stack-and-platform-decisions/10-model-routing-profiles-with-litellm.md",
+      "decision_needed": "None \u2014 LiteLLM gateway + published local/cloud ModelRoutingProfile tables.",
+      "resolution_path": "ADR 09 + profile JSON under backend/configs/model-routing + resolve_route loader.",
+      "closed_in": "docs/13-technology-stack-and-platform-decisions/10-model-routing-profiles-with-litellm.md",
+      "approver": "Platform Architect",
+      "review_date": "2026-07-23"
+    },
+    {
+      "gap_id": "GAP-004",
+      "title": "Human Approval UX",
+      "category": "Product and Workflow",
+      "severity": "Medium",
+      "owner": "Product Lead",
+      "status": "CLOSED",
+      "linked_phase_gates": [
+        5,
+        11
+      ],
+      "proposed_resolution_artifact": "docs/04-rule-engine-orchestration/10-approval-cli-first-surface.md",
+      "documentation_ref": "docs/04-rule-engine-orchestration/10-approval-cli-first-surface.md",
+      "decision_needed": "None \u2014 first Accept surface is Astloom CLI.",
+      "resolution_path": "ApprovalModeProfile catalog + approval_modes package + astloom approval CLI.",
+      "closed_in": "docs/04-rule-engine-orchestration/10-approval-cli-first-surface.md",
+      "approver": "Product Lead",
+      "review_date": "2026-07-23"
+    },
+    {
+      "gap_id": "GAP-005",
+      "title": "Tenant Isolation Implementation Details",
+      "category": "Security",
+      "severity": "Critical",
+      "owner": "Security Architect",
+      "status": "CLOSED",
+      "linked_phase_gates": [
+        3,
+        4,
+        9
+      ],
+      "proposed_resolution_artifact": "docs/09-platform-governance-operations/tenant-isolation-threat-model.md",
+      "documentation_ref": "docs/10-gap-analysis/04-governance-operations-gaps.md",
+      "decision_needed": "Define isolation enforcement strategy per storage and service boundary.",
+      "resolution_path": "Threat model + code-graph/MCP isolation tests; single-tenant v1 mode."
+    },
+    {
+      "gap_id": "GAP-006",
+      "title": "Weight Profile Governance",
+      "category": "Memory and Retrieval",
+      "severity": "Medium",
+      "owner": "Memory Platform Lead",
+      "status": "CLOSED",
+      "linked_phase_gates": [
+        4
+      ],
+      "proposed_resolution_artifact": "docs/02-memory-and-context/12-weight-profile-governance.md",
+      "documentation_ref": "docs/02-memory-and-context/12-weight-profile-governance.md",
+      "decision_needed": "None \u2014 owner/approval/rollback policy published with CLI.",
+      "resolution_path": "WeightProfile catalog + weight_profiles governance package + astloom weight-profile CLI.",
+      "closed_in": "docs/02-memory-and-context/12-weight-profile-governance.md",
+      "approver": "Memory Platform Lead",
+      "review_date": "2026-07-23"
+    },
+    {
+      "gap_id": "GAP-007",
+      "title": "Development Port Profile Ownership",
+      "category": "Developer Experience",
+      "severity": "Medium",
+      "owner": "Developer Experience Lead",
+      "status": "CLOSED",
+      "linked_phase_gates": [
+        8
+      ],
+      "proposed_resolution_artifact": "backend/configs/port-profiles/astloom-dev.json",
+      "documentation_ref": "docs/08-software-engineering-architecture/34-phase8-verification-and-acceptance.md",
+      "decision_needed": "Choose default development base and ownership of port profile changes.",
+      "resolution_path": "Port profile file format and Phase 8 gate ownership checks.",
+      "closed_in": "Phase 8 port-profile catalog and verification gate"
+    },
+    {
+      "gap_id": "GAP-008",
+      "title": "Schema Registry Implementation",
+      "category": "Contract Governance",
+      "severity": "Medium",
+      "owner": "Platform Architect",
+      "status": "CLOSED",
+      "linked_phase_gates": [
+        5,
+        9
+      ],
+      "proposed_resolution_artifact": "docs/09-platform-governance-operations/12-schema-registry-architecture.md",
+      "documentation_ref": "docs/09-platform-governance-operations/12-schema-registry-architecture.md",
+      "decision_needed": "None \u2014 v1 is a repository-directory catalog (not a service or DB registry).",
+      "resolution_path": "Architecture ADR + backend/tools/schema-registry/catalog.json + unit tests.",
+      "closed_in": "docs/09-platform-governance-operations/12-schema-registry-architecture.md",
+      "approver": "Platform Architect",
+      "review_date": "2026-07-23"
+    },
+    {
+      "gap_id": "GAP-009",
+      "title": "Domain Pack, Feature Profile, And Rule Suggestion Governance",
+      "category": "Product Architecture and Configuration Governance",
+      "severity": "High",
+      "owner": "Product Architect and Platform Architect",
+      "status": "CLOSED",
+      "linked_phase_gates": [
+        5,
+        9
+      ],
+      "proposed_resolution_artifact": "docs/04-rule-engine-orchestration/08-domain-pack-feature-profile-and-rule-suggestion-schemas.md",
+      "documentation_ref": "docs/04-rule-engine-orchestration/08-domain-pack-feature-profile-and-rule-suggestion-schemas.md",
+      "decision_needed": "Define authoritative schema, ownership, activation workflow, and conflict precedence.",
+      "resolution_path": "JSON Schemas + precedence standard + unit schema tests.",
+      "closed_in": "docs/04-rule-engine-orchestration/08-domain-pack-feature-profile-and-rule-suggestion-schemas.md",
+      "approver": "Platform Architect",
+      "review_date": "2026-07-23"
+    },
+    {
+      "gap_id": "GAP-010",
+      "title": "Impact KPI Instrumentation Completeness",
+      "category": "Governance and Operations",
+      "severity": "Medium",
+      "owner": "Platform Governance Lead",
+      "status": "CLOSED",
+      "linked_phase_gates": [
+        9
+      ],
+      "proposed_resolution_artifact": "backend/configs/governance/impact-kpis.json",
+      "documentation_ref": "docs/09-platform-governance-operations/11-phase9-verification-and-acceptance.md",
+      "decision_needed": "Ensure KPI fields and comparison method are machine-checkable.",
+      "resolution_path": "Impact KPI catalog and Phase 9 gate.",
+      "closed_in": "Phase 9 impact-kpis catalog and verification gate"
+    },
+    {
+      "gap_id": "GAP-011",
+      "title": "Neo4j as Code Graph Store Timing",
+      "category": "Architecture",
+      "severity": "Medium",
+      "owner": "Code Graph Lead",
+      "status": "CLOSED",
+      "linked_phase_gates": [
+        7
+      ],
+      "proposed_resolution_artifact": "docs/07-code-knowledge-graph/11-neo4j-migration-plan.md",
+      "documentation_ref": "docs/07-code-knowledge-graph/13-codesymbol-projection-adr.md",
+      "decision_needed": "None \u2014 cutover default completed.",
+      "resolution_path": "Default flipped to Neo4j; Postgres retained for rollback; structural parity via domain/parity.py; CodeSymbol projection ADR.",
+      "closed_in": "Neo4j default store + CodeSymbol projection ADR (2026-07-20)",
+      "approver": "Platform Architect",
+      "review_date": "2026-07-20"
+    },
+    {
+      "gap_id": "GAP-T01",
+      "title": "AST Hash Stability",
+      "category": "Technical Implementation",
+      "severity": "High",
+      "owner": "Code Graph Lead",
+      "status": "CLOSED",
+      "linked_phase_gates": [
+        7,
+        10
+      ],
+      "proposed_resolution_artifact": "docs/07-code-knowledge-graph/14-ast-hash-stability-contract.md",
+      "documentation_ref": "docs/07-code-knowledge-graph/14-ast-hash-stability-contract.md",
+      "decision_needed": "None \u2014 language-correct hashing + corpus shipped.",
+      "resolution_path": "Hash contract + content_hash + hash_corpus tests.",
+      "closed_in": "docs/07-code-knowledge-graph/14-ast-hash-stability-contract.md + hashing.py + test_hash_corpus.py (2026-07-24)",
+      "approver": "Code Graph Lead",
+      "review_date": "2026-07-24"
+    },
+    {
+      "gap_id": "GAP-T02",
+      "title": "Call Graph Accuracy",
+      "category": "Technical Implementation",
+      "severity": "High",
+      "owner": "Code Graph Lead",
+      "status": "CLOSED",
+      "linked_phase_gates": [
+        7,
+        10
+      ],
+      "proposed_resolution_artifact": "docs/07-code-knowledge-graph/15-call-graph-confidence-and-runtime-traces.md",
+      "documentation_ref": "docs/07-code-knowledge-graph/15-call-graph-confidence-and-runtime-traces.md",
+      "decision_needed": "None \u2014 runtime_trace + accuracy gate shipped.",
+      "resolution_path": "Confidence standard + runtime_traces + call_graph_corpus gate.",
+      "closed_in": "docs/07-code-knowledge-graph/15-call-graph-confidence-and-runtime-traces.md + runtime_traces.py (2026-07-24)",
+      "approver": "Code Graph Lead",
+      "review_date": "2026-07-24"
+    },
+    {
+      "gap_id": "GAP-T03",
+      "title": "Embedding Storage and Refresh Policy",
+      "category": "Technical Implementation",
+      "severity": "High",
+      "owner": "AI Platform Lead",
+      "status": "CLOSED",
+      "linked_phase_gates": [
+        4,
+        7,
+        10
+      ],
+      "proposed_resolution_artifact": "docs/13-technology-stack-and-platform-decisions/14-embedding-lifecycle-and-refresh.md",
+      "documentation_ref": "docs/13-technology-stack-and-platform-decisions/14-embedding-lifecycle-and-refresh.md",
+      "decision_needed": "None \u2014 refresh lifecycle + TurboVec Stage-2 on code-graph and memory.",
+      "resolution_path": "embedding_refresh + memory embeddings SoR + vector_index TurboVec.",
+      "closed_in": "docs/13-technology-stack-and-platform-decisions/14-embedding-lifecycle-and-refresh.md + vector_index (2026-07-24)",
+      "approver": "AI Platform Lead",
+      "review_date": "2026-07-24"
+    },
+    {
+      "gap_id": "GAP-T04",
+      "title": "Prompt Context Verification",
+      "category": "Technical Implementation",
+      "severity": "High",
+      "owner": "Memory Platform Lead",
+      "status": "CLOSED",
+      "linked_phase_gates": [
+        4,
+        10
+      ],
+      "proposed_resolution_artifact": "docs/02-memory-and-context/13-context-bundle-audit-and-verification.md",
+      "documentation_ref": "docs/02-memory-and-context/13-context-bundle-audit-and-verification.md",
+      "decision_needed": "None \u2014 audit schema + verifier + safety tests.",
+      "resolution_path": "JSON Schema + bundle_verifier + prompt-safety tests.",
+      "closed_in": "docs/02-memory-and-context/13-context-bundle-audit-and-verification.md (2026-07-24)",
+      "approver": "Memory Platform Lead",
+      "review_date": "2026-07-24"
+    },
+    {
+      "gap_id": "GAP-T05",
+      "title": "LLM Judge Determinism",
+      "category": "Technical Implementation",
+      "severity": "High",
+      "owner": "AI Platform Lead",
+      "status": "CLOSED",
+      "linked_phase_gates": [
+        5,
+        10
+      ],
+      "proposed_resolution_artifact": "docs/04-rule-engine-orchestration/11-llm-judge-operating-standard.md",
+      "documentation_ref": "docs/04-rule-engine-orchestration/11-llm-judge-operating-standard.md",
+      "decision_needed": "None \u2014 LiteLLMJudge + replay metadata.",
+      "resolution_path": "Operating standard + LiteLLMJudge + verdict schema + tests.",
+      "closed_in": "docs/04-rule-engine-orchestration/11-llm-judge-operating-standard.md + litellm_judge.py (2026-07-24)",
+      "approver": "AI Platform Lead",
+      "review_date": "2026-07-24"
+    },
+    {
+      "gap_id": "GAP-T06",
+      "title": "SDK Language Packaging And Adapter Harness",
+      "category": "Technical Implementation",
+      "severity": "High",
+      "owner": "Developer Experience Lead",
+      "status": "CLOSED",
+      "linked_phase_gates": [
+        8,
+        10
+      ],
+      "proposed_resolution_artifact": "docs/05-interoperability-ecosystem/11-sdk-release-and-adapter-harness.md",
+      "documentation_ref": "docs/05-interoperability-ecosystem/11-sdk-release-and-adapter-harness.md",
+      "decision_needed": "None \u2014 Python+TS SDK + generator + adapter harness.",
+      "resolution_path": "astloom_sdk + typescript client + sdk-generation + adapter_harness.",
+      "closed_in": "docs/05-interoperability-ecosystem/11-sdk-release-and-adapter-harness.md (2026-07-24)",
+      "approver": "Developer Experience Lead",
+      "review_date": "2026-07-24"
+    },
+    {
+      "gap_id": "GAP-T07",
+      "title": "Port Preflight Tool",
+      "category": "Developer Experience",
+      "severity": "Medium",
+      "owner": "Developer Experience Lead",
+      "status": "CLOSED",
+      "linked_phase_gates": [
+        8,
+        10
+      ],
+      "proposed_resolution_artifact": "docs/08-software-engineering-architecture/04-development-port-management.md",
+      "documentation_ref": "docs/08-software-engineering-architecture/04-development-port-management.md",
+      "decision_needed": "None \u2014 ports check + install preflight + resolved map.",
+      "resolution_path": "port_profile preflight + astloom ports check + run_port_preflight in install.",
+      "closed_in": "port_profile preflight + scripts/install run_port_preflight (2026-07-24)",
+      "approver": "Developer Experience Lead",
+      "review_date": "2026-07-24"
+    },
+    {
+      "gap_id": "GAP-T08",
+      "title": "Test Data and Fixture Strategy",
+      "category": "Technical Implementation",
+      "severity": "Medium",
+      "owner": "Platform Governance Lead",
+      "status": "CLOSED",
+      "linked_phase_gates": [
+        8,
+        10
+      ],
+      "proposed_resolution_artifact": "docs/08-software-engineering-architecture/51-test-fixture-catalog.md",
+      "documentation_ref": "docs/08-software-engineering-architecture/51-test-fixture-catalog.md",
+      "decision_needed": "None \u2014 fixture catalog + synthetic workflow generator.",
+      "resolution_path": "catalog.json + sample_repos + synthetic_workflow + validation tests.",
+      "closed_in": "docs/08-software-engineering-architecture/51-test-fixture-catalog.md (2026-07-24)",
+      "approver": "Platform Governance Lead",
+      "review_date": "2026-07-24"
+    },
+    {
+      "gap_id": "GAP-A01",
+      "title": "Bounded Context Map",
+      "category": "Architecture",
+      "severity": "High",
+      "owner": "Platform Architect",
+      "status": "CLOSED",
+      "linked_phase_gates": [8, 10],
+      "proposed_resolution_artifact": "backend/configs/governance/bounded-context-map.json",
+      "documentation_ref": "docs/10-gap-analysis/02-architecture-gaps.md",
+      "decision_needed": "None",
+      "resolution_path": "Machine-readable context map + forbidden persistence import gate.",
+      "closed_in": "backend/configs/governance/bounded-context-map.json + architecture_governance (2026-07-25)",
+      "approver": "Platform Architect",
+      "review_date": "2026-07-25"
+    },
+    {
+      "gap_id": "GAP-A02",
+      "title": "Synchronous vs Asynchronous Boundaries",
+      "category": "Architecture",
+      "severity": "High",
+      "owner": "Platform Architect",
+      "status": "CLOSED",
+      "linked_phase_gates": [8, 10],
+      "proposed_resolution_artifact": "backend/configs/governance/sync-async-boundaries.json",
+      "documentation_ref": "docs/10-gap-analysis/02-architecture-gaps.md",
+      "decision_needed": "None",
+      "resolution_path": "Operation catalog with sync/async + durable delivery + timeouts.",
+      "closed_in": "backend/configs/governance/sync-async-boundaries.json (2026-07-25)",
+      "approver": "Platform Architect",
+      "review_date": "2026-07-25"
+    },
+    {
+      "gap_id": "GAP-A03",
+      "title": "Read Model Strategy",
+      "category": "Architecture",
+      "severity": "Medium",
+      "owner": "Platform Architect",
+      "status": "CLOSED",
+      "linked_phase_gates": [8, 10],
+      "proposed_resolution_artifact": "backend/configs/governance/read-model-catalog.json",
+      "documentation_ref": "docs/10-gap-analysis/02-architecture-gaps.md",
+      "decision_needed": "None",
+      "resolution_path": "Read model catalog with consistency + invalidation tags.",
+      "closed_in": "backend/configs/governance/read-model-catalog.json (2026-07-25)",
+      "approver": "Platform Architect",
+      "review_date": "2026-07-25"
+    },
+    {
+      "gap_id": "GAP-A04",
+      "title": "Multi-Tenant Deployment Modes",
+      "category": "Architecture",
+      "severity": "High",
+      "owner": "Platform Architect",
+      "status": "CLOSED",
+      "linked_phase_gates": [9, 10],
+      "proposed_resolution_artifact": "backend/configs/governance/tenancy-deployment-modes.json",
+      "documentation_ref": "docs/10-gap-analysis/02-architecture-gaps.md",
+      "decision_needed": "None",
+      "resolution_path": "Tenancy mode catalog + ASTLOOM_TENANCY_MODE fail-fast loader.",
+      "closed_in": "backend/configs/governance/tenancy-deployment-modes.json (2026-07-25)",
+      "approver": "Platform Architect",
+      "review_date": "2026-07-25"
+    },
+    {
+      "gap_id": "GAP-A05",
+      "title": "Agent Trust Model",
+      "category": "Architecture",
+      "severity": "High",
+      "owner": "Security Lead",
+      "status": "CLOSED",
+      "linked_phase_gates": [9, 10],
+      "proposed_resolution_artifact": "backend/configs/governance/agent-trust-policy.json",
+      "documentation_ref": "docs/10-gap-analysis/02-architecture-gaps.md",
+      "decision_needed": "None",
+      "resolution_path": "Trust policy + adapter enum + rule-engine high-risk floor.",
+      "closed_in": "backend/configs/governance/agent-trust-policy.json + architecture_governance (2026-07-25)",
+      "approver": "Security Lead",
+      "review_date": "2026-07-25"
+    },
+    {
+      "gap_id": "GAP-A06",
+      "title": "Product Boundary Between Astloom and IDEs",
+      "category": "Architecture",
+      "severity": "Medium",
+      "owner": "Developer Experience Lead",
+      "status": "CLOSED",
+      "linked_phase_gates": [10, 15],
+      "proposed_resolution_artifact": "backend/configs/governance/ide-product-boundary.json",
+      "documentation_ref": "docs/10-gap-analysis/02-architecture-gaps.md",
+      "decision_needed": "None — UI deferred; MCP fail-closed guidance gate shipped.",
+      "resolution_path": "Boundary matrix + ASTLOOM_GUIDANCE_RESOLVE_REQUIRED fail-closed writes.",
+      "closed_in": "backend/configs/governance/ide-product-boundary.json + mcp writes gate (2026-07-25)",
+      "approver": "Developer Experience Lead",
+      "review_date": "2026-07-25"
+    },
+    {
+      "gap_id": "GAP-A07",
+      "title": "Enterprise Administration Model",
+      "category": "Architecture",
+      "severity": "High",
+      "owner": "Platform Governance Lead",
+      "status": "CLOSED",
+      "linked_phase_gates": [9, 10],
+      "proposed_resolution_artifact": "backend/configs/governance/admin-permission-matrix.json",
+      "documentation_ref": "docs/10-gap-analysis/02-architecture-gaps.md",
+      "decision_needed": "None — admin UI deferred.",
+      "resolution_path": "Admin permission matrix + identity-access authorize integration.",
+      "closed_in": "backend/configs/governance/admin-permission-matrix.json (2026-07-25)",
+      "approver": "Platform Governance Lead",
+      "review_date": "2026-07-25"
+    },
+    {
+      "gap_id": "GAP-A08",
+      "title": "Agent Collaboration Surface Completeness",
+      "category": "Architecture",
+      "severity": "High",
+      "owner": "Core Data Lead",
+      "status": "CLOSED",
+      "linked_phase_gates": [1, 10],
+      "proposed_resolution_artifact": "docs/01-core-data-model/08-changeset-review-and-discussion-contracts.md",
+      "documentation_ref": "docs/01-core-data-model/07-agent-collaboration-work-surface.md",
+      "decision_needed": "None — backend MVP; diff viewer UX deferred.",
+      "resolution_path": "ChangeSet/Review/Discussion/WorkLabel kinds + API + self-approval forbid.",
+      "closed_in": "core-data-service ChangeSet surface (2026-07-25)",
+      "approver": "Core Data Lead",
+      "review_date": "2026-07-25"
+    }
+  ]
+}

@@ -1,0 +1,13 @@
+{
+  "pack_id": "default",
+  "version": "1.0.0",
+  "title": "Default rule pack",
+  "policies": [
+    {
+      "policy_id": "security-high-risk-approval",
+      "severity": "high",
+      "evaluation_mode": "deterministic_then_judge",
+      "requires_human_approval": true
+    }
+  ]
+}

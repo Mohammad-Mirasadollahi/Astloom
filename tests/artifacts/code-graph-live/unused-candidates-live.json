@@ -1,0 +1,35 @@
+{
+  "http_mcp_ok": true,
+  "server_name": "Astloom-Programming",
+  "project_id": "deadcode-live",
+  "path_prefix": "fixtures/dead_code_sample",
+  "graph_mode": "neo4j",
+  "index_coverage": {
+    "status": "ok",
+    "pending_count": 0,
+    "safe_absence_claims": true,
+    "note": "index looks fresh for scoped absence claims"
+  },
+  "kpi_hints": {
+    "dead_code_candidates_surfaced": 1,
+    "dead_code_candidates_skipped_uncertain": 0,
+    "dead_code_candidates_resolved": 0
+  },
+  "row_count": 1,
+  "orphan": {
+    "symbol": "fixtures.dead_code_sample.live_main.old_helper_orphan",
+    "path": "fixtures/dead_code_sample/live_main.py",
+    "finding_kind": "unused_symbol",
+    "score": 0.8,
+    "confidence": "high",
+    "safe_to_delete": true,
+    "blockers": [],
+    "evidence_kinds": [
+      "unreachable_from_live_roots",
+      "no_inbound_strong_use",
+      "freshness_ok"
+    ]
+  },
+  "triage_engine": "local_rules",
+  "outside_orphan_excluded": true
+}

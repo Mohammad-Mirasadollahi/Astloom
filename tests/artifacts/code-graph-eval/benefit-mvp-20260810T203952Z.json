@@ -1,0 +1,11 @@
+{
+  "chars_saved_proxy": 0,
+  "explore_over_naive_ratio": 1.6425,
+  "generated_at": "2026-08-10T20:39:52Z",
+  "ingest_files": 2,
+  "notes": "Proxy only: compares explore pack used_chars vs concatenating all .py sources. Not a production acceptance KPI; sales dry-run evidence for backlog 34 C3.",
+  "query": "how does login password verification work",
+  "sample_root": "/opt/Astloom/samples/e2e-graph-probe/src",
+  "with_explore_chars": 1741,
+  "without_graph_chars": 1060
+}

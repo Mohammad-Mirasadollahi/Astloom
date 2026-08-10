@@ -1,0 +1,1 @@
+"""Governance catalog verification support."""

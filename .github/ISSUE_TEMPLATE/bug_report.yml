@@ -1,0 +1,101 @@
+name: Bug report
+description: Report incorrect behavior, a regression, or a broken gate/test.
+title: "bug: "
+labels: ["bug", "needs-triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting a bug. Remove secrets, tokens, and private customer data before submitting.
+        Security issues belong in SECURITY.md, not here.
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      description: Where does the bug show up?
+      options:
+        - services/core-data-service
+        - services/memory-service
+        - services/docs-sync-service
+        - services/rule-engine-service
+        - services/adapter-service
+        - services/code-graph-service
+        - gates/technical-logic-verification
+        - gates/port-profile-verification
+        - gates/governance-catalog-verification
+        - gates/gap-register-verification
+        - gates/logical-examples-verification
+        - services/platform (audit / identity / orchestration / reporting / project-profile / common-context)
+        - tools (cli / outbox / usage-profile)
+        - docs
+        - frontend
+        - tooling / git-sync / install
+        - other
+    validations:
+      required: true
+  - type: textarea
+    id: summary
+    attributes:
+      label: Summary
+      description: One or two sentences describing the failure.
+      placeholder: rule-engine idempotent evaluate_rules drops impact tasks on replay.
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behavior
+    validations:
+      required: true
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: Reproduction steps
+      description: Exact commands, headers, and payloads when possible.
+      placeholder: |
+        1. PYTHONPATH=backend/services/... .venv/bin/python -m pytest ...
+        2. POST /api/v1/projects/p/...
+    validations:
+      required: true
+  - type: input
+    id: environment
+    attributes:
+      label: Environment
+      description: OS, Python version, commit SHA if known.
+      placeholder: Linux, Python 3.12, commit abc1234
+    validations:
+      required: true
+  - type: dropdown
+    id: severity
+    attributes:
+      label: Severity
+      options:
+        - blocker (breaks gate or data integrity)
+        - high (wrong behavior on main path)
+        - medium (workaround exists)
+        - low (cosmetic / docs)
+    validations:
+      required: true
+  - type: textarea
+    id: evidence
+    attributes:
+      label: Evidence
+      description: Failing test output, stack traces, or redacted logs. No secrets.
+      render: text
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Checklist
+      options:
+        - label: I searched existing issues for duplicates.
+          required: true
+        - label: I removed secrets and private data from this report.
+          required: true
+        - label: This is not a security vulnerability report (those use SECURITY.md).
+          required: true

@@ -1,0 +1,36 @@
+{
+  "policy_id": "default-embedding-refresh",
+  "version": 1,
+  "title": "Default embedding refresh policy (GAP-T03)",
+  "owner": "ai-platform",
+  "status": "active",
+  "default_model": "BAAI/bge-large-en-v1.5",
+  "default_dims": 1024,
+  "skip_when_model_unchanged": true,
+  "batch_size": 64,
+  "states": ["pending", "running", "failed", "complete"],
+  "tenant_isolation": {
+    "scope_keys": ["tenant_id", "workspace_id", "project_id"],
+    "cross_tenant_forbidden": true
+  },
+  "sor": {
+    "store": "postgresql+pgvector",
+    "vector_type": "vector(1024)",
+    "code_graph_table": "code_graph.symbol_embeddings",
+    "memory_table": "memory.memory_embeddings"
+  },
+  "replica_sync": {
+    "after_sor_write": true,
+    "accelerator": "turbovec",
+    "fail_open": true
+  },
+  "regenerate_triggers": [
+    "configured_model_mismatch",
+    "missing_embedding_row",
+    "symbol_body_or_doc_changed_on_ingest",
+    "operator_force_refresh",
+    "orphan_cleanup_after_delete"
+  ],
+  "model_change_policy": "scoped_reembed",
+  "change_reason": "GAP-T03 embedding lifecycle SoR"
+}

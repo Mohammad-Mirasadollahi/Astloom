@@ -1,0 +1,25 @@
+{
+  "profile_id": "default",
+  "version": "1.0.0",
+  "title": "Default code metadata profile",
+  "freshness_thresholds": {
+    "default_max_age_hours": 24
+  },
+  "ranking_weights": {
+    "symbol_relevance": 0.25,
+    "graph_proximity": 0.2,
+    "documentation_freshness": 0.15,
+    "ownership": 0.1,
+    "call_frequency": 0.1,
+    "test_coverage": 0.1,
+    "risk": 0.1
+  },
+  "source_read_escalation": {
+    "min_confidence": 0.6,
+    "escalate_on_stale": true,
+    "escalate_on_high_risk": true
+  },
+  "token_budget": {
+    "context_pack_max": 4000
+  }
+}

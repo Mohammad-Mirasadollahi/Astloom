@@ -1,0 +1,36 @@
+{
+  "circular_claim_ban": "ADR-19: labels must not come from graph self-walk",
+  "generated_at": "2026-07-21T07:26:24Z",
+  "label_source": "git_cochange",
+  "mean_change_risk_f1": 1.0,
+  "mean_explore_f1": 1.0,
+  "pair_count": 2,
+  "seeds": [
+    {
+      "change_risk": {
+        "f1": 1.0,
+        "precision": 1.0,
+        "predicted": [
+          "src/api.py",
+          "src/crypto.py"
+        ],
+        "recall": 1.0
+      },
+      "explore": {
+        "f1": 1.0,
+        "precision": 1.0,
+        "predicted": [
+          "src/api.py",
+          "src/crypto.py"
+        ],
+        "recall": 1.0
+      },
+      "gold_partners": [
+        "src/api.py",
+        "src/crypto.py"
+      ],
+      "risk_score": 0.8,
+      "seed": "src/auth.py"
+    }
+  ]
+}

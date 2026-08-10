@@ -1,0 +1,54 @@
+{
+  "schema_version": "1.0",
+  "doc_id": "ac.gov.read-model-catalog",
+  "read_models": [
+    {
+      "read_model_id": "memory.context_bundle",
+      "build": "on_demand",
+      "consistency": "read_your_writes",
+      "invalidation": "source_memory_version_change",
+      "owner_service": "memory-service",
+      "api_hint": "retrieve_context"
+    },
+    {
+      "read_model_id": "code_graph.generation_context",
+      "build": "on_demand",
+      "consistency": "eventual",
+      "invalidation": "symbol_hash_change",
+      "owner_service": "code-graph-service",
+      "api_hint": "generation-context"
+    },
+    {
+      "read_model_id": "code_graph.hybrid_search",
+      "build": "materialized",
+      "consistency": "eventual",
+      "invalidation": "embedding_refresh",
+      "owner_service": "code-graph-service",
+      "api_hint": "search:hybrid"
+    },
+    {
+      "read_model_id": "audit.timeline",
+      "build": "materialized",
+      "consistency": "append_only",
+      "invalidation": "none",
+      "owner_service": "audit-service",
+      "api_hint": "audit list"
+    },
+    {
+      "read_model_id": "common_context.guidance",
+      "build": "on_demand",
+      "consistency": "read_your_writes",
+      "invalidation": "guidance_seed_change",
+      "owner_service": "common-context-service",
+      "api_hint": "guidance_resolve"
+    },
+    {
+      "read_model_id": "core_data.task_board",
+      "build": "on_demand",
+      "consistency": "read_your_writes",
+      "invalidation": "task_transition",
+      "owner_service": "core-data-service",
+      "api_hint": "task_board"
+    }
+  ]
+}

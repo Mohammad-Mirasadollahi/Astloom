@@ -1,0 +1,237 @@
+# Astloom sync filters template (`astloom sync`).
+# Embeddings: everyday `astloom sync` heals touched files only; use `astloom sync heal`
+# for full-project missing/mismatch rows (does not re-parse healthy hash-stable sources).
+#   cp astloom.sync.yaml.example astloom.sync.yaml
+# The local astloom.sync.yaml is gitignored (like .env); only this example is tracked.
+# Wildcards: *, ?, [], **
+#
+# Exclude lists: this YAML + optional .astloom/sync.yaml, plus layered ignore files
+# (.gitignore then .astloomignore) merged into code exclude globs at resolve time.
+# Nothing is hardcoded in Python — edit code.exclude / docs.exclude freely.
+# Remove Astloom-specific path entries (deploy-toolkit, …) for other repos.
+
+# -----------------------------------------------------------------------------
+# Phase 1 — code graph
+# -----------------------------------------------------------------------------
+code:
+  exclude:
+    # --- Project trees (edit for your repo) ---
+    - deploy-toolkit
+    - ai-toolstack
+    - Setup
+    - wheelhouse
+    - charts
+    - archives
+    - Archives
+    - Archive
+    - archive
+    - migrations
+    - scripts
+    - "**/.astloom/**"
+    - "**/frontend/dist/**"
+    - "**/frontend/build/**"
+
+    # --- Python package / cache / bytecode ---
+    - "__pycache__"
+    - "**/__pycache__/**"
+    - "**/__init__.py"
+    - "**/*.pyc"
+    - "**/*.pyo"
+    - "**/*.pyd"
+    - "**/*.egg-info/**"
+    - "**/.eggs/**"
+    - "**/site-packages/**"
+    - ".venv"
+    - "venv"
+    - "env"
+    - "**/.venv/**"
+    - "**/venv/**"
+    - ".mypy_cache"
+    - ".pytest_cache"
+    - ".ruff_cache"
+    - ".tox"
+    - ".nox"
+    - ".hypothesis"
+    - "htmlcov"
+    - "**/.mypy_cache/**"
+    - "**/.pytest_cache/**"
+    - "**/.ruff_cache/**"
+    - "**/.tox/**"
+    - "**/.nox/**"
+    - "**/htmlcov/**"
+    - "**/*_pb2.py"
+    - "**/*_pb2_grpc.py"
+
+    # --- Tests / fixtures / mocks ---
+    - tests
+    - test
+    - fixtures
+    - fixture
+    - mocks
+    - testdata
+    - __mocks__
+    - __snapshots__
+    - "**/tests/**"
+    - "**/test/**"
+    - "**/__tests__/**"
+    - "**/testdata/**"
+    - "**/__mocks__/**"
+    - "**/mocks/**"
+    - "**/fixture/**"
+    - "**/fixtures/**"
+    - "**/__snapshots__/**"
+    - "**/*_test.py"
+    - "**/test_*.py"
+    - "**/*_test.go"
+    - "**/*.spec.ts"
+    - "**/*.spec.tsx"
+    - "**/*.spec.js"
+    - "**/*.spec.jsx"
+    - "**/*.test.ts"
+    - "**/*.test.tsx"
+    - "**/*.test.js"
+    - "**/*.test.jsx"
+
+    # --- JS / TS / frontend noise ---
+    - node_modules
+    - "**/node_modules/**"
+    - ".next"
+    - ".nuxt"
+    - ".output"
+    - ".turbo"
+    - ".svelte-kit"
+    - "storybook-static"
+    - "**/.next/**"
+    - "**/.nuxt/**"
+    - "**/.turbo/**"
+    - "**/.svelte-kit/**"
+    - "**/storybook-static/**"
+    - "**/*.min.js"
+    - "**/*.min.css"
+    - "**/*.min.map"
+    - "**/*.bundle.js"
+    - "**/*.bundle.css"
+    - "**/*.map"
+    - "**/*.d.ts"
+
+    # --- Go / Rust / Java / .NET / build outputs ---
+    - vendor
+    - target
+    - dist
+    - build
+    - out
+    - coverage
+    - "**/vendor/**"
+    - "**/target/**"
+    - "**/dist/**"
+    - "**/build/**"
+    - "**/out/**"
+    - "**/coverage/**"
+    - "**/.nyc_output/**"
+    - "**/bin/**"
+    - "**/obj/**"
+    - "**/*.gen.go"
+    - "**/*.pb.go"
+    - "**/*.g.dart"
+    - "**/*.freezed.dart"
+    - "**/*.designer.cs"
+    - "**/*.AssemblyInfo.cs"
+    - "**/*.generated.*"
+    - "**/generated/**"
+    - "_cpu_bench"
+    - "**/_cpu_bench/**"
+
+    # --- Lockfiles / packages (not source) ---
+    - "**/package-lock.json"
+    - "**/yarn.lock"
+    - "**/pnpm-lock.yaml"
+    - "**/Cargo.lock"
+    - "**/poetry.lock"
+    - "**/composer.lock"
+    - "**/go.sum"
+    - "**/Pipfile.lock"
+    - "**/uv.lock"
+    - "**/*.egg"
+    - "**/*.whl"
+
+    # --- Secrets / OS junk ---
+    - "**/.env"
+    - "**/.env.*"
+    - "**/*.pem"
+    - "**/*.key"
+    - "**/*.crt"
+    - "**/*.p12"
+    - "**/.DS_Store"
+    - "**/Thumbs.db"
+    - tmp
+    - temp
+    - logs
+    - log
+    - ".cache"
+    - ".idea"
+    - ".vscode"
+    - ".terraform"
+    - ".serverless"
+
+  include_extensions:
+    - .py
+    - .ts
+    - .tsx
+    - .js
+    - .jsx
+    - .go
+    - .rs
+
+# -----------------------------------------------------------------------------
+# Phase 2 — human docs (match by wildcard; docs-only exclude)
+# Discovery = docs.match − docs.exclude (what sync indexes).
+# Full-tier / quality-audit = discovery − docs.audit.exclude (− built-in
+# README/AGENTS/skill/tests defaults). Package README maps still sync via
+# Phase 1 package-readme ingest; they are not audited as Full-tier product docs.
+# -----------------------------------------------------------------------------
+docs:
+  match:
+    - "**/*.md"
+    - "**/*.mdx"
+  exclude:
+    # Product / tooling trees (also listed under code.exclude — docs phase is independent)
+    - archives
+    - Archives
+    - Archive
+    - archive
+    - "**/node_modules/**"
+    - "**/.venv/**"
+    - "**/venv/**"
+    - "**/__pycache__/**"
+    - "**/site-packages/**"
+    - "**/dist/**"
+    - "**/build/**"
+    - "**/coverage/**"
+    - "**/vendor/**"
+    - "**/target/**"
+    - "**/.next/**"
+    - "**/.turbo/**"
+    - "**/wheelhouse/**"
+    - "**/archives/**"
+    - "**/Archives/**"
+    - "**/Archive/**"
+    - "**/archive/**"
+    - "**/CHANGELOG.md"
+    - "**/CHANGELOG*.md"
+    - "**/HISTORY.md"
+    - "**/LICENSE.md"
+    - "**/LICENSE"
+    - "**/LICENSES/**"
+    - "**/COPYING"
+    - "**/NOTICE"
+    - "**/CODE_OF_CONDUCT.md"
+    - "**/SECURITY.md"
+    - "**/CONTRIBUTING.md"
+    - "**/package-lock.json"
+    - "**/.DS_Store"
+  audit:
+    # Extra Full-tier / quality-audit skips (merged with built-in README/AGENTS/…).
+    # These paths may still Phase-2 sync; they just skip docs-standards scoring.
+    exclude:
+      - "samples/**"
+      - "**/fixtures/**"

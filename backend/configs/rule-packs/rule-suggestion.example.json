@@ -1,0 +1,27 @@
+{
+  "suggestion_id": "sug:docs-english-project",
+  "title": "Require English documentation for this project",
+  "proposed_rule": {
+    "category": "documentation",
+    "statement": "All architecture and API documentation for this project must be written in English.",
+    "severity": "medium"
+  },
+  "scope": {
+    "kind": "project",
+    "id": "example-project"
+  },
+  "risk": "low",
+  "confidence": 0.82,
+  "evidence": [
+    {
+      "summary": "User corrected documentation language to English three times in one week",
+      "source": "conversation",
+      "count": 3
+    }
+  ],
+  "status": "draft",
+  "test_examples": [
+    "Persian-only architecture note must be rejected",
+    "English API contract must pass"
+  ]
+}

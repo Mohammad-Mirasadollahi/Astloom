@@ -1,0 +1,61 @@
+============================= test session starts ==============================
+platform linux -- Python 3.12.3, pytest-9.1.1, pluggy-1.6.0 -- /opt/Astloom/.venv/bin/python
+cachedir: .pytest_cache
+rootdir: /opt/Astloom
+configfile: pyproject.toml
+plugins: timeout-2.4.0, anyio-4.14.1
+collecting ... collected 50 items
+
+tests/backend/services/code-graph-service/test_production_retrieval_fuzzer.py::test_fuzz_tokenize_never_raises[tok0] PASSED [  2%]
+tests/backend/services/code-graph-service/test_production_retrieval_fuzzer.py::test_fuzz_tokenize_never_raises[tok1] PASSED [  4%]
+tests/backend/services/code-graph-service/test_production_retrieval_fuzzer.py::test_fuzz_tokenize_never_raises[tok2] PASSED [  6%]
+tests/backend/services/code-graph-service/test_production_retrieval_fuzzer.py::test_fuzz_tokenize_never_raises[tok3] PASSED [  8%]
+tests/backend/services/code-graph-service/test_production_retrieval_fuzzer.py::test_fuzz_tokenize_never_raises[tok4] PASSED [ 10%]
+tests/backend/services/code-graph-service/test_production_retrieval_fuzzer.py::test_fuzz_tokenize_never_raises[tok5] PASSED [ 12%]
+tests/backend/services/code-graph-service/test_production_retrieval_fuzzer.py::test_fuzz_tokenize_never_raises[tok6] PASSED [ 14%]
+tests/backend/services/code-graph-service/test_production_retrieval_fuzzer.py::test_fuzz_tokenize_never_raises[tok7] PASSED [ 16%]
+tests/backend/services/code-graph-service/test_production_retrieval_fuzzer.py::test_fuzz_tokenize_never_raises[tok8] PASSED [ 18%]
+tests/backend/services/code-graph-service/test_production_retrieval_fuzzer.py::test_fuzz_tokenize_never_raises[tok9] PASSED [ 20%]
+tests/backend/services/code-graph-service/test_production_retrieval_fuzzer.py::test_fuzz_tokenize_never_raises[tok10] PASSED [ 22%]
+tests/backend/services/code-graph-service/test_production_retrieval_fuzzer.py::test_fuzz_tokenize_never_raises[tok11] PASSED [ 24%]
+tests/backend/services/code-graph-service/test_production_retrieval_fuzzer.py::test_fuzz_lucene_query_safe[luc0] PASSED [ 26%]
+tests/backend/services/code-graph-service/test_production_retrieval_fuzzer.py::test_fuzz_lucene_query_safe[luc1] PASSED [ 28%]
+tests/backend/services/code-graph-service/test_production_retrieval_fuzzer.py::test_fuzz_lucene_query_safe[luc2] PASSED [ 30%]
+tests/backend/services/code-graph-service/test_production_retrieval_fuzzer.py::test_fuzz_lucene_query_safe[luc3] PASSED [ 32%]
+tests/backend/services/code-graph-service/test_production_retrieval_fuzzer.py::test_fuzz_lucene_query_safe[luc4] PASSED [ 34%]
+tests/backend/services/code-graph-service/test_production_retrieval_fuzzer.py::test_fuzz_lucene_query_safe[luc5] PASSED [ 36%]
+tests/backend/services/code-graph-service/test_production_retrieval_fuzzer.py::test_fuzz_lucene_query_safe[luc6] PASSED [ 38%]
+tests/backend/services/code-graph-service/test_production_retrieval_fuzzer.py::test_fuzz_lucene_query_safe[luc7] PASSED [ 40%]
+tests/backend/services/code-graph-service/test_production_retrieval_fuzzer.py::test_fuzz_bm25_rank_stable[bm0] PASSED [ 42%]
+tests/backend/services/code-graph-service/test_production_retrieval_fuzzer.py::test_fuzz_bm25_rank_stable[bm1] PASSED [ 44%]
+tests/backend/services/code-graph-service/test_production_retrieval_fuzzer.py::test_fuzz_bm25_rank_stable[bm2] PASSED [ 46%]
+tests/backend/services/code-graph-service/test_production_retrieval_fuzzer.py::test_fuzz_bm25_rank_stable[bm3] PASSED [ 48%]
+tests/backend/services/code-graph-service/test_production_retrieval_fuzzer.py::test_fuzz_rrf_merge_empty_and_dupes PASSED [ 50%]
+tests/backend/services/code-graph-service/test_production_retrieval_fuzzer.py::test_fuzz_coalesce_rank_lists_filters_empty PASSED [ 52%]
+tests/backend/services/code-graph-service/test_production_retrieval_fuzzer.py::test_fuzz_gds_concurrency_clamped_1_to_4[gds0] PASSED [ 54%]
+tests/backend/services/code-graph-service/test_production_retrieval_fuzzer.py::test_fuzz_gds_concurrency_clamped_1_to_4[gds1] PASSED [ 56%]
+tests/backend/services/code-graph-service/test_production_retrieval_fuzzer.py::test_fuzz_gds_concurrency_clamped_1_to_4[gds2] PASSED [ 58%]
+tests/backend/services/code-graph-service/test_production_retrieval_fuzzer.py::test_fuzz_gds_concurrency_clamped_1_to_4[gds3] PASSED [ 60%]
+tests/backend/services/code-graph-service/test_production_retrieval_fuzzer.py::test_fuzz_gds_concurrency_clamped_1_to_4[gds4] PASSED [ 62%]
+tests/backend/services/code-graph-service/test_production_retrieval_fuzzer.py::test_fuzz_gds_concurrency_clamped_1_to_4[gds5] PASSED [ 64%]
+tests/backend/services/code-graph-service/test_production_retrieval_fuzzer.py::test_fuzz_gds_concurrency_clamped_1_to_4[gds6] PASSED [ 66%]
+tests/backend/services/code-graph-service/test_production_retrieval_fuzzer.py::test_fuzz_gds_concurrency_clamped_1_to_4[gds7] PASSED [ 68%]
+tests/backend/services/code-graph-service/test_production_retrieval_fuzzer.py::test_fuzz_communities_deterministic[com0] PASSED [ 70%]
+tests/backend/services/code-graph-service/test_production_retrieval_fuzzer.py::test_fuzz_communities_deterministic[com1] PASSED [ 72%]
+tests/backend/services/code-graph-service/test_production_retrieval_fuzzer.py::test_fuzz_communities_deterministic[com2] PASSED [ 74%]
+tests/backend/services/code-graph-service/test_production_retrieval_fuzzer.py::test_fuzz_communities_deterministic[com3] PASSED [ 76%]
+tests/backend/services/code-graph-service/test_production_retrieval_fuzzer.py::test_fuzz_searchable_text_handles_huge_body PASSED [ 78%]
+tests/backend/services/code-graph-service/test_production_retrieval_fuzzer.py::test_fuzz_live_hybrid_and_explore_survive[liveq0] PASSED [ 80%]
+tests/backend/services/code-graph-service/test_production_retrieval_fuzzer.py::test_fuzz_live_hybrid_and_explore_survive[liveq1] PASSED [ 82%]
+tests/backend/services/code-graph-service/test_production_retrieval_fuzzer.py::test_fuzz_live_hybrid_and_explore_survive[liveq2] PASSED [ 84%]
+tests/backend/services/code-graph-service/test_production_retrieval_fuzzer.py::test_fuzz_live_hybrid_and_explore_survive[liveq3] PASSED [ 86%]
+tests/backend/services/code-graph-service/test_production_retrieval_fuzzer.py::test_fuzz_live_hybrid_and_explore_survive[liveq4] PASSED [ 88%]
+tests/backend/services/code-graph-service/test_production_retrieval_fuzzer.py::test_fuzz_live_hybrid_and_explore_survive[liveq5] PASSED [ 90%]
+tests/backend/services/code-graph-service/test_production_retrieval_fuzzer.py::test_fuzz_live_empty_query_rejected PASSED [ 92%]
+tests/backend/services/code-graph-service/test_production_retrieval_fuzzer.py::test_fuzz_live_architecture_and_path_random_pair PASSED [ 94%]
+tests/backend/services/code-graph-service/test_production_retrieval_fuzzer.py::test_fuzz_live_postgres_fts_weird_query PASSED [ 96%]
+tests/backend/services/code-graph-service/test_production_retrieval_fuzzer.py::test_fuzz_live_gds_off_degree_method PASSED [ 98%]
+tests/backend/services/code-graph-service/test_production_retrieval_fuzzer.py::test_fuzz_live_random_corpus_bm25_then_hybrid PASSED [100%]
+
+- generated xml file: /opt/Astloom/tests/artifacts/code-graph-live/fuzzer-junit.xml -
+============================== 50 passed in 5.24s ==============================

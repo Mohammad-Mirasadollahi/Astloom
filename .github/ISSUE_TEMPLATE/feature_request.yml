@@ -1,0 +1,85 @@
+name: Feature request
+description: Propose a new capability, slice deepening, or product workflow change.
+title: "feat: "
+labels: ["enhancement", "needs-triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Describe the job to be done, not only an implementation idea.
+        Large requests may be tracked first in the gap register or a phase design doc.
+  - type: dropdown
+    id: area
+    attributes:
+      label: Primary area
+      options:
+        - Phase 1 core data
+        - Phase 2 memory / context
+        - Phase 3 docs sync
+        - Phase 4 rule engine
+        - Phase 5 interoperability
+        - Phase 6 verification
+        - Phase 7 code graph
+        - Phase 8 engineering / packages / ports
+        - Phase 9 governance / ops
+        - Phase 10 gap analysis
+        - Phase 11 logical examples
+        - Platform service
+        - Frontend / admin
+        - Developer experience / tooling
+        - other
+    validations:
+      required: true
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem / job to be done
+      description: Who is blocked today, and what outcome do they need?
+      placeholder: Operators cannot revoke a principal without deleting the whole project profile.
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed behavior
+      description: What should the system do instead?
+    validations:
+      required: true
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: Acceptance criteria
+      description: Testable outcomes that mean the feature is done.
+      placeholder: |
+        - API route exists and is idempotent
+        - Unit tests cover allow/deny paths
+        - Contract doc updated
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: Other designs, workarounds, or why not to do this.
+  - type: dropdown
+    id: priority
+    attributes:
+      label: Suggested priority
+      options:
+        - must-have for current phase gate
+        - should-have soon
+        - nice-to-have
+        - unsure
+    validations:
+      required: true
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Checklist
+      options:
+        - label: I checked the roadmap and related phase docs for an existing plan.
+          required: true
+        - label: I searched existing issues / gaps for duplicates.
+          required: true
+        - label: This request does not include secrets or private customer data.
+          required: true

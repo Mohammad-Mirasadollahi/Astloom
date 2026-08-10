@@ -1,0 +1,129 @@
+{
+  "profile_id": "astloom-local-default",
+  "version": "1.0.0",
+  "title": "Astloom local ModelRoutingProfile",
+  "description": "Default LiteLLM aliases for offline/lab hosts (Ollama OpenAI-compatible). Env task overrides still win.",
+  "environment": "local",
+  "routes": [
+    {
+      "task_class": "docs.generate",
+      "risk_level": "low",
+      "primary_model": "ollama/qwen2.5-coder:7b",
+      "fallback_models": ["ollama/qwen2.5:7b"],
+      "max_tokens": 512,
+      "timeout_ms": 60000,
+      "json_mode": false,
+      "allow_stub": true
+    },
+    {
+      "task_class": "docs.generate",
+      "risk_level": "medium",
+      "primary_model": "ollama/qwen2.5-coder:14b",
+      "fallback_models": ["ollama/qwen2.5-coder:7b"],
+      "max_tokens": 768,
+      "timeout_ms": 90000,
+      "json_mode": false,
+      "allow_stub": true
+    },
+    {
+      "task_class": "docs.generate",
+      "risk_level": "high",
+      "primary_model": "ollama/qwen2.5-coder:32b",
+      "fallback_models": ["ollama/qwen2.5-coder:14b"],
+      "max_tokens": 1024,
+      "timeout_ms": 120000,
+      "json_mode": false,
+      "allow_stub": false
+    },
+    {
+      "task_class": "rules.judge",
+      "risk_level": "low",
+      "primary_model": "ollama/qwen2.5:7b",
+      "fallback_models": [],
+      "max_tokens": 512,
+      "timeout_ms": 60000,
+      "json_mode": true,
+      "allow_stub": true
+    },
+    {
+      "task_class": "rules.judge",
+      "risk_level": "medium",
+      "primary_model": "ollama/qwen2.5:14b",
+      "fallback_models": ["ollama/qwen2.5:7b"],
+      "max_tokens": 768,
+      "timeout_ms": 90000,
+      "json_mode": true,
+      "allow_stub": false
+    },
+    {
+      "task_class": "rules.judge",
+      "risk_level": "high",
+      "primary_model": "ollama/qwen2.5:32b",
+      "fallback_models": ["ollama/qwen2.5:14b"],
+      "max_tokens": 1024,
+      "timeout_ms": 120000,
+      "json_mode": true,
+      "allow_stub": false
+    },
+    {
+      "task_class": "codegen.synthesize",
+      "risk_level": "low",
+      "primary_model": "ollama/qwen2.5-coder:7b",
+      "fallback_models": [],
+      "max_tokens": 1024,
+      "timeout_ms": 90000,
+      "json_mode": false,
+      "allow_stub": true
+    },
+    {
+      "task_class": "codegen.synthesize",
+      "risk_level": "medium",
+      "primary_model": "ollama/qwen2.5-coder:14b",
+      "fallback_models": ["ollama/qwen2.5-coder:7b"],
+      "max_tokens": 2048,
+      "timeout_ms": 120000,
+      "json_mode": false,
+      "allow_stub": false
+    },
+    {
+      "task_class": "codegen.synthesize",
+      "risk_level": "high",
+      "primary_model": "ollama/qwen2.5-coder:32b",
+      "fallback_models": ["ollama/qwen2.5-coder:14b"],
+      "max_tokens": 4096,
+      "timeout_ms": 180000,
+      "json_mode": false,
+      "allow_stub": false
+    },
+    {
+      "task_class": "embed.symbol",
+      "risk_level": "low",
+      "primary_model": "ollama/nomic-embed-text",
+      "fallback_models": [],
+      "max_tokens": null,
+      "timeout_ms": 60000,
+      "json_mode": false,
+      "allow_stub": true
+    },
+    {
+      "task_class": "embed.symbol",
+      "risk_level": "medium",
+      "primary_model": "ollama/nomic-embed-text",
+      "fallback_models": [],
+      "max_tokens": null,
+      "timeout_ms": 60000,
+      "json_mode": false,
+      "allow_stub": true
+    },
+    {
+      "task_class": "embed.symbol",
+      "risk_level": "high",
+      "primary_model": "ollama/nomic-embed-text",
+      "fallback_models": [],
+      "max_tokens": null,
+      "timeout_ms": 90000,
+      "json_mode": false,
+      "allow_stub": false
+    }
+  ]
+}

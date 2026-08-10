@@ -1,0 +1,294 @@
+# Astloom Git Ignore
+#
+# Keep this file tracked. Do not add /.gitignore here — remote clones would lose
+# ignore rules (secrets, archives, runtime data) and git-sync could push them.
+
+# Local archives / offline packs — NEVER commit, stage, or push to GitHub/remotes.
+# Any tree named archives/Archive/archive (any case, root or nested) stays local-only.
+archives/
+Archives/
+Archive/
+archive/
+**/archives/**
+**/Archives/**
+**/Archive/**
+**/archive/**
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+coverage.xml
+htmlcov/
+.tox/
+.nox/
+.venv/
+venv/
+env/
+.smoke-temp/
+*.egg-info/
+
+# =============================================================================
+# Astloom operator runtime (local data / logs / secrets — never commit)
+# Default state: .astloom/  (projects, sync-progress, sync-usage, mcp fragment,
+# optional sync.yaml override, install-state, probes).
+# If you relocate ASTLOOM_SYNC_USAGE_LOG_DIR, keep it under .astloom/, logs/,
+# or a folder named sync-usage/ so these rules still apply.
+# =============================================================================
+.astloom/
+
+# HTTPS / TLS auto-certs (ensure_tls_material; never commit private CA/leaf)
+# Broader *.pem / *.key rules above also apply; these pin the data-root layout.
+**/certs/ca.pem
+**/certs/ca.key
+**/certs/server.pem
+**/certs/server.key
+**/.astloom-certs.json
+**/certs/.astloom-certs.json
+# Sibling durable data root beside install (Postgres/Neo4j/usage/certs)
+Astloom-data/
+**/Astloom-data/
+# Live HTTPS probe scratch if created under the tree
+**/astloom-live-https-qa/
+# Local agent scratch (SDD ledgers, PR drafts, pytest dumps — not product SoT)
+.superpowers/
+
+# Sync usage reports (default .astloom/sync-usage/; also if relocated)
+**/sync-usage/
+sync-usage.jsonl
+**/sync-usage.jsonl
+*.sync-usage.jsonl
+# MCP token usage JSONL (default .astloom/mcp-usage/)
+**/mcp-usage/
+
+# Sync filter copy (operator-owned; template stays tracked)
+astloom.sync.yaml
+astloom.sync.yml
+!astloom.sync.yaml.example
+!astloom.sync.yml.example
+
+# Node / Next.js
+node_modules/
+.next/
+out/
+dist/
+build/
+coverage/
+.npm/
+.pnpm-store/
+.yarn/
+
+# Environment and secrets (never commit real values)
+.env
+.env.local
+**/.env
+**/.env.local
+.env.*
+!**/.env.example
+!.env.example
+!**/*.example.env
+*.pem
+*.key
+*.crt
+*.p12
+*.pfx
+*.token
+*.secret
+secrets/
+.local-secrets/
+**/credentials.json
+**/credentials.local.*
+
+# git-sync (local-only tool + PAT + first-push msg + change notes — never commit)
+scripts/git-sync.sh
+**/git-sync.sh
+scripts/.git-sync-first-push.msg
+**/.git-sync-first-push.msg
+scripts/.git-sync-changes/
+**/.git-sync-changes/
+**/.git-sync.local.env
+**/.git-sync.local.env.*
+**/git-sync.local.env
+**/git-sync.local.env.*
+**/.git-sync.credentials
+**/git-sync.credentials
+!**/git-sync.local.env.example
+
+# Logs and runtime output
+*.log
+logs/
+runtime/
+tmp/
+tmp/**
+/tmp/
+temp/
+.cache/
+.DS_Store
+Thumbs.db
+.pip-show.txt
+.pip-*.txt
+# Agent/session scratch files (never commit)
+.tmp-*
+.tmp_*
+**/_tmp_*
+scripts/_tmp_*
+pytest-audit.txt
+cs_pytest.txt
+
+# Agent / IDE local wiring (never sync)
+# Installed Cursor / Claude / Codex / other agent tooling — never commit
+
+# Cursor
+.cursor/
+**/.cursor/
+.cursorrules
+**/.cursorrules
+.cursorignore
+**/.cursorignore
+**/ponytail-stack-cursor.mdc
+docs/agents/cursor-*.md
+backend/integrations/agents/cursor/
+backend/integrations/ides/cursor/
+
+# Claude Code / Anthropic
+.claude/
+**/.claude/
+CLAUDE.md
+**/CLAUDE.md
+.claudeignore
+**/.claudeignore
+
+# OpenAI Codex
+.codex/
+**/.codex/
+codex.md
+**/codex.md
+
+# Generic agent entry + sessions
+AGENTS.md
+**/AGENTS.md
+.agents/
+**/.agents/
+.agent/
+**/.agent/
+.agent-runs/
+.agent-sessions/
+.agent-cache/
+agent-runtime/
+agent-workspaces/
+agent_logs/
+agent-memory-dumps/
+project_docs/
+
+# Other AI coding assistants / IDE agents
+.aider/
+**/.aider/
+.aider.conf.yml
+.aider*
+**/.aider*
+.continue/
+**/.continue/
+.windsurf/
+**/.windsurf/
+.codeium/
+**/.codeium/
+.gemini/
+**/.gemini/
+GEMINI.md
+**/GEMINI.md
+.opencode/
+**/.opencode/
+.goose/
+**/.goose/
+.crush/
+**/.crush/
+.roo/
+**/.roo/
+.roo-code/
+**/.roo-code/
+.kilocode/
+**/.kilocode/
+.augment/
+**/.augment/
+.factory/
+**/.factory/
+.amp/
+**/.amp/
+.junie/
+**/.junie/
+.amazonq/
+**/.amazonq/
+.tabnine/
+**/.tabnine/
+.sourcegraph/
+**/.sourcegraph/
+.specstory/
+**/.specstory/
+.copilot/
+**/.copilot/
+.github/copilot-instructions.md
+**/copilot-instructions.md
+
+# MCP local state (astloom connect writes these; may embed local DB URLs)
+.mcp-memory
+.mcp-memory/
+.mcp.json
+**/.mcp.json
+.vscode/mcp.json
+**/.vscode/mcp.json
+.astloom-connect-merge.lock
+**/.astloom-connect-merge.lock
+mcp-lazy-servers.json
+**/mcp-lazy-servers.local.json
+
+# Entire ai-toolstack tree is local/vendor wiring — never commit (rules, skills, runtime data).
+ai-toolstack/
+
+# Generated evidence and exports (local only)
+evidence/
+**/pass.txt
+
+exports/
+diagnostics/
+reports/generated/
+artifacts/generated/
+
+# Synthetic CPU-bench modules (local load fixtures — never commit / never sync-ingest)
+_cpu_bench/
+**/_cpu_bench/
+
+# Local infrastructure data volumes / bind mounts + local wheel caches
+.docker-data/
+docker-data/
+postgres-data/
+neo4j-data/
+redis-data/
+minio-data/
+otel-data/
+grafana-data/
+wheelhouse/
+**/wheelhouse/
+
+# Local embedding model caches (default lives at /opt/astloom-models outside the tree;
+# ignore in-repo copies if ASTLOOM_EMBEDDING_CACHE_DIR points inside the checkout)
+astloom-models/
+**/astloom-models/
+models--*/
+**/models--*/
+**/sentence-transformers/models--*/
+
+# IDE and OS local state
+.idea/
+.vscode/
+**/.vscode/
+*.code-workspace
+*.swp
+*.swo
+*~
+.history/
+**/.history/

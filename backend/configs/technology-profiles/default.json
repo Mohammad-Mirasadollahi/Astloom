@@ -1,0 +1,21 @@
+{
+  "profile_id": "default",
+  "version": "1.0.0",
+  "title": "Default technology profile",
+  "runtime": {
+    "venv_path": ".venv",
+    "compose_profiles": ["core"],
+    "port_profile": "astloom-dev",
+    "install_python_dependencies": true,
+    "start_infrastructure_with_docker": true
+  },
+  "stores": {
+    "postgresql": {"enabled": true, "role": "operational"},
+    "pgvector": {"enabled": true, "role": "rag"},
+    "neo4j": {"enabled": true, "role": "code_graph"},
+    "redis": {"enabled": true, "role": "ephemeral_cache"}
+  },
+  "observability": {
+    "otel_enabled": true
+  }
+}

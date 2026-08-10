@@ -1,0 +1,15 @@
+{
+  "schema_version": "1.0",
+  "title": "Require approval for auth changes",
+  "natural_language_rule": "Production authentication and security changes require human approval",
+  "severity": "critical",
+  "owner": "security",
+  "evaluation_mode": "hybrid",
+  "domain": "security",
+  "match_tags": ["security", "auth", "production"],
+  "examples": ["changed auth middleware without approval"],
+  "counterexamples": ["docs-only edit"],
+  "required_approval_role": "security-approver",
+  "precedence": 100,
+  "classification": "synthetic"
+}

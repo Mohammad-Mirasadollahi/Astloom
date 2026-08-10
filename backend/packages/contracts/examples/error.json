@@ -1,0 +1,11 @@
+{
+  "error": {
+    "error_code": "task_not_found",
+    "category": "not_found_error",
+    "message": "Task was not found.",
+    "retryable": false,
+    "correlation_id": "corr_example",
+    "details": {},
+    "documentation_ref": "docs/errors/task_not_found"
+  }
+}
