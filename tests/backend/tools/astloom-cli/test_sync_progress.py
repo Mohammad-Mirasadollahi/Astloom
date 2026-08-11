@@ -110,8 +110,37 @@ def test_progress_explains_this_run_vs_prior(tmp_path: Path, monkeypatch, capsys
     assert "prior file symbols" not in out
     assert "lang_backfill=" not in out
     assert "need-work files finished yet" not in out
-    assert "0 of 237 files finished yet" in out
-    assert "in-flight not counted" in out
+    assert "half-credit for 30 in-flight" in out
+    assert "done=0 finished" in out
+    tracker.finish()
+
+
+def test_progress_percent_half_credits_in_flight(tmp_path: Path, monkeypatch, capsys):
+    monkeypatch.setattr("astloom_cli.ui._use_color", lambda: False)
+    progress_file = tmp_path / "sync-progress.json"
+    tracker = SyncProgressTracker(
+        scope="t/w/p",
+        path=str(tmp_path),
+        interval_sec=0.0,
+        progress_file=progress_file,
+    )
+    tracker(
+        {
+            "phase": "ingest",
+            "done": 0,
+            "total": 10,
+            "status": "started",
+            "files_in_flight": 10,
+            "file_workers": 10,
+            "queue_new": 10,
+        }
+    )
+    data = json.loads(progress_file.read_text(encoding="utf-8"))
+    # 0 finished + 0.5 * 10 in-flight → 50%
+    assert data["done"] == 0
+    assert data["percent"] == 50.0
+    out = capsys.readouterr().out
+    assert "50.0%" in out
     tracker.finish()
 
 

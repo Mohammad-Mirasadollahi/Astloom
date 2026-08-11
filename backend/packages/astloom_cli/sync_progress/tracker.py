@@ -157,7 +157,13 @@ class SyncProgressTracker:
                     )
                 self._rate_basis = basis
 
+        # Rate/ETA stay file-completion based. Display percent also half-credits
+        # in-flight files so the bar moves while workers wait on LLM/embed/RPM
+        # (otherwise 0% can sit unchanged for many minutes with full parallelism).
         pct = (100.0 * done / total) if total else 0.0
+        if total > 0 and in_flight > 0 and done < total:
+            display_done = min(float(total), float(done) + 0.5 * float(in_flight))
+            pct = 100.0 * display_done / float(total)
         elapsed = now - self._t0
         eta = None
         remaining = max(total - done, 0)

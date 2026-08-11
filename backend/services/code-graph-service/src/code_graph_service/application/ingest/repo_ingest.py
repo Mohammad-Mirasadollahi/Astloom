@@ -65,6 +65,9 @@ class RepoIngestMixin:
         max_file_bytes = int(payload.get("max_file_bytes") or DEFAULT_MAX_FILE_BYTES)
         include_outcomes = bool(payload.get("include_outcomes", True))
         on_progress_early = payload.get("on_progress")
+        self._force_prune_removed_sources = bool(
+            payload.get("force_prune_removed_sources", False)
+        )
 
         def _emit_prep(detail: str, *, status: str = "preparing") -> None:
             if not callable(on_progress_early):
@@ -363,6 +366,49 @@ class RepoIngestMixin:
                 f"{idempotency_key}:{rel}:{hashed['hash']}:"
                 f"{hashed['hash_version']}:{hashed['parser_version']}"
             )
+
+            def _on_symbol_progress(event: dict[str, Any], *, _rel: str = rel) -> None:
+                # Mid-file heartbeat so the bar/symbols move while LLM/embed runs.
+                if not callable(on_progress):
+                    return
+                try:
+                    with state_lock:
+                        # Provisional: count documented symbols before file completes.
+                        delta = int(event.get("symbols_done") or 0)
+                        snap_totals = dict(totals)
+                        # Show at least this file's in-progress symbols without
+                        # double-counting completed files (totals already include them).
+                        provisional_symbols = snap_totals["symbols_indexed"] + delta
+                        in_flight_paths = sorted(active_files)
+                        done_now = progress_done
+                    on_progress(
+                        {
+                            "phase": "ingest",
+                            "done": done_now,
+                            "total": progress_total,
+                            "file": _rel,
+                            "status": str(event.get("status") or "active"),
+                            "prior_indexed": int(queue_meta["prior_indexed"]),
+                            "queue_new": int(queue_meta["queue_new"]),
+                            "queue_changed": int(queue_meta["queue_changed"]),
+                            "queue_unchanged": int(queue_meta["queue_unchanged"]),
+                            "files_ingested": snap_totals["ingested"],
+                            "files_failed": snap_totals["failed"],
+                            "files_skipped": snap_totals["skipped"],
+                            "symbols_indexed": provisional_symbols,
+                            "symbols_changed": snap_totals["symbols_changed"] + delta,
+                            "edges_written": snap_totals["edges_written"],
+                            "chars_read": snap_totals["chars_read"] + len(text),
+                            "approx_tokens": (snap_totals["chars_read"] + len(text)) // 4,
+                            "files_in_flight": len(in_flight_paths),
+                            "files_in_flight_paths": in_flight_paths[:8],
+                            "file_workers": workers,
+                            **_rpm_progress_fields(),
+                        }
+                    )
+                except Exception:  # noqa: BLE001
+                    return
+
             try:
                 result = self.ingest_file(
                     scope,
@@ -378,6 +424,7 @@ class RepoIngestMixin:
                         "language_backfill_only": rel in backfill_paths,
                         "reuse_unchanged_embeddings": True,
                         "shared_resolution": shared_resolution,
+                        "on_symbol_progress": _on_symbol_progress,
                     },
                 )
             except Exception as exc:  # noqa: BLE001 — soft-fail per file for bulk jobs
@@ -491,6 +538,21 @@ class RepoIngestMixin:
             if symbol.kind == SymbolKind.FILE and symbol.file_path
         }
         stale_paths = indexed_paths - discovered_paths
+        # Circuit breaker: a huge prune usually means discovery/excludes drifted,
+        # not that half the repo was deleted. Refuse rather than wipe the graph.
+        if indexed_paths and stale_paths:
+            force_prune = bool(getattr(self, "_force_prune_removed_sources", False))
+            threshold = max(50, int(0.2 * len(indexed_paths)))
+            if not force_prune and len(stale_paths) > threshold:
+                sample = ", ".join(sorted(stale_paths)[:8])
+                if len(stale_paths) > 8:
+                    sample += ", …"
+                raise RuntimeError(
+                    "refusing to prune "
+                    f"{len(stale_paths)}/{len(indexed_paths)} indexed files "
+                    f"(threshold {threshold}); check sync discovery/excludes "
+                    f"or set force_prune_removed_sources. sample: {sample}"
+                )
         live_ids = {symbol.id for symbol in stored_symbols}
         owned_kinds = {
             SymbolKind.FILE,

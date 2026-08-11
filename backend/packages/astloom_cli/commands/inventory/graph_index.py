@@ -89,7 +89,17 @@ def scan_root_symbols(
                 if status == "human":
                     code_stats[rel]["docs_models"].add("human")
                 else:
-                    code_stats[rel]["docs_models"].add(docs_model_label)
+                    meta = getattr(sym, "metadata", None) or {}
+                    if not isinstance(meta, dict):
+                        meta = {}
+                    origin = str(meta.get("doc_origin") or "").strip().lower()
+                    if origin == "heuristic":
+                        code_stats[rel]["docs_models"].add("heuristic")
+                    elif origin == "llm":
+                        code_stats[rel]["docs_models"].add(docs_model_label)
+                    else:
+                        # Legacy rows: unknown generator — do not claim the LLM model.
+                        code_stats[rel]["docs_models"].add("heuristic")
             else:
                 llm_remaining.append(label)
 

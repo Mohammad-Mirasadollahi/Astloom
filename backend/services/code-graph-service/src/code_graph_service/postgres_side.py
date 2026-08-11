@@ -13,6 +13,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any, Protocol, Sequence
 
+from .domain.errors import EmbeddingDimensionMismatchError
 from .domain.models import Scope
 from .domain.rag import SEARCHABLE_SYMBOL_KINDS
 from .pg_thread_local import ThreadLocalPsycopg
@@ -194,7 +195,7 @@ class PostgresEmbeddingIndex:
             expected = pg_sql.expected_vector_type(self._dims)
             if row and str(row.get("typ") or "") != expected:
                 actual = str(row.get("typ") or "unknown")
-                raise RuntimeError(
+                raise EmbeddingDimensionMismatchError(
                     "embedding schema dimension mismatch: "
                     f"database has {actual}, configured provider requires {expected}; "
                     "run an explicit backed-up embedding migration or use the canonical dimension"

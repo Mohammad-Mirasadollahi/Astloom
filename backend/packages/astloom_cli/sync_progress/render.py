@@ -71,10 +71,13 @@ def print_progress_line(snap: dict[str, Any]) -> None:
         parts.append(f"{recheck_label}={q_unchanged}")
     if parts and phase != "embeddings":
         print(f"   {ui.dim('queue')} {'  '.join(parts)}")
-        if int(snap["done"]) == 0 and int(snap.get("files_in_flight") or 0) > 0:
+        if int(snap.get("files_in_flight") or 0) > 0 and int(snap["done"]) < int(
+            snap["total"] or 0
+        ):
             print(
-                f"   {ui.dim('note')} 0 of {snap['total']} files finished yet "
-                f"(in-flight not counted until each file completes)"
+                f"   {ui.dim('note')} bar includes half-credit for "
+                f"{snap.get('files_in_flight')} in-flight file(s); "
+                f"done={snap['done']} finished"
             )
     if phase == "docs":
         detail = (

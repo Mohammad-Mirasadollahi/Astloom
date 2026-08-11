@@ -48,6 +48,41 @@ def reduce_dims(vector: list[float], dims: int) -> list[float]:
     return [round(v / norm, 6) for v in out]
 
 
+def truncate_embedding_input(
+    text: str,
+    *,
+    max_tokens: int | None = None,
+    chars_per_token: float | None = None,
+) -> str:
+    """Clamp embed text under the model context (BGE-large hosted = 512 tokens).
+
+    Local SentenceTransformers silently truncates; OpenRouter BGE rejects over-limit
+    prompts with HTTP 400. Use a conservative chars/token ratio — code+docs often
+    tokenize denser than 4 chars/token (480×4 still produced 513-token rejects).
+    """
+    import os
+
+    if max_tokens is None:
+        raw = str(os.environ.get("ASTLOOM_EMBEDDING_MAX_INPUT_TOKENS", "480")).strip()
+        try:
+            max_tokens = int(raw) if raw else 480
+        except ValueError:
+            max_tokens = 480
+    if chars_per_token is None:
+        raw_cpt = str(os.environ.get("ASTLOOM_EMBEDDING_CHARS_PER_TOKEN", "3")).strip()
+        try:
+            chars_per_token = float(raw_cpt) if raw_cpt else 3.0
+        except ValueError:
+            chars_per_token = 3.0
+    if max_tokens <= 0:
+        return text
+    max_chars = max(8, int(max_tokens * float(chars_per_token)))
+    if len(text) <= max_chars:
+        return text
+    # Prefer keeping the head (qualified_name + start of docs).
+    return text[: max_chars - 1].rstrip() + "…"
+
+
 class LlmBackedDocGenerator:
     """Generate symbol docs via LiteLLM; fall back to heuristic on failure/stub."""
 
@@ -174,6 +209,7 @@ class HybridEmbeddings:
         return f"stub:{self.stub.model}"
 
     def embed(self, text: str, *, is_query: bool = False) -> EmbeddingResult:
+        text = truncate_embedding_input(text)
         if self.local is not None:
             embed_fn = getattr(self.local, "embed", None)
             if callable(embed_fn):
@@ -199,6 +235,12 @@ class HybridEmbeddings:
             or not embeddings_generation_enabled()
             or not getattr(self.settings, "enabled", False)
         ):
+            if embeddings_generation_enabled() and (
+                self.gateway is None or not getattr(self.settings, "enabled", False)
+            ):
+                raise RuntimeError(
+                    "LiteLLM embeddings enabled but gateway/settings unavailable"
+                )
             self._backend = "stub"
             return self.stub.embed(text)
 
@@ -208,6 +250,11 @@ class HybridEmbeddings:
         )
         models = route.models_in_order()
         if not models:
+            if embeddings_generation_enabled():
+                raise RuntimeError(
+                    "LiteLLM embeddings enabled but no embed model configured "
+                    "(set ASTLOOM_LITELLM_MODEL_EMBED)"
+                )
             self._backend = "stub"
             return self.stub.embed(text)
 
@@ -221,8 +268,28 @@ class HybridEmbeddings:
                 return EmbeddingResult(vector, "ready", result.model, self.dims)
             except Exception as exc:  # noqa: BLE001
                 last_error = exc
+                # Hosted BGE-large is hard-capped at 512 tokens; shrink and retry once.
+                msg = str(exc).lower()
+                if "context length" in msg or "input tokens" in msg:
+                    text = truncate_embedding_input(
+                        text, max_tokens=360, chars_per_token=2.5
+                    )
+                    try:
+                        result = self.gateway.embed(text, model=model)
+                        vector = reduce_dims(list(result.vector), self.dims)
+                        self.model = result.model
+                        self._backend = "litellm"
+                        return EmbeddingResult(
+                            vector, "ready", result.model, self.dims
+                        )
+                    except Exception as retry_exc:  # noqa: BLE001
+                        last_error = retry_exc
                 continue
 
+        # When LiteLLM embeddings are explicitly enabled, never silent-stub:
+        # stub vectors (local-hash-v1) poison retrieval while looking "indexed".
+        if last_error is not None and embeddings_generation_enabled():
+            raise RuntimeError(f"LiteLLM embedding failed: {last_error}") from last_error
         if route.allow_stub or last_error is not None:
             self._backend = "stub"
             return self.stub.embed(text)
@@ -234,6 +301,7 @@ class HybridEmbeddings:
         *,
         is_query: bool = False,
     ) -> list[EmbeddingResult]:
+        texts = [truncate_embedding_input(t) for t in texts]
         if self.local is not None:
             batch = getattr(self.local, "embed_many", None)
             if callable(batch):

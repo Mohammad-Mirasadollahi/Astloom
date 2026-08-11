@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from typing import Any
+
 from ...domain.code_metadata_bridge import (
     build_file_metadata_record,
     build_symbol_metadata_record,
@@ -122,10 +124,11 @@ class FileSymbolsMixin:
         stamp: str,
         prefer_heuristic_docs: bool = False,
         reuse_unchanged_embeddings: bool = False,
+        on_progress: Any | None = None,
     ) -> tuple[list[str], list[str], int, list[tuple[str, str]]]:
         """Return ``(symbol_ids, changed_ids, documented_count, documented_pairs)``.
 
-        Phase 1 builds docs + embeddings (CPU). Phase 2 writes to the store so
+        Phase 1 builds docs + embeddings (CPU/network). Phase 2 writes to the store so
         parallel workers spend wall time on embed rather than waiting on Neo4j.
         """
         from ...domain.documentation import HeuristicDocGenerator
@@ -135,12 +138,29 @@ class FileSymbolsMixin:
         symbol_ids: list[str] = []
         documented_pairs: list[tuple[str, str]] = []
         heuristic = HeuristicDocGenerator() if prefer_heuristic_docs else None
+        doc_origin = "heuristic" if heuristic is not None else "llm"
         # (symbol, kind_for_index, optional_doc_symbol)
         pending: list[tuple[GraphSymbol, str, GraphSymbol | None]] = []
         embedding_requests: list[tuple[GraphSymbol, str]] = []
         generated_embedding_ids: set[str] = set()
         language_fixes: list[GraphSymbol] = []
         file_id = f"file:{scope.project_id}:{file_path}"
+
+        def _progress(*, symbols_done: int, status: str = "symbol") -> None:
+            if not callable(on_progress):
+                return
+            try:
+                on_progress(
+                    {
+                        "file_path": file_path,
+                        "symbols_done": symbols_done,
+                        "symbols_total": len(parsed.symbols),
+                        "status": status,
+                        "doc_origin": doc_origin,
+                    }
+                )
+            except Exception:  # noqa: BLE001 — progress must never break ingest
+                return
 
         for item in parsed.symbols:
             symbol_id = f"sym:{scope.project_id}:{item.qualified_name}"
@@ -182,8 +202,8 @@ class FileSymbolsMixin:
                         "parser_version": parser_ver,
                     },
                 )
-                # Parallel bulk ingest: keep workers on CPU (parse/embed), not blocked
-                # on LiteLLM RPM/network. Living LLM docs can be refreshed later.
+                # Prefer heuristic only when living LLM docs are disabled (caller).
+                # When LLM docs are on, each changed symbol hits the docs route (RPM).
                 if heuristic is not None:
                     doc = heuristic.generate(draft, neighbors)
                 else:
@@ -207,9 +227,11 @@ class FileSymbolsMixin:
                     created_at=stamp,
                     updated_at=stamp,
                     language=language,
+                    metadata={"doc_origin": doc_origin},
                 )
                 embedding_requests.append((doc_symbol, doc))
                 documented_pairs.append((symbol_id, doc_id))
+                _progress(symbols_done=len(changed_ids), status="documented")
             elif previous and previous.ai_documentation:
                 doc_id = f"doc:{scope.project_id}:{item.qualified_name}"
                 doc_prev = self._maybe_get(doc_id, scope)
@@ -230,6 +252,9 @@ class FileSymbolsMixin:
                 {
                     "hash_version": hash_version,
                     "parser_version": parser_ver,
+                    "doc_origin": doc_origin if changed else (
+                        (previous.metadata or {}).get("doc_origin") if previous else ""
+                    ),
                 },
                 build_symbol_metadata_record(
                     symbol_id=symbol_id,
@@ -287,6 +312,8 @@ class FileSymbolsMixin:
         for (symbol, _), result in zip(embedding_requests, results, strict=True):
             symbol.embedding = list(result.vector)
             generated_embedding_ids.add(symbol.id)
+        if embedding_requests:
+            _progress(symbols_done=len(changed_ids), status="embedded")
 
         for fix in language_fixes:
             self.store.put_symbol(fix)

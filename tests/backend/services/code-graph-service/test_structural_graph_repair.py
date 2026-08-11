@@ -178,6 +178,51 @@ def test_sync_repo_prunes_symbols_and_embeddings_for_removed_source(tmp_path: Pa
     assert store.get_symbol(f"file:{scope.project_id}:src/active.py", scope)
 
 
+def test_sync_repo_refuses_massive_prune_without_force(tmp_path: Path):
+    (tmp_path / "src").mkdir()
+    store = InMemoryStore()
+    svc = CodeGraphService(store)
+    scope = Scope("t", "w", "prune-guard")
+    # Seed many indexed files, then shrink discovery to one file.
+    for i in range(60):
+        path = tmp_path / "src" / f"f{i}.py"
+        path.write_text(f"def f{i}():\n    return {i}\n", encoding="utf-8")
+    svc.sync_repo(
+        scope,
+        "tester",
+        "corr-seed",
+        "key-seed",
+        {"root_path": str(tmp_path), "include_outcomes": True},
+    )
+    assert len([s for s in store.list_symbols(scope) if s.kind.value == "file"]) == 60
+    # Delete 55 files from disk → prune would exceed 20% threshold.
+    for i in range(55):
+        (tmp_path / "src" / f"f{i}.py").unlink()
+    with pytest.raises(RuntimeError, match="refusing to prune"):
+        svc.sync_repo(
+            scope,
+            "tester",
+            "corr-prune",
+            "key-prune",
+            {"root_path": str(tmp_path), "include_outcomes": True},
+        )
+    # Force path still prunes.
+    result = svc.sync_repo(
+        scope,
+        "tester",
+        "corr-force",
+        "key-force",
+        {
+            "root_path": str(tmp_path),
+            "include_outcomes": True,
+            "force_prune_removed_sources": True,
+        },
+    )
+    assert result.files_failed == 0
+    files = [s for s in store.list_symbols(scope) if s.kind.value == "file"]
+    assert len(files) == 5
+
+
 def test_sync_repo_backfills_language_without_rebuilding_edges(tmp_path: Path):
     source = tmp_path / "module.py"
     source.write_text("def helper():\n    return 1\n", encoding="utf-8")

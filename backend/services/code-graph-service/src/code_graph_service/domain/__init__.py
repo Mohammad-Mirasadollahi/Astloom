@@ -8,6 +8,7 @@ from .errors import (
     CodeGraphError,
     ConflictError,
     DatabaseCapacityError,
+    EmbeddingDimensionMismatchError,
     NotFoundError,
     ValidationError,
 )
@@ -59,6 +60,7 @@ __all__ = [
     "ConflictError",
     "DatabaseCapacityError",
     "DocStatus",
+    "EmbeddingDimensionMismatchError",
     "EmbeddingResult",
     "GraphEdge",
     "GraphSymbol",

@@ -33,10 +33,27 @@ def cmd_sync(args: argparse.Namespace) -> int:
         print(f"{ui.warn('!')} Sync stopped — graceful shutdown complete", flush=True)
         ui.blank()
         return 130
-    except Exception as exc:  # noqa: BLE001 — map known capacity failures to a clean exit
-        from code_graph_service.domain.errors import DatabaseCapacityError
+    except Exception as exc:  # noqa: BLE001 — map known config/capacity failures to a clean exit
+        from code_graph_service.domain.errors import (
+            DatabaseCapacityError,
+            EmbeddingDimensionMismatchError,
+        )
         from code_graph_service.pg_thread_local import is_db_capacity_error
 
+        if isinstance(exc, EmbeddingDimensionMismatchError) or (
+            "embedding schema dimension mismatch" in str(exc).lower()
+        ):
+            ui.blank()
+            message = getattr(exc, "message", None) or str(exc)
+            print(f"{ui.warn('!')} Sync paused — embedding dimension mismatch", flush=True)
+            print(f"   →  {message}", flush=True)
+            print(
+                "   →  Align embedding provider dims with Postgres (canonical vector(1024)), "
+                "or run an explicit backed-up migration",
+                flush=True,
+            )
+            ui.blank()
+            return 2
         if isinstance(exc, DatabaseCapacityError) or is_db_capacity_error(exc):
             ui.blank()
             message = getattr(exc, "message", None) or str(exc)

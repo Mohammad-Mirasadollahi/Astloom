@@ -201,7 +201,9 @@ def test_postgres_embedding_dimension_mismatch_preserves_existing_rows():
             model="dimension-guard",
             kind="function",
         )
-        with pytest.raises(RuntimeError, match="dimension mismatch"):
+        from code_graph_service.domain.errors import EmbeddingDimensionMismatchError
+
+        with pytest.raises(EmbeddingDimensionMismatchError, match="dimension mismatch"):
             PostgresEmbeddingIndex(url, dims=16, ensure_schema=True)
         assert canonical.list_symbol_models(scope) == {"sentinel": "dimension-guard"}
     finally:

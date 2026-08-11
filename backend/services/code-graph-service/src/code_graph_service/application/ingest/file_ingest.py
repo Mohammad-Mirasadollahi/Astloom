@@ -126,14 +126,25 @@ class FileIngestMixin(
 
         parsed = parse_source(language, file_path, source)
         defer_cross_file = bool(payload.get("defer_cross_file_pass"))
+        # Parallel ingest used to force heuristic docs whenever defer_cross_file
+        # was set ("refresh LLM later") — but no later pass existed, so
+        # ASTLOOM_LITELLM_DOCS_ENABLED=true was a no-op on `astloom sync`.
+        # Keep heuristic only when living LLM docs are disabled.
+        from llm_gateway.routing import docs_generation_enabled
+
+        prefer_heuristic_docs = defer_cross_file and not docs_generation_enabled()
+        force_heuristic = payload.get("prefer_heuristic_docs")
+        if force_heuristic is not None:
+            prefer_heuristic_docs = bool(force_heuristic)
         symbol_ids, changed_ids, documented, documented_pairs = self._upsert_parsed_symbols(
             scope,
             parsed=parsed,
             file_path=file_path,
             language=language,
             stamp=stamp,
-            prefer_heuristic_docs=defer_cross_file,
+            prefer_heuristic_docs=prefer_heuristic_docs,
             reuse_unchanged_embeddings=reuse_unchanged_embeddings,
+            on_progress=payload.get("on_symbol_progress"),
         )
         self._prune_stale_file_embeddings(
             scope,

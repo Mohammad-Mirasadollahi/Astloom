@@ -1,6 +1,8 @@
-"""HybridEmbeddings must soft-fail local BGE into stub when offline/cache miss."""
+"""HybridEmbeddings fallback and fail-closed LiteLLM embed behavior."""
 
 from __future__ import annotations
+
+from types import SimpleNamespace
 
 import pytest
 
@@ -18,7 +20,13 @@ class _BrokenLocal:
         raise RuntimeError("huggingface offline")
 
 
-def test_hybrid_embed_falls_back_to_stub_when_local_fails() -> None:
+class _BrokenGateway:
+    def embed(self, text: str, *, model: str | None = None):
+        raise RuntimeError("openrouter down")
+
+
+def test_hybrid_embed_falls_back_to_stub_when_local_fails(monkeypatch) -> None:
+    monkeypatch.setenv("ASTLOOM_LITELLM_EMBEDDINGS_ENABLED", "false")
     emb = HybridEmbeddings(
         gateway=None,
         local=_BrokenLocal(),
@@ -30,7 +38,8 @@ def test_hybrid_embed_falls_back_to_stub_when_local_fails() -> None:
     assert emb.backend_name.startswith("stub:")
 
 
-def test_hybrid_embed_many_falls_back_when_local_batch_fails() -> None:
+def test_hybrid_embed_many_falls_back_when_local_batch_fails(monkeypatch) -> None:
+    monkeypatch.setenv("ASTLOOM_LITELLM_EMBEDDINGS_ENABLED", "false")
     emb = HybridEmbeddings(
         gateway=None,
         local=_BrokenLocal(),
@@ -40,3 +49,31 @@ def test_hybrid_embed_many_falls_back_when_local_batch_fails() -> None:
     rows = emb.embed_many(["a", "b"])
     assert len(rows) == 2
     assert all(len(row.vector) == 8 for row in rows)
+
+
+def test_truncate_embedding_input_respects_token_budget(monkeypatch) -> None:
+    from code_graph_service.llm_wiring import truncate_embedding_input
+
+    monkeypatch.setenv("ASTLOOM_EMBEDDING_MAX_INPUT_TOKENS", "10")
+    monkeypatch.setenv("ASTLOOM_EMBEDDING_CHARS_PER_TOKEN", "3")
+    long = "x" * 500
+    out = truncate_embedding_input(long)
+    assert len(out) <= 10 * 3
+    assert out.endswith("…")
+
+
+def test_hybrid_embed_fail_closed_when_litellm_embeddings_enabled(monkeypatch) -> None:
+    monkeypatch.setenv("ASTLOOM_LITELLM_EMBEDDINGS_ENABLED", "true")
+    monkeypatch.setenv("ASTLOOM_LITELLM_MODEL_EMBED", "openrouter/baai/bge-large-en-v1.5")
+    from llm_gateway.routing import clear_routing_profile_cache
+
+    clear_routing_profile_cache()
+    emb = HybridEmbeddings(
+        gateway=_BrokenGateway(),
+        local=None,
+        stub=LocalEmbeddingStub(dims=8),
+        dims=8,
+        settings=SimpleNamespace(enabled=True, default_model="x"),
+    )
+    with pytest.raises(RuntimeError, match="LiteLLM embedding failed"):
+        emb.embed("hello")

@@ -43,3 +43,10 @@ class DatabaseCapacityError(CodeGraphError):
         ),
     ) -> None:
         super().__init__("database_capacity", "capacity_error", message)
+
+
+class EmbeddingDimensionMismatchError(CodeGraphError):
+    """pgvector column dims disagree with the configured embedding provider."""
+
+    def __init__(self, message: str) -> None:
+        super().__init__("embedding_dimension_mismatch", "configuration_error", message)
