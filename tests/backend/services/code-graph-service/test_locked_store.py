@@ -18,24 +18,82 @@ from code_graph_service.locked_store import (
 def test_sync_max_file_workers_auto_from_cpu_and_rpm(monkeypatch):
     monkeypatch.delenv("ASTLOOM_SYNC_MAX_FILE_WORKERS", raising=False)
     monkeypatch.delenv("ASTLOOM_SYNC_CPU_PERCENT", raising=False)
+    # LLM-cold: docs/embeds off → previous min(cpu, rpm) behavior.
+    monkeypatch.setenv("ASTLOOM_LITELLM_DOCS_ENABLED", "false")
+    monkeypatch.setenv("ASTLOOM_LITELLM_EMBEDDINGS_ENABLED", "false")
     monkeypatch.setenv("ASTLOOM_LITELLM_RPM", "30")
     monkeypatch.setattr("code_graph_service.locked_store.os.cpu_count", lambda: 8)
     assert sync_max_file_workers() == 8
 
     monkeypatch.setattr("code_graph_service.locked_store.os.cpu_count", lambda: 64)
-    assert sync_max_file_workers({"ASTLOOM_LITELLM_RPM": "10"}) == 10
+    assert sync_max_file_workers({"ASTLOOM_LITELLM_RPM": "10", "ASTLOOM_LITELLM_DOCS_ENABLED": "false", "ASTLOOM_LITELLM_EMBEDDINGS_ENABLED": "false"}) == 10
 
     # High RPM: limited by CPU only (no fixed 32 ceiling)
     monkeypatch.setattr("code_graph_service.locked_store.os.cpu_count", lambda: 64)
-    assert sync_max_file_workers({"ASTLOOM_LITELLM_RPM": "100"}) == 64
+    assert sync_max_file_workers({"ASTLOOM_LITELLM_RPM": "100", "ASTLOOM_LITELLM_DOCS_ENABLED": "false", "ASTLOOM_LITELLM_EMBEDDINGS_ENABLED": "false"}) == 64
+
+
+def test_sync_max_file_workers_llm_hot_reserves_rpm_headroom(monkeypatch):
+    monkeypatch.delenv("ASTLOOM_SYNC_MAX_FILE_WORKERS", raising=False)
+    monkeypatch.delenv("ASTLOOM_SYNC_CPU_PERCENT", raising=False)
+    monkeypatch.setattr("code_graph_service.locked_store.os.cpu_count", lambda: 48)
+    # Docs+cloud embeds: workers = rpm // 6 (not min(cpu, rpm)).
+    plan = resolve_sync_cpu_plan(
+        {
+            "ASTLOOM_LITELLM_RPM": "30",
+            "ASTLOOM_LITELLM_DOCS_ENABLED": "true",
+            "ASTLOOM_LITELLM_EMBEDDINGS_ENABLED": "true",
+            "ASTLOOM_EMBEDDING_PROVIDER": "litellm",
+        }
+    )
+    assert plan.mode == "auto"
+    assert plan.workers == 5  # 30 // 6
+
+
+def test_sync_cpu_percent_caps_at_llm_budget_when_hot(monkeypatch):
+    monkeypatch.delenv("ASTLOOM_SYNC_MAX_FILE_WORKERS", raising=False)
+    monkeypatch.setattr("code_graph_service.locked_store.os.cpu_count", lambda: 48)
+    # 60% of 48 = 29, but LLM-hot cap is 30//6 = 5.
+    plan = resolve_sync_cpu_plan(
+        {
+            "ASTLOOM_SYNC_CPU_PERCENT": "60",
+            "ASTLOOM_LITELLM_RPM": "30",
+            "ASTLOOM_LITELLM_DOCS_ENABLED": "true",
+            "ASTLOOM_LITELLM_EMBEDDINGS_ENABLED": "true",
+            "ASTLOOM_EMBEDDING_PROVIDER": "litellm",
+        }
+    )
+    assert plan.mode == "percent"
+    assert plan.workers == 5
 
 
 def test_sync_max_file_workers_explicit_override(monkeypatch):
     monkeypatch.setattr("code_graph_service.locked_store.os.cpu_count", lambda: 8)
     assert sync_max_file_workers({"ASTLOOM_SYNC_MAX_FILE_WORKERS": "3", "ASTLOOM_LITELLM_RPM": "30"}) == 3
-    assert sync_max_file_workers({"ASTLOOM_SYNC_MAX_FILE_WORKERS": "auto", "ASTLOOM_LITELLM_RPM": "5"}) == 5
-    assert sync_max_file_workers({"ASTLOOM_SYNC_MAX_FILE_WORKERS": "nope", "ASTLOOM_LITELLM_RPM": "2"}) == 2
-    assert sync_max_file_workers({"ASTLOOM_SYNC_MAX_FILE_WORKERS": "0", "ASTLOOM_LITELLM_RPM": "7"}) == 7
+    assert sync_max_file_workers(
+        {
+            "ASTLOOM_SYNC_MAX_FILE_WORKERS": "auto",
+            "ASTLOOM_LITELLM_RPM": "5",
+            "ASTLOOM_LITELLM_DOCS_ENABLED": "false",
+            "ASTLOOM_LITELLM_EMBEDDINGS_ENABLED": "false",
+        }
+    ) == 5
+    assert sync_max_file_workers(
+        {
+            "ASTLOOM_SYNC_MAX_FILE_WORKERS": "nope",
+            "ASTLOOM_LITELLM_RPM": "2",
+            "ASTLOOM_LITELLM_DOCS_ENABLED": "false",
+            "ASTLOOM_LITELLM_EMBEDDINGS_ENABLED": "false",
+        }
+    ) == 2
+    assert sync_max_file_workers(
+        {
+            "ASTLOOM_SYNC_MAX_FILE_WORKERS": "0",
+            "ASTLOOM_LITELLM_RPM": "7",
+            "ASTLOOM_LITELLM_DOCS_ENABLED": "false",
+            "ASTLOOM_LITELLM_EMBEDDINGS_ENABLED": "false",
+        }
+    ) == 7
 
 
 def test_sync_cpu_percent_derives_workers_and_embed_slots(monkeypatch):
@@ -44,6 +102,8 @@ def test_sync_cpu_percent_derives_workers_and_embed_slots(monkeypatch):
         {
             "ASTLOOM_SYNC_CPU_PERCENT": "25",
             "ASTLOOM_LITELLM_RPM": "30",
+            "ASTLOOM_LITELLM_DOCS_ENABLED": "false",
+            "ASTLOOM_LITELLM_EMBEDDINGS_ENABLED": "false",
         }
     )
     assert plan.mode == "percent"
@@ -52,26 +112,58 @@ def test_sync_cpu_percent_derives_workers_and_embed_slots(monkeypatch):
     assert plan.embed_concurrency == 4
     assert plan.torch_threads == 1
     assert plan.store_concurrency == 8
-    assert sync_max_file_workers({"ASTLOOM_SYNC_CPU_PERCENT": "25", "ASTLOOM_LITELLM_RPM": "30"}) == 10
+    assert sync_max_file_workers(
+        {
+            "ASTLOOM_SYNC_CPU_PERCENT": "25",
+            "ASTLOOM_LITELLM_RPM": "30",
+            "ASTLOOM_LITELLM_DOCS_ENABLED": "false",
+            "ASTLOOM_LITELLM_EMBEDDINGS_ENABLED": "false",
+        }
+    ) == 10
 
 
 def test_store_concurrency_caps_at_eight_and_floors_at_two(monkeypatch):
     monkeypatch.setattr("code_graph_service.locked_store.os.cpu_count", lambda: 48)
-    plan = resolve_sync_cpu_plan({"ASTLOOM_SYNC_CPU_PERCENT": "60"})
+    plan = resolve_sync_cpu_plan(
+        {
+            "ASTLOOM_SYNC_CPU_PERCENT": "60",
+            "ASTLOOM_LITELLM_DOCS_ENABLED": "false",
+            "ASTLOOM_LITELLM_EMBEDDINGS_ENABLED": "false",
+            "ASTLOOM_LITELLM_RPM": "100",
+        }
+    )
     assert plan.workers == 29
     assert plan.store_concurrency == 8
     monkeypatch.setattr("code_graph_service.locked_store.os.cpu_count", lambda: 2)
-    plan_small = resolve_sync_cpu_plan({"ASTLOOM_SYNC_CPU_PERCENT": "50"})
+    plan_small = resolve_sync_cpu_plan(
+        {
+            "ASTLOOM_SYNC_CPU_PERCENT": "50",
+            "ASTLOOM_LITELLM_DOCS_ENABLED": "false",
+            "ASTLOOM_LITELLM_EMBEDDINGS_ENABLED": "false",
+        }
+    )
     assert plan_small.workers == 1
     assert plan_small.store_concurrency == 2
 
 
 def test_sync_cpu_percent_rounds_and_floors_at_one(monkeypatch):
     monkeypatch.setattr("code_graph_service.locked_store.os.cpu_count", lambda: 8)
-    plan = resolve_sync_cpu_plan({"ASTLOOM_SYNC_CPU_PERCENT": "1"})
+    plan = resolve_sync_cpu_plan(
+        {
+            "ASTLOOM_SYNC_CPU_PERCENT": "1",
+            "ASTLOOM_LITELLM_DOCS_ENABLED": "false",
+            "ASTLOOM_LITELLM_EMBEDDINGS_ENABLED": "false",
+        }
+    )
     assert plan.workers == 1
     assert plan.embed_concurrency == 1
-    plan50 = resolve_sync_cpu_plan({"ASTLOOM_SYNC_CPU_PERCENT": "50"})
+    plan50 = resolve_sync_cpu_plan(
+        {
+            "ASTLOOM_SYNC_CPU_PERCENT": "50",
+            "ASTLOOM_LITELLM_DOCS_ENABLED": "false",
+            "ASTLOOM_LITELLM_EMBEDDINGS_ENABLED": "false",
+        }
+    )
     assert plan50.workers == 4
 
 
@@ -91,7 +183,13 @@ def test_explicit_workers_override_cpu_percent(monkeypatch):
 
 def test_auto_plan_caps_embed_and_pins_torch(monkeypatch):
     monkeypatch.setattr("code_graph_service.locked_store.os.cpu_count", lambda: 16)
-    plan = resolve_sync_cpu_plan({"ASTLOOM_LITELLM_RPM": "30"})
+    plan = resolve_sync_cpu_plan(
+        {
+            "ASTLOOM_LITELLM_RPM": "30",
+            "ASTLOOM_LITELLM_DOCS_ENABLED": "false",
+            "ASTLOOM_LITELLM_EMBEDDINGS_ENABLED": "false",
+        }
+    )
     assert plan.mode == "auto"
     assert plan.workers == 16
     assert plan.embed_concurrency == 4

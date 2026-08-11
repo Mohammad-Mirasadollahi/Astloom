@@ -175,6 +175,20 @@ def test_fake_gateway_releases_rpm_session():
     assert snap["history"][0]["status"] == "ok"
 
 
+def test_fake_gateway_embed_many_uses_one_rpm_start():
+    gateway = FakeLlmGateway()
+    results = gateway.embed_many(["a", "b", "c", "d"])
+    assert len(results) == 4
+    snap = gateway.rpm_sessions_snapshot()
+    assert snap["inflight_count"] == 0
+    assert snap["starts_in_window"] == 1
+    # Per-text embed would burn 4 starts.
+    for text in ("a", "b", "c", "d"):
+        gateway.embed(text)
+    snap2 = gateway.rpm_sessions_snapshot()
+    assert snap2["starts_in_window"] == 5
+
+
 def test_settings_debug_defaults_off(monkeypatch):
     monkeypatch.delenv("ASTLOOM_LITELLM_DEBUG", raising=False)
     monkeypatch.setenv("ASTLOOM_LITELLM_PORT", "32400")

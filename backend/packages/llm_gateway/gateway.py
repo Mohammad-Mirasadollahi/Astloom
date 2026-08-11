@@ -310,6 +310,85 @@ class LiteLlmGateway:
             self._rpm.release(session, status, error_detail=_error_detail(exc))
             raise
 
+    def embed_many(
+        self,
+        texts: list[str],
+        *,
+        model: str | None = None,
+        batch_size: int = 32,
+    ) -> list[EmbeddingResult]:
+        """Embed many texts with one RPM acquire per batch (not per vector)."""
+        if not texts:
+            return []
+        if not self.settings.enabled:
+            raise RuntimeError("LiteLLM gateway is disabled (ASTLOOM_LITELLM_ENABLED=false)")
+        _raise_if_quota_tripped()
+        resolved = (model or self.settings.default_model or "").strip()
+        if not resolved:
+            raise RuntimeError(
+                "No embedding model configured: set ASTLOOM_LITELLM_MODEL_EMBED "
+                "or ASTLOOM_LITELLM_DEFAULT_MODEL"
+            )
+        try:
+            import litellm
+        except ImportError as exc:  # pragma: no cover
+            raise RuntimeError(
+                "litellm package is required for LiteLlmGateway; install project dependencies"
+            ) from exc
+
+        size = max(1, int(batch_size))
+        out: list[EmbeddingResult] = []
+        for start in range(0, len(texts), size):
+            chunk = list(texts[start : start + size])
+            session = self._rpm.acquire("embed", SessionMeta(model=resolved))
+            try:
+                _apply_litellm_runtime(litellm, self.settings)
+                kwargs: dict[str, Any] = {
+                    "model": resolved,
+                    "input": chunk,
+                    "timeout": self.settings.timeout_seconds,
+                    "num_retries": _effective_num_retries(self.settings.num_retries),
+                    "api_base": self.settings.api_base,
+                }
+                if self.settings.api_key:
+                    kwargs["api_key"] = self.settings.api_key
+                response = litellm.embedding(**kwargs)
+                data = getattr(response, "data", None) or []
+                if len(data) != len(chunk):
+                    raise RuntimeError(
+                        f"LiteLLM embedding batch size mismatch: got {len(data)} "
+                        f"for {len(chunk)} inputs"
+                    )
+                used_model = getattr(response, "model", None) or resolved
+                usage: dict[str, Any] = {}
+                raw_usage = getattr(response, "usage", None)
+                if raw_usage is not None:
+                    usage = {
+                        "prompt_tokens": getattr(raw_usage, "prompt_tokens", None),
+                        "total_tokens": getattr(raw_usage, "total_tokens", None),
+                    }
+                for item in data:
+                    vector = getattr(item, "embedding", None)
+                    if vector is None and isinstance(item, dict):
+                        vector = item.get("embedding")
+                    if not isinstance(vector, list) or not vector:
+                        raise RuntimeError("LiteLLM embedding vector missing")
+                    out.append(
+                        EmbeddingResult(
+                            vector=[float(v) for v in vector],
+                            model=str(used_model),
+                            provider=_provider_from_model(str(used_model)),
+                            usage={k: v for k, v in usage.items() if v is not None},
+                        )
+                    )
+                self._rpm.release(session, "ok", model=str(used_model))
+            except Exception as exc:
+                _maybe_trip_quota(exc)
+                status = "cancelled" if _is_timeout(exc) else "error"
+                self._rpm.release(session, status, error_detail=_error_detail(exc))
+                raise
+        return out
+
 
 def _message_content(response: Any) -> str:
     choices = getattr(response, "choices", None) or []
@@ -397,3 +476,33 @@ class FakeLlmGateway:
         except Exception as exc:
             self._rpm.release(session, "error", error_detail=_error_detail(exc))
             raise
+
+    def embed_many(
+        self,
+        texts: list[str],
+        *,
+        model: str | None = None,
+        batch_size: int = 32,
+    ) -> list[EmbeddingResult]:
+        if not texts:
+            return []
+        # One RPM acquire for the whole call (tests assert batching saves budget).
+        resolved = model or self.settings.default_model
+        session = self._rpm.acquire("embed", SessionMeta(model=resolved))
+        try:
+            out = [self._fake_vector(text, model=resolved) for text in texts]
+            self._rpm.release(session, "ok", model=resolved)
+            return out
+        except Exception as exc:
+            self._rpm.release(session, "error", error_detail=_error_detail(exc))
+            raise
+
+    def _fake_vector(self, text: str, *, model: str) -> EmbeddingResult:
+        seed = sum(ord(c) for c in text) % 97
+        vector = [((seed + i) % 10) / 10.0 for i in range(8)]
+        return EmbeddingResult(
+            vector=vector,
+            model=model,
+            provider=_provider_from_model(model),
+            usage={"total_tokens": 1},
+        )

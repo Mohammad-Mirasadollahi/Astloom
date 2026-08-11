@@ -302,6 +302,8 @@ class HybridEmbeddings:
         is_query: bool = False,
     ) -> list[EmbeddingResult]:
         texts = [truncate_embedding_input(t) for t in texts]
+        if not texts:
+            return []
         if self.local is not None:
             batch = getattr(self.local, "embed_many", None)
             if callable(batch):
@@ -313,6 +315,43 @@ class HybridEmbeddings:
                     return results
                 except Exception:  # noqa: BLE001 — offline/cache miss → per-text fallback
                     self.local = None
+        # Cloud path: one LiteLLM embedding call (+ one RPM acquire) per batch.
+        if self.gateway is not None:
+            route = resolve_route(
+                "embeddings",
+                settings=self.settings,
+                allow_stub_default=True,
+            )
+            models = route.models_in_order()
+            gw_batch = getattr(self.gateway, "embed_many", None)
+            if models and callable(gw_batch):
+                last_error: Exception | None = None
+                for model in models:
+                    try:
+                        raw = list(gw_batch(texts, model=model))
+                        out: list[EmbeddingResult] = []
+                        for item in raw:
+                            vector = reduce_dims(list(item.vector), self.dims)
+                            out.append(
+                                EmbeddingResult(
+                                    vector, "ready", item.model, self.dims
+                                )
+                            )
+                        if out:
+                            self.model = out[0].model
+                            self._backend = "litellm"
+                        return out
+                    except Exception as exc:  # noqa: BLE001
+                        last_error = exc
+                        continue
+                if last_error is not None and embeddings_generation_enabled():
+                    raise RuntimeError(
+                        f"LiteLLM embedding batch failed: {last_error}"
+                    ) from last_error
+                if route.allow_stub or last_error is not None:
+                    self._backend = "stub"
+                    return [self.stub.embed(text) for text in texts]
+                raise RuntimeError(f"LiteLLM embedding batch failed: {last_error}")
         return [self.embed(text, is_query=is_query) for text in texts]
 
 def build_embeddings(

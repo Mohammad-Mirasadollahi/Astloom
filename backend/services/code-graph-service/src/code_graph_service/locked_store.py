@@ -22,6 +22,11 @@ from dataclasses import dataclass
 from typing import Any
 
 _DEFAULT_AUTO_EMBED_CAP = 4
+# Typical cloud cost per changed file when docs + embeds share one RPM gate:
+# ~1 complete/symbol + ~1 embed/symbol (+ file embed). Oversizing workers to
+# min(cpu, rpm) exhausts the start budget immediately and serializes on the gate
+# while the UI still shows "N active / W workers".
+_LLM_HOT_CALLS_PER_FILE = 6
 
 # Names treated as mutations when ``lock_reads`` is False (slot-budgeted, not
 # exclusive). Postgres and Neo4j both use slots under production bootstrap.
@@ -100,10 +105,38 @@ def _parse_explicit_workers(raw: str) -> int | None:
         return None
 
 
-def _auto_file_workers(env: dict[str, str], *, cpu_count: int) -> int:
-    """Derive worker count from CPU cores and LiteLLM RPM (in-flight cap)."""
+def _env_flag_true(env: dict[str, str], key: str, *, default: str) -> bool:
+    raw = str(env.get(key, default) or default).strip().lower()
+    return raw not in {"0", "false", "no", "off"}
+
+
+def _cloud_llm_sync_hot(env: dict[str, str]) -> bool:
+    """True when sync will burn shared LiteLLM RPM on docs and/or cloud embeds."""
+    if _env_flag_true(env, "ASTLOOM_LITELLM_DOCS_ENABLED", default="true"):
+        return True
+    if not _env_flag_true(env, "ASTLOOM_LITELLM_EMBEDDINGS_ENABLED", default="false"):
+        return False
+    provider = str(env.get("ASTLOOM_EMBEDDING_PROVIDER", "") or "").strip().lower()
+    # local_bge / stub do not consume the LiteLLM RPM gate for embeds.
+    if provider in {"local_bge", "stub"}:
+        return False
+    if provider in {"litellm", "openrouter", "remote"}:
+        return True
+    # Empty / unknown with embeddings enabled → assume cloud (fail closed on oversize).
+    return True
+
+
+def _llm_aware_worker_cap(env: dict[str, str], *, cpu_count: int) -> int:
+    """Upper bound on file workers given RPM and multi-call-per-file cost."""
     rpm = _rpm_from_env(env)
-    return max(1, min(int(cpu_count), int(rpm)))
+    if not _cloud_llm_sync_hot(env):
+        return max(1, min(int(cpu_count), int(rpm)))
+    return max(1, min(int(cpu_count), int(rpm) // _LLM_HOT_CALLS_PER_FILE))
+
+
+def _auto_file_workers(env: dict[str, str], *, cpu_count: int) -> int:
+    """Derive worker count from CPU cores and LiteLLM RPM (LLM-aware when hot)."""
+    return _llm_aware_worker_cap(env, cpu_count=cpu_count)
 
 
 def resolve_sync_cpu_plan(
@@ -115,8 +148,9 @@ def resolve_sync_cpu_plan(
 
     Precedence:
     1. Explicit ``ASTLOOM_SYNC_MAX_FILE_WORKERS`` integer (advanced override)
-    2. ``ASTLOOM_SYNC_CPU_PERCENT`` 1..100 — workers from that share of CPUs
-    3. Auto — ``min(cpu_count, ASTLOOM_LITELLM_RPM)``
+    2. ``ASTLOOM_SYNC_CPU_PERCENT`` 1..100 — workers from that share of CPUs,
+       then capped by the LLM-aware RPM budget when docs/cloud embeds are on
+    3. Auto — ``min(cpu_count, RPM)`` when LLM-cold; ``min(cpu, RPM // 6)`` when hot
 
     Local-embed slots are always capped at ``_DEFAULT_AUTO_EMBED_CAP`` (4) so
     BGE encode does not fan out with file workers. Torch/OMP intra-op threads
@@ -124,6 +158,7 @@ def resolve_sync_cpu_plan(
     """
     env = environ if environ is not None else os.environ
     cpus = max(1, int(cpu_count if cpu_count is not None else (os.cpu_count() or 1)))
+    llm_cap = _llm_aware_worker_cap(env, cpu_count=cpus)
 
     explicit = _parse_explicit_workers(str(env.get("ASTLOOM_SYNC_MAX_FILE_WORKERS", "") or ""))
     if explicit is not None:
@@ -142,6 +177,8 @@ def resolve_sync_cpu_plan(
     percent = _parse_cpu_percent(str(env.get("ASTLOOM_SYNC_CPU_PERCENT", "") or ""))
     if percent is not None:
         workers = max(1, int(round(cpus * percent / 100.0)))
+        # Percent alone used to spawn ~0.6×CPUs (often ≈RPM) and starve the gate.
+        workers = min(workers, llm_cap)
         return SyncCpuPlan(
             mode="percent",
             workers=workers,

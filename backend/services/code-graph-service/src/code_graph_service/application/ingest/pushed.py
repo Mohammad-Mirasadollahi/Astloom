@@ -152,31 +152,49 @@ class PushedIngestMixin:
             progress_done += 1
             return progress_done
 
+        def _rpm_progress_fields() -> dict[str, Any]:
+            llm = getattr(self, "llm", None)
+            snap_fn = getattr(llm, "rpm_sessions_snapshot", None) if llm is not None else None
+            if not callable(snap_fn):
+                return {}
+            try:
+                snap = snap_fn()
+            except Exception:  # noqa: BLE001
+                return {}
+            return {
+                "rpm": int(snap.get("rpm") or 0),
+                "rpm_inflight_cap": int(snap.get("inflight_cap") or 0),
+                "rpm_inflight": int(snap.get("inflight_count") or 0),
+                "rpm_starts_in_window": int(snap.get("starts_in_window") or 0),
+            }
+
         def _emit(done: int, *, file: str = "", status: str = "") -> None:
             if not callable(on_progress):
                 return
             try:
                 with state_lock:
                     snap = dict(totals)
-                on_progress(
-                    {
-                        "phase": "ingest",
-                        "done": done,
-                        "total": progress_total,
-                        "file": file,
-                        "status": status,
-                        "files_ingested": snap["ingested"],
-                        "files_failed": snap["failed"],
-                        "files_skipped": snap["skipped"],
-                        "symbols_indexed": snap["symbols_indexed"],
-                        "symbols_changed": snap["symbols_changed"],
-                        "edges_written": snap["edges_written"],
-                        "chars_read": snap["chars_read"],
-                        "approx_tokens": snap["chars_read"] // 4,
-                        "files_in_flight": len(active_files),
-                        "file_workers": workers,
-                    }
-                )
+                    in_flight_paths = sorted(active_files)
+                event = {
+                    "phase": "ingest",
+                    "done": done,
+                    "total": progress_total,
+                    "file": file,
+                    "status": status,
+                    "files_ingested": snap["ingested"],
+                    "files_failed": snap["failed"],
+                    "files_skipped": snap["skipped"],
+                    "symbols_indexed": snap["symbols_indexed"],
+                    "symbols_changed": snap["symbols_changed"],
+                    "edges_written": snap["edges_written"],
+                    "chars_read": snap["chars_read"],
+                    "approx_tokens": snap["chars_read"] // 4,
+                    "files_in_flight": len(in_flight_paths),
+                    "files_in_flight_paths": in_flight_paths[:8],
+                    "file_workers": workers,
+                }
+                event.update(_rpm_progress_fields())
+                on_progress(event)
             except Exception:  # noqa: BLE001
                 return
 
@@ -206,6 +224,41 @@ class PushedIngestMixin:
                 f"{idempotency_key}:{rel}:{hashed['hash']}:"
                 f"{hashed['hash_version']}:{hashed['parser_version']}"
             )
+
+            def _on_symbol_progress(event: dict[str, Any], *, _rel: str = rel) -> None:
+                if not callable(on_progress):
+                    return
+                try:
+                    with state_lock:
+                        delta = int(event.get("symbols_done") or 0)
+                        snap = dict(totals)
+                        provisional_symbols = snap["symbols_indexed"] + delta
+                        in_flight_paths = sorted(active_files)
+                        done_now = progress_done
+                    on_progress(
+                        {
+                            "phase": "ingest",
+                            "done": done_now,
+                            "total": progress_total,
+                            "file": _rel,
+                            "status": str(event.get("status") or "active"),
+                            "files_ingested": snap["ingested"],
+                            "files_failed": snap["failed"],
+                            "files_skipped": snap["skipped"],
+                            "symbols_indexed": provisional_symbols,
+                            "symbols_changed": snap["symbols_changed"] + delta,
+                            "edges_written": snap["edges_written"],
+                            "chars_read": snap["chars_read"] + len(text),
+                            "approx_tokens": (snap["chars_read"] + len(text)) // 4,
+                            "files_in_flight": len(in_flight_paths),
+                            "files_in_flight_paths": in_flight_paths[:8],
+                            "file_workers": workers,
+                            **_rpm_progress_fields(),
+                        }
+                    )
+                except Exception:  # noqa: BLE001
+                    return
+
             try:
                 result = self.ingest_file(
                     scope,
@@ -220,6 +273,7 @@ class PushedIngestMixin:
                         "defer_cross_file_pass": True,
                         "reuse_unchanged_embeddings": True,
                         "shared_resolution": shared_resolution,
+                        "on_symbol_progress": _on_symbol_progress,
                     },
                 )
             except Exception as exc:  # noqa: BLE001
