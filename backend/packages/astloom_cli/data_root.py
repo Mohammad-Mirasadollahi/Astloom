@@ -141,17 +141,24 @@ def ensure_data_root(
     install_root: Path | str | None = None,
     environ: dict[str, str] | None = None,
 ) -> Path:
-    """Create data-root subdirs, stamp marker, migrate legacy in-tree dirs."""
+    """Create data-root subdirs, stamp marker, migrate legacy in-tree dirs.
+
+    When ``ASTLOOM_DATA_ROOT`` is set, use that path for this process but **do not**
+    rewrite ``<install>/.astloom/data-root``. Test shells and one-off overrides
+    must not poison the durable dogfood marker.
+    """
     if install_root is None:
         from astloom_cli.util import repo_root
 
         install_root = repo_root()
-    root = resolve_data_root(install_root=install_root, environ=environ)
+    env = environ if environ is not None else os.environ
+    root = resolve_data_root(install_root=install_root, environ=env)
     root.mkdir(parents=True, exist_ok=True)
     for name in DATA_SUBDIRS:
         (root / name).mkdir(parents=True, exist_ok=True)
-    stamp_data_root(install_root, root)
-    migrate_legacy_in_tree_dirs(install_root, root)
+    if not str(env.get(ENV_DATA_ROOT) or "").strip():
+        stamp_data_root(install_root, root)
+        migrate_legacy_in_tree_dirs(install_root, root)
     return root
 
 

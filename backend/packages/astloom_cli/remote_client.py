@@ -40,7 +40,12 @@ def apply_compose_env_to_os(environ: dict[str, str], repo_root: Path) -> None:
     if missing:
         raise SystemExit(f"error: compose env missing keys: {', '.join(missing)}")
 
-    environ.update(values)
+    # Preserve operator/process overrides for durable paths (tests must not poison dogfood).
+    preserve = {"ASTLOOM_DATA_ROOT"}
+    for key, value in values.items():
+        if key in preserve and str(environ.get(key) or "").strip():
+            continue
+        environ[key] = value
     pg_user = values["ASTLOOM_POSTGRES_USER"]
     pg_pass = values["ASTLOOM_POSTGRES_PASSWORD"]
     pg_port = values["ASTLOOM_POSTGRES_PORT"]

@@ -103,16 +103,55 @@ def _prepare_cache_env(cache_dir: str) -> Path:
     return st
 
 
+def _env_truthy(name: str, default: str = "0") -> bool:
+    return str(os.environ.get(name, default) or "").strip().lower() in {
+        "1",
+        "true",
+        "yes",
+        "on",
+    }
+
+
+def _embedding_offline_mode() -> bool:
+    return any(
+        _env_truthy(name)
+        for name in (
+            "HF_HUB_OFFLINE",
+            "TRANSFORMERS_OFFLINE",
+            "ASTLOOM_EMBEDDING_LOCAL_FILES_ONLY",
+        )
+    )
+
+
+def _embedding_allow_download() -> bool:
+    """Network download is opt-in when offline flags are unset.
+
+    Default: allow download unless an offline flag is set. Operators can force
+    local-only with ``ASTLOOM_EMBEDDING_ALLOW_DOWNLOAD=0``.
+    """
+    if _embedding_offline_mode():
+        return False
+    raw = str(os.environ.get("ASTLOOM_EMBEDDING_ALLOW_DOWNLOAD", "1") or "").strip()
+    if not raw:
+        return True
+    return raw.lower() not in {"0", "false", "no", "off"}
+
+
 @lru_cache(maxsize=2)
 def _load_sentence_transformer(model_name: str, cache_dir: str, device: str) -> Any:
+    """Load SentenceTransformer; prefer on-disk cache so sync workers never stall on HF."""
     st_home = _prepare_cache_env(cache_dir)
     from sentence_transformers import SentenceTransformer
 
-    return SentenceTransformer(
-        model_name,
-        cache_folder=str(st_home),
-        device=device,
-    )
+    common = {"cache_folder": str(st_home), "device": device}
+    try:
+        return SentenceTransformer(model_name, local_files_only=True, **common)
+    except Exception as local_exc:
+        if not _embedding_allow_download():
+            raise RuntimeError(
+                f"local embedding model not cached (offline/local-only): {model_name}"
+            ) from local_exc
+        return SentenceTransformer(model_name, **common)
 
 
 class LocalBgeEmbeddings:

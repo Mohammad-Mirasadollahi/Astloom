@@ -90,6 +90,14 @@ def _cmd_sync_body(args: argparse.Namespace) -> int:
         _print_stack_started(started)
 
     svc = _graph_service()
+    # Warm (or soft-fail) local BGE once before parallel file workers — avoids N
+    # workers blocking on a single HuggingFace download / empty cache.
+    try:
+        preload_fn = getattr(svc.embeddings, "preload", None)
+        if callable(preload_fn):
+            preload_fn()
+    except Exception:  # noqa: BLE001 — ingest still proceeds via stub/heuristic docs
+        pass
     scope = _graph_scope(args, with_defaults=True)
     scope_txt = f"{scope.tenant_id}/{scope.workspace_id}/{scope.project_id}"
     cli_paths = list(args.path) if args.path else None

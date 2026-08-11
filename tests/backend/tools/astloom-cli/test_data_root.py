@@ -56,6 +56,16 @@ def test_ensure_stamps_marker_and_migrates_legacy(tmp_path: Path, monkeypatch):
     assert read_data_root_marker(install) == root
 
 
+def test_ensure_data_root_env_override_does_not_stamp_marker(tmp_path: Path, monkeypatch):
+    install = tmp_path / "Astloom"
+    install.mkdir()
+    override = tmp_path / "ephemeral-data"
+    monkeypatch.setenv("ASTLOOM_DATA_ROOT", str(override))
+    root = ensure_data_root(install_root=install)
+    assert root == override.resolve()
+    assert not (install / ".astloom" / "data-root").exists()
+
+
 def test_resolve_prefers_marker_over_sibling(tmp_path: Path, monkeypatch):
     monkeypatch.delenv("ASTLOOM_DATA_ROOT", raising=False)
     install = tmp_path / "Astloom"

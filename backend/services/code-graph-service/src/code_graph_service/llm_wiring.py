@@ -141,11 +141,21 @@ class HybridEmbeddings:
         self._backend = "local_bge" if local is not None else "stub"
 
     def preload(self) -> None:
-        """Force local BGE (or no-op stub) load at process start when configured."""
-        if self.local is not None:
-            preload_fn = getattr(self.local, "preload", None)
-            if callable(preload_fn):
-                preload_fn()
+        """Force local BGE load at process start when configured.
+
+        On failure, drop ``local`` so later ``embed`` / ``embed_many`` use LiteLLM/stub
+        instead of hanging every parallel sync worker on a missing HF download.
+        """
+        if self.local is None:
+            return
+        preload_fn = getattr(self.local, "preload", None)
+        if not callable(preload_fn):
+            return
+        try:
+            preload_fn()
+        except Exception:  # noqa: BLE001 — soft-fail to stub/LiteLLM for sync
+            self.local = None
+            self._backend = "stub"
 
     @property
     def backend_name(self) -> str:
