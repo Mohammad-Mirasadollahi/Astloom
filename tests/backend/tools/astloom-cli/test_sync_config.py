@@ -6,7 +6,11 @@ from pathlib import Path
 
 import pytest
 
-from astloom_cli.sync_config import SyncConfigError, resolve_sync_filters
+from astloom_cli.sync_config import (
+    DEFAULT_INCLUDE_EXTENSIONS,
+    SyncConfigError,
+    resolve_sync_filters,
+)
 from code_graph_service.domain.repo_discovery import (
     DEFAULT_EXCLUDE_DIRS,
     DEFAULT_EXCLUDE_GLOBS,
@@ -215,3 +219,17 @@ def test_tracked_sync_example_excludes_cpu_bench():
     text = example.read_text(encoding="utf-8")
     assert "_cpu_bench" in text
     assert "**/_cpu_bench/**" in text
+
+
+def test_default_and_example_include_mjs():
+    assert ".mjs" in DEFAULT_INCLUDE_EXTENSIONS
+    example = Path(__file__).resolve().parents[4] / "astloom.sync.yaml.example"
+    text = example.read_text(encoding="utf-8")
+    assert "- .mjs" in text
+
+
+def test_resolve_defaults_include_mjs_when_yaml_omits_extensions(tmp_path: Path, monkeypatch):
+    monkeypatch.delenv("ASTLOOM_SYNC_INCLUDE_EXTENSIONS", raising=False)
+    (tmp_path / "astloom.sync.yaml").write_text("code:\n  exclude: [tests]\n", encoding="utf-8")
+    filters = resolve_sync_filters(root=tmp_path)
+    assert ".mjs" in filters["include_extensions"]

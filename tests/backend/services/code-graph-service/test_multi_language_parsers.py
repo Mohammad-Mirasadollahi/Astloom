@@ -67,6 +67,8 @@ def test_registered_parsers_include_rust_and_matrix_langs():
     assert detect_language_from_path("src/app.tsx") == "typescript"
     assert detect_language_from_path("lib/util.go") == "go"
     assert detect_language_from_path("src/main/java/App.java") == "java"
+    assert detect_language_from_path("src/app.mjs") == "javascript"
+    assert detect_language_from_path("src/app.cjs") == "javascript"
 
 
 JAVA_SOURCE = """
@@ -85,6 +87,8 @@ def test_parse_javascript_typescript_go_rust_symbols():
     js = parse_source("javascript", "src/auth.js", JS_SOURCE)
     assert any(s.qualified_name.endswith(".Auth.login") for s in js.symbols)
     assert "helpFn" in js.import_aliases
+    mjs = parse_source("javascript", "src/auth.mjs", JS_SOURCE)
+    assert any(s.name == "login" for s in mjs.symbols)
 
     ts = parse_source("typescript", "src/auth.ts", TS_SOURCE)
     assert any(s.kind.value == "method" and s.name == "check" for s in ts.symbols)

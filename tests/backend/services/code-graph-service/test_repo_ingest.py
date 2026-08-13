@@ -32,6 +32,18 @@ def test_discover_source_files_skips_excluded_and_unknown(tmp_path: Path):
     assert all(item.language == "python" for item in found)
 
 
+def test_discover_source_files_includes_mjs_by_default(tmp_path: Path):
+    src = tmp_path / "src"
+    src.mkdir()
+    (src / "app.mjs").write_text("export function ping() { return 1; }\n", encoding="utf-8")
+    (src / "notes.md").write_text("# skip\n", encoding="utf-8")
+    found = discover_source_files(tmp_path, exclude_dirs=[])
+    by_rel = {item.relative_path: item for item in found}
+    assert "src/app.mjs" in by_rel
+    assert by_rel["src/app.mjs"].language == "javascript"
+    assert "src/notes.md" not in by_rel
+
+
 def test_discover_respects_max_files(tmp_path: Path):
     src = tmp_path / "src"
     src.mkdir()

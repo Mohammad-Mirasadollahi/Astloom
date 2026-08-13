@@ -19,7 +19,7 @@ import time
 from pathlib import Path
 
 
-DEFAULT_EXTENSIONS = {".py", ".ts", ".tsx", ".js", ".jsx", ".go", ".rs"}
+DEFAULT_EXTENSIONS = {".py", ".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs", ".go", ".rs"}
 # Quiet period after last observed change before flushing a batch.
 DEFAULT_DEBOUNCE_S = 30.0
 # Ceiling: flush even if the agent is still writing (bursting).

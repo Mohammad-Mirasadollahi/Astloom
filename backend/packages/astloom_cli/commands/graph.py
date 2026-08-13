@@ -13,6 +13,7 @@ from typing import Any
 from urllib.parse import urlparse
 
 from astloom_cli.parser._core import resolve_discovery_max_files
+from astloom_cli.sync_config import DEFAULT_INCLUDE_EXTENSIONS
 from astloom_cli.util import now_iso, print_json, repo_root, require_scope
 
 
@@ -211,7 +212,7 @@ def cmd_graph_ingest(args: argparse.Namespace) -> int:
         f"cli-repo:{root_path}",
         {
             "root_path": str(root_path),
-            "include_extensions": [".py", ".ts", ".tsx", ".js", ".jsx", ".go", ".rs"],
+            "include_extensions": list(DEFAULT_INCLUDE_EXTENSIONS),
             "max_files": resolve_discovery_max_files(getattr(args, "max_files", 0)),
             "include_outcomes": True,
         },

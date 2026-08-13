@@ -157,7 +157,7 @@ def _is_path_ref(token: str) -> bool:
         return False
     if "/" in t:
         return True
-    return t.endswith((".py", ".pyi", ".ts", ".tsx", ".js", ".jsx", ".go", ".rs", ".java"))
+    return t.endswith((".py", ".pyi", ".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs", ".go", ".rs", ".java"))
 
 
 def _resolve_path_ref(token: str, symbols: list[CodeSymbol]) -> CodeSymbol | None:

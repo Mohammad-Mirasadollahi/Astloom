@@ -13,11 +13,12 @@ from astloom_cli.util import ensure_service_import_paths
 ensure_service_import_paths()
 
 from code_graph_service.domain.doc_discovery import DEFAULT_DOC_MATCH_GLOBS
-from code_graph_service.domain.repo_discovery import _looks_like_glob
+from code_graph_service.domain.repo_discovery import _looks_like_glob, default_include_extensions
 
 from astloom_cli.docs_audit_scope import merge_docs_audit_exclude_globs
 
-DEFAULT_INCLUDE_EXTENSIONS = (".py", ".ts", ".tsx", ".js", ".jsx", ".go", ".rs")
+# Same set as LANGUAGE_MATRIX (includes .mjs / .cjs / .mts / .cts / .java).
+DEFAULT_INCLUDE_EXTENSIONS = default_include_extensions()
 
 REPO_CONFIG_NAMES = ("astloom.sync.yaml", "astloom.sync.yml")
 LOCAL_CONFIG_REL = Path(".astloom") / "sync.yaml"

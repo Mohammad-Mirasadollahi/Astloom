@@ -179,6 +179,8 @@ code:
     - .tsx
     - .js
     - .jsx
+    - .mjs
+    - .cjs
     - .go
     - .rs
 
