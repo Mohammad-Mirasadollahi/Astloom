@@ -305,10 +305,12 @@ def test_run_ingest_push_http_consumes_ndjson(monkeypatch):
         calls["method"] = method
         calls["url"] = url
         calls["headers"] = dict(headers or {})
+        calls["timeout"] = timeout
         return Resp()
 
     fake = ModuleType("httpx")
     fake.HTTPError = Exception
+    fake.Timeout = __import__("httpx").Timeout
     fake.stream = stream
     monkeypatch.setitem(sys.modules, "httpx", fake)
     monkeypatch.setattr(cp, "httpx_verify", lambda _settings: True)
@@ -333,6 +335,10 @@ def test_run_ingest_push_http_consumes_ndjson(monkeypatch):
     # Defense in depth for proxies that strip Accept.
     assert calls["url"].endswith("/graph/ingest-push?stream=1")
     assert seen and seen[0]["done"] == 1
+    timeout = calls["timeout"]
+    assert timeout is not None
+    assert float(timeout.connect) == 30.0
+    assert float(timeout.read) == 600.0
 
 
 def test_run_ingest_push_http_compat_plain_json(monkeypatch):
@@ -361,6 +367,7 @@ def test_run_ingest_push_http_compat_plain_json(monkeypatch):
 
     fake = ModuleType("httpx")
     fake.HTTPError = Exception
+    fake.Timeout = __import__("httpx").Timeout
     fake.stream = lambda method, url, **_kw: Resp()
     monkeypatch.setitem(sys.modules, "httpx", fake)
     monkeypatch.setattr(cp, "httpx_verify", lambda _settings: True)

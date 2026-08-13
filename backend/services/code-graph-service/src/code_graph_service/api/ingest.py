@@ -15,6 +15,7 @@ from .common import scope_from
 from .ingest_push_stream import (
     PROGRESS,
     build_progress_stream,
+    iter_queue_with_heartbeat,
     ndjson_line,
     run_push_with_progress,
     wants_ndjson_stream,
@@ -237,10 +238,18 @@ def register(api: FastAPI, service: CodeGraphService) -> None:
                     asyncio.to_thread(run_push_with_progress, emit, lambda: _work(cancel.is_set))
                 )
                 try:
-                    while True:
-                        item = await q.get()
-                        if item is None:
-                            break
+                    # Headers alone are not a body chunk — send one line immediately
+                    # so the client read-timeout cannot fire during list_symbols.
+                    yield ndjson_line(
+                        {
+                            "type": PROGRESS,
+                            "phase": "ingest",
+                            "status": "registered",
+                            "done": 0,
+                            "total": 0,
+                        }
+                    )
+                    async for item in iter_queue_with_heartbeat(q):
                         yield ndjson_line(item)
                 finally:
                     cancel.set()
@@ -254,7 +263,14 @@ def register(api: FastAPI, service: CodeGraphService) -> None:
                         pass
                     await worker
 
-            return StreamingResponse(_gen(), media_type="application/x-ndjson")
+            return StreamingResponse(
+                _gen(),
+                media_type="application/x-ndjson",
+                headers={
+                    "Cache-Control": "no-cache",
+                    "X-Accel-Buffering": "no",
+                },
+            )
 
         if job_id:
             from .client_sync_job_snapshots import clear_job_snapshot, write_job_snapshot

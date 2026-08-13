@@ -13,6 +13,7 @@ from fastapi.testclient import TestClient
 from code_graph_service.api import build_app
 from code_graph_service.api.ingest_push_stream import (
     build_progress_stream,
+    iter_queue_with_heartbeat,
     ndjson_line,
     run_push_with_progress,
     wants_ndjson_stream,
@@ -105,6 +106,27 @@ def test_run_push_with_progress_emits_error_then_sentinel_on_unexpected_exceptio
     assert "boom" in emitted[0]["message"]
 
 
+def test_iter_queue_with_heartbeat_emits_when_worker_silent():
+    async def main():
+        q: asyncio.Queue[dict | None] = asyncio.Queue()
+        items = []
+
+        async def produce():
+            await asyncio.sleep(0.2)
+            q.put_nowait({"type": "result", "files_ingested": 1})
+            q.put_nowait(None)
+
+        producer = asyncio.create_task(produce())
+        async for item in iter_queue_with_heartbeat(q, heartbeat_sec=0.05):
+            items.append(item)
+        await producer
+        return items
+
+    items = asyncio.run(main())
+    assert any(i.get("status") == "heartbeat" for i in items)
+    assert items[-1]["type"] == "result"
+
+
 def test_ingest_push_ndjson_stream_emits_progress_then_result(monkeypatch):
     monkeypatch.setenv("ASTLOOM_CODE_GRAPH_HTTP_TOKEN", "secret-token-123456")
     service = CodeGraphService(InMemoryStore())
@@ -149,6 +171,8 @@ def test_ingest_push_ndjson_stream_via_query_param(monkeypatch):
         assert response.status_code == 200
         assert "ndjson" in response.headers.get("content-type", "")
         lines = [json.loads(ln) for ln in response.iter_lines() if ln]
+    assert lines[0]["type"] == "progress"
+    assert lines[0]["status"] == "registered"
     assert lines[-1]["type"] == "result"
 
 

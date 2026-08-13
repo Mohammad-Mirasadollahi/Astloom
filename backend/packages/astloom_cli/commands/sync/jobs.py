@@ -3,12 +3,13 @@
 from __future__ import annotations
 
 import argparse
+import os
 import time
 from pathlib import Path
 from typing import Any
 
 from astloom_cli import ui
-from astloom_cli.data_root import resolve_data_root
+from astloom_cli.data_root import default_data_root, resolve_data_root
 from astloom_cli.service_runtime.paths import install_role
 from astloom_cli.sync_progress.formatters import format_duration
 from astloom_cli.util import print_json, repo_root
@@ -16,6 +17,34 @@ from astloom_cli.util import print_json, repo_root
 
 def _data_root_for_jobs() -> Path:
     return resolve_data_root(install_root=repo_root())
+
+
+def _job_data_roots() -> list[Path]:
+    """Install marker, env, and sibling ``<name>-data`` (HTTPS APIs may differ)."""
+    root = repo_root()
+    seen: set[Path] = set()
+    out: list[Path] = []
+
+    def add(raw: Path | str | None) -> None:
+        if raw is None:
+            return
+        text = str(raw).strip()
+        if not text:
+            return
+        try:
+            path = Path(text).expanduser().resolve()
+        except OSError:
+            return
+        if path in seen:
+            return
+        seen.add(path)
+        out.append(path)
+
+    add(_data_root_for_jobs())
+    add(os.environ.get("ASTLOOM_DATA_ROOT"))
+    add(default_data_root(root))
+    add(root / ".astloom")
+    return out
 
 
 def _require_server_role() -> None:
@@ -117,12 +146,23 @@ def cmd_sync_jobs(args: argparse.Namespace) -> int:
         read_job_snapshot,
     )
 
-    data_root = _data_root_for_jobs()
+    roots = _job_data_roots()
+    data_root = roots[0] if roots else _data_root_for_jobs()
     job_id = str(getattr(args, "sync_job_id", None) or "").strip()
     as_json = bool(getattr(args, "json", False))
 
     if not job_id:
-        jobs = list_live_job_snapshots(data_root=data_root)
+        by_id: dict[str, dict[str, Any]] = {}
+        for root in roots:
+            for snap in list_live_job_snapshots(data_root=root):
+                jid = str(snap.get("job_id") or "").strip()
+                if jid and jid not in by_id:
+                    by_id[jid] = snap
+        jobs = sorted(
+            by_id.values(),
+            key=lambda d: float(d.get("updated_at") or 0),
+            reverse=True,
+        )
         if as_json:
             print_json({"jobs": jobs, "data_root": str(data_root)})
             return 0
@@ -148,11 +188,17 @@ def cmd_sync_jobs(args: argparse.Namespace) -> int:
         print(ui.dim("Detail: astloom sync jobs <JOB_ID>"))
         return 0
 
-    snap = read_job_snapshot(job_id, data_root=data_root, max_age_sec=0)
+    snap = None
+    found_root = data_root
+    for root in roots:
+        snap = read_job_snapshot(job_id, data_root=root, max_age_sec=0)
+        if snap is not None:
+            found_root = root
+            break
     if snap is None:
         raise SystemExit(f"error: no snapshot for job_id {job_id!r}")
     # Re-check staleness for messaging
-    live = read_job_snapshot(job_id, data_root=data_root)
+    live = read_job_snapshot(job_id, data_root=found_root)
     stale = live is None or bool((live or {}).get("stale"))
     rate, eta = _rate_eta(snap)
     resources = _proc_resources(_graph_pid(repo_root()))

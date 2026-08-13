@@ -42,6 +42,7 @@ def test_cmd_sync_jobs_lists_empty(monkeypatch, tmp_path: Path, capsys):
     from astloom_cli.commands.sync import jobs as jobs_mod
 
     monkeypatch.setattr(jobs_mod, "_require_server_role", lambda: None)
+    monkeypatch.setattr(jobs_mod, "_job_data_roots", lambda: [tmp_path])
     monkeypatch.setattr(jobs_mod, "_data_root_for_jobs", lambda: tmp_path)
     code = jobs_mod.cmd_sync_jobs(Namespace(sync_job_id="", json=False))
     assert code == 0
@@ -73,6 +74,7 @@ def test_cmd_sync_jobs_lists_and_details(monkeypatch, tmp_path: Path, capsys):
         project_id="ThinkingSOC",
     )
     monkeypatch.setattr(jobs_mod, "_require_server_role", lambda: None)
+    monkeypatch.setattr(jobs_mod, "_job_data_roots", lambda: [tmp_path])
     monkeypatch.setattr(jobs_mod, "_data_root_for_jobs", lambda: tmp_path)
     monkeypatch.setattr(jobs_mod, "_graph_pid", lambda _r: None)
 
@@ -86,6 +88,32 @@ def test_cmd_sync_jobs_lists_and_details(monkeypatch, tmp_path: Path, capsys):
     detail = capsys.readouterr().out
     assert "3 active / 28 workers" in detail
     assert "a.py" in detail
+
+
+def test_cmd_sync_jobs_lists_snapshot_on_sibling_data_root(monkeypatch, tmp_path: Path, capsys):
+    from astloom_cli.commands.sync import jobs as jobs_mod
+    from code_graph_service.api.client_sync_job_snapshots import write_job_snapshot
+
+    install = tmp_path / "Astloom"
+    (install / ".astloom").mkdir(parents=True)
+    (install / ".astloom" / "data-root").write_text(str(install / ".astloom") + "\n")
+    sibling = tmp_path / "Astloom-data"
+    jid = "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee"
+    write_job_snapshot(
+        jid,
+        {"phase": "ingest", "done": 2, "total": 5, "status": "ok"},
+        data_root=sibling,
+        tenant_id="mir",
+        workspace_id="dev",
+        project_id="ThinkingSOC",
+    )
+    monkeypatch.setattr(jobs_mod, "_require_server_role", lambda: None)
+    monkeypatch.setattr(jobs_mod, "repo_root", lambda: install)
+    monkeypatch.delenv("ASTLOOM_DATA_ROOT", raising=False)
+    assert jobs_mod.cmd_sync_jobs(Namespace(sync_job_id="", json=False)) == 0
+    listed = capsys.readouterr().out
+    assert jid in listed
+    assert "2/5" in listed
 
 
 def test_cmd_sync_jobs_rejects_client_role(monkeypatch):

@@ -387,7 +387,7 @@ def _run_ingest_push_http(
             url,
             headers=headers,
             json=payload,
-            timeout=600.0,
+            timeout=httpx.Timeout(600.0, connect=30.0),
             verify=httpx_verify(settings),
         ) as response:
             if response.status_code == 499:

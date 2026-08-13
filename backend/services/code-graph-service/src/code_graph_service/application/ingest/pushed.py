@@ -81,6 +81,11 @@ class PushedIngestMixin:
         include_outcomes = bool(payload.get("include_outcomes", True))
         on_progress = payload.get("on_progress")
         package_aliases: dict[str, Any] = dict(payload.get("package_aliases") or {})
+        if callable(on_progress):
+            try:
+                on_progress({"phase": "ingest", "done": 0, "total": 0, "status": "started"})
+            except Exception:  # noqa: BLE001
+                pass
 
         stored_symbols = list(self.store.list_symbols(scope))
         if present_paths is not None:

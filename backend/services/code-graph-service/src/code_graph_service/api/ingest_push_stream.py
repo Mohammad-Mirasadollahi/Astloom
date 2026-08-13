@@ -12,6 +12,9 @@ from ..domain.errors import ClientDisconnected
 PROGRESS = "progress"
 RESULT = "result"
 ERROR = "error"
+# Keep the HTTPS stream alive while LiteLLM/embed work produces no file events.
+# Client read timeout is idle-between-chunks; silence > that looks like a hang.
+STREAM_HEARTBEAT_SEC = 15.0
 
 
 def wants_ndjson_stream(*, accept: str | None, stream_query: str | None) -> bool:
@@ -48,6 +51,29 @@ def build_progress_stream() -> tuple["asyncio.Queue[dict[str, Any] | None]", Emi
             pass
 
     return q, emit
+
+
+def heartbeat_event() -> dict[str, Any]:
+    return {"type": PROGRESS, "phase": "ingest", "status": "heartbeat"}
+
+
+async def iter_queue_with_heartbeat(
+    q: "asyncio.Queue[dict[str, Any] | None]",
+    *,
+    heartbeat_sec: float | None = None,
+):
+    """Yield queue items; emit a progress heartbeat when the worker is silent."""
+    interval = STREAM_HEARTBEAT_SEC if heartbeat_sec is None else float(heartbeat_sec)
+    timeout = max(0.05, interval)
+    while True:
+        try:
+            item = await asyncio.wait_for(q.get(), timeout=timeout)
+        except asyncio.TimeoutError:
+            yield heartbeat_event()
+            continue
+        if item is None:
+            break
+        yield item
 
 
 def run_push_with_progress(emit: Emit, work: Callable[[], dict[str, Any]]) -> None:
