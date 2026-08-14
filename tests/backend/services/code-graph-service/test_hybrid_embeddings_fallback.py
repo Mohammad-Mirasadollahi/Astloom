@@ -67,6 +67,18 @@ def test_hybrid_embed_many_falls_back_when_local_batch_fails(monkeypatch) -> Non
     assert all(len(row.vector) == 8 for row in rows)
 
 
+def test_chunk_embedding_input_keeps_full_text(monkeypatch) -> None:
+    from code_graph_service.llm_wiring import chunk_embedding_input
+
+    monkeypatch.delenv("ASTLOOM_EMBEDDING_MAX_INPUT_TOKENS", raising=False)
+    monkeypatch.delenv("ASTLOOM_EMBEDDING_CHARS_PER_TOKEN", raising=False)
+    text = "abcdefghij" * 200
+    parts = chunk_embedding_input(text)
+    assert "".join(parts) == text
+    assert len(parts) > 1
+    assert all(len(part) <= 360 * 2.5 for part in parts)
+
+
 def test_truncate_embedding_input_default_stays_under_bge_cap(monkeypatch) -> None:
     from code_graph_service.llm_wiring import truncate_embedding_input
 
@@ -172,3 +184,35 @@ def test_hybrid_embed_many_retries_after_token_limit(monkeypatch) -> None:
     rows = emb.embed_many(["a" * 2000, "b" * 2000])
     assert len(rows) == 2
     assert _TokenThenOk.calls == 2
+
+
+def test_hybrid_embed_many_pools_chunks_without_dropping_tail(monkeypatch) -> None:
+    monkeypatch.setenv("ASTLOOM_LITELLM_EMBEDDINGS_ENABLED", "true")
+    monkeypatch.setenv("ASTLOOM_LITELLM_MODEL_EMBED", "openrouter/baai/bge-large-en-v1.5")
+    monkeypatch.delenv("ASTLOOM_EMBEDDING_MAX_INPUT_TOKENS", raising=False)
+    monkeypatch.delenv("ASTLOOM_EMBEDDING_CHARS_PER_TOKEN", raising=False)
+    from llm_gateway.routing import clear_routing_profile_cache
+
+    clear_routing_profile_cache()
+    seen: list[str] = []
+
+    class _RecordBatch:
+        def embed_many(self, texts: list[str], *, model: str | None = None):
+            seen.extend(texts)
+            return [
+                SimpleNamespace(vector=[float(len(text)), 0.0], model=model or "embed-ok")
+                for text in texts
+            ]
+
+    long = "z" * 2000
+    emb = HybridEmbeddings(
+        gateway=_RecordBatch(),
+        local=None,
+        stub=LocalEmbeddingStub(dims=8),
+        dims=8,
+        settings=SimpleNamespace(enabled=True, default_model="x"),
+    )
+    rows = emb.embed_many([long])
+    assert len(rows) == 1
+    assert "".join(seen) == long
+    assert len(seen) > 1

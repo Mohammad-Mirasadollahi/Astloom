@@ -63,7 +63,7 @@ class HumanDocIngestMixin:
         if content_unchanged:
             doc_symbol = previous
         else:
-            embed = self.embeddings.embed(f"{title or doc_id}\n{body[:2000]}")
+            embed = self.embeddings.embed(f"{title or doc_id}\n{body}")
             doc_symbol = GraphSymbol(
                 id=symbol_id,
                 scope=scope,

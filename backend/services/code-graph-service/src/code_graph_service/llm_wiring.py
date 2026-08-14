@@ -53,18 +53,12 @@ def _is_embed_context_error(exc: BaseException) -> bool:
     return "context length" in msg or "input tokens" in msg
 
 
-def truncate_embedding_input(
-    text: str,
+def _embed_char_budget(
     *,
     max_tokens: int | None = None,
     chars_per_token: float | None = None,
-) -> str:
-    """Clamp embed text under the model context (BGE-large hosted = 512 tokens).
-
-    Local SentenceTransformers silently truncates; OpenRouter BGE rejects over-limit
-    prompts with HTTP 400. Code+docs tokenize denser than 3–4 chars/token
-    (480×3 still produced 513-token rejects). Default 360×2.5 stays under 512.
-    """
+) -> int:
+    """Max characters per hosted-BGE request (hard cap 512 tokens)."""
     import os
 
     if max_tokens is None:
@@ -80,12 +74,57 @@ def truncate_embedding_input(
         except ValueError:
             chars_per_token = 2.5
     if max_tokens <= 0:
-        return text
-    max_chars = max(8, int(max_tokens * float(chars_per_token)))
+        return 10**9
+    return max(8, int(max_tokens * float(chars_per_token)))
+
+
+def truncate_embedding_input(
+    text: str,
+    *,
+    max_tokens: int | None = None,
+    chars_per_token: float | None = None,
+) -> str:
+    """Clamp one embed window under the model context (BGE-large hosted = 512).
+
+    Do not use this to drop document tails — ``chunk_embedding_input`` keeps
+    the full text as consecutive windows. Stored symbol/doc bodies are never
+    truncated here.
+    """
+    max_chars = _embed_char_budget(
+        max_tokens=max_tokens, chars_per_token=chars_per_token
+    )
     if len(text) <= max_chars:
         return text
-    # Prefer keeping the head (qualified_name + start of docs).
     return text[: max_chars - 1].rstrip() + "…"
+
+
+def chunk_embedding_input(
+    text: str,
+    *,
+    max_tokens: int | None = None,
+    chars_per_token: float | None = None,
+) -> list[str]:
+    """Split text into full-coverage windows that each fit the embed cap."""
+    budget = _embed_char_budget(
+        max_tokens=max_tokens, chars_per_token=chars_per_token
+    )
+    if not text:
+        return [""]
+    if len(text) <= budget:
+        return [text]
+    return [text[i : i + budget] for i in range(0, len(text), budget)]
+
+
+def _mean_pool_vectors(vectors: list[list[float]]) -> list[float]:
+    if not vectors:
+        return []
+    dims = len(vectors[0])
+    out = [0.0] * dims
+    for vec in vectors:
+        for i, value in enumerate(vec[:dims]):
+            out[i] += float(value)
+    n = float(len(vectors))
+    return [value / n for value in out]
 
 
 class LlmBackedDocGenerator:
@@ -214,113 +253,64 @@ class HybridEmbeddings:
         return f"stub:{self.stub.model}"
 
     def embed(self, text: str, *, is_query: bool = False) -> EmbeddingResult:
-        text = truncate_embedding_input(text)
-        if self.local is not None:
-            embed_fn = getattr(self.local, "embed", None)
-            if callable(embed_fn):
-                try:
-                    try:
-                        result = embed_fn(text, is_query=is_query)  # type: ignore[call-arg]
-                    except TypeError:
-                        result = embed_fn(text)
-                    self.model = result.model
-                    self._backend = "local_bge"
-                    return result
-                except Exception:  # noqa: BLE001 — offline/cache miss → LiteLLM/stub
-                    # Drop broken local so subsequent calls skip repeated HF loads.
-                    self.local = None
-            else:
-                result = self.stub.embed(text)
-                self.model = result.model
-                self._backend = "stub"
-                return result
+        rows = self.embed_many([text], is_query=is_query)
+        return rows[0] if rows else self.stub.embed(text)
 
-        if (
-            self.gateway is None
-            or not embeddings_generation_enabled()
-            or not getattr(self.settings, "enabled", False)
-        ):
-            if embeddings_generation_enabled() and (
-                self.gateway is None or not getattr(self.settings, "enabled", False)
-            ):
-                raise RuntimeError(
-                    "LiteLLM embeddings enabled but gateway/settings unavailable"
-                )
-            self._backend = "stub"
-            return self.stub.embed(text)
-
-        route = resolve_route(
-            "embed.symbol",
-            default_model=getattr(self.settings, "default_model", "") or "",
-        )
-        models = route.models_in_order()
-        if not models:
-            if embeddings_generation_enabled():
-                raise RuntimeError(
-                    "LiteLLM embeddings enabled but no embed model configured "
-                    "(set ASTLOOM_LITELLM_MODEL_EMBED)"
-                )
-            self._backend = "stub"
-            return self.stub.embed(text)
-
-        last_error: Exception | None = None
-        for model in models:
-            try:
-                result = self.gateway.embed(text, model=model)
-                vector = reduce_dims(list(result.vector), self.dims)
-                self.model = result.model
-                self._backend = "litellm"
-                return EmbeddingResult(vector, "ready", result.model, self.dims)
-            except Exception as exc:  # noqa: BLE001
-                last_error = exc
-                # Hosted BGE-large is hard-capped at 512 tokens; shrink and retry once.
-                if _is_embed_context_error(exc):
-                    text = truncate_embedding_input(
-                        text, max_tokens=280, chars_per_token=2.0
-                    )
-                    try:
-                        result = self.gateway.embed(text, model=model)
-                        vector = reduce_dims(list(result.vector), self.dims)
-                        self.model = result.model
-                        self._backend = "litellm"
-                        return EmbeddingResult(
-                            vector, "ready", result.model, self.dims
-                        )
-                    except Exception as retry_exc:  # noqa: BLE001
-                        last_error = retry_exc
-                continue
-
-        # When LiteLLM embeddings are explicitly enabled, never silent-stub:
-        # stub vectors (local-hash-v1) poison retrieval while looking "indexed".
-        if last_error is not None and embeddings_generation_enabled():
-            raise RuntimeError(f"LiteLLM embedding failed: {last_error}") from last_error
-        if route.allow_stub or last_error is not None:
-            self._backend = "stub"
-            return self.stub.embed(text)
-        raise RuntimeError(f"LiteLLM embedding failed: {last_error}")
-
-    def embed_many(
+    def _pool_chunk_results(
         self,
-        texts: list[str],
+        raw: list[EmbeddingResult],
+        owners: list[int],
+        count: int,
+    ) -> list[EmbeddingResult]:
+        buckets: list[list[list[float]]] = [[] for _ in range(count)]
+        model = raw[0].model if raw else self.stub.model
+        for item, owner in zip(raw, owners, strict=True):
+            buckets[owner].append(list(item.vector))
+        out: list[EmbeddingResult] = []
+        for vecs in buckets:
+            if not vecs:
+                out.append(self.stub.embed(""))
+                continue
+            pooled = reduce_dims(_mean_pool_vectors(vecs), self.dims)
+            out.append(EmbeddingResult(pooled, "ready", model, self.dims))
+        return out
+
+    def _embed_sized_many(
+        self,
+        chunks: list[str],
         *,
         is_query: bool = False,
     ) -> list[EmbeddingResult]:
-        texts = [truncate_embedding_input(t) for t in texts]
-        if not texts:
+        """Embed windows that already fit the model cap. Does not call embed()."""
+        if not chunks:
             return []
         if self.local is not None:
             batch = getattr(self.local, "embed_many", None)
             if callable(batch):
                 try:
-                    results = list(batch(texts, is_query=is_query))
+                    results = list(batch(chunks, is_query=is_query))
                     if results:
                         self.model = results[0].model
                         self._backend = "local_bge"
                     return results
-                except Exception:  # noqa: BLE001 — offline/cache miss → per-text fallback
+                except Exception:  # noqa: BLE001 — offline/cache miss → LiteLLM/stub
                     self.local = None
-        # Cloud path: one LiteLLM embedding call (+ one RPM acquire) per batch.
-        # Same route contract as embed() — task class embed.symbol, no invented kwargs.
+            else:
+                embed_fn = getattr(self.local, "embed", None)
+                if callable(embed_fn):
+                    try:
+                        out = []
+                        for chunk in chunks:
+                            try:
+                                out.append(embed_fn(chunk, is_query=is_query))
+                            except TypeError:
+                                out.append(embed_fn(chunk))
+                        if out:
+                            self.model = out[0].model
+                            self._backend = "local_bge"
+                        return out
+                    except Exception:  # noqa: BLE001
+                        self.local = None
         if (
             self.gateway is not None
             and embeddings_generation_enabled()
@@ -331,56 +321,110 @@ class HybridEmbeddings:
                 default_model=getattr(self.settings, "default_model", "") or "",
             )
             models = route.models_in_order()
+            if not models:
+                raise RuntimeError(
+                    "LiteLLM embeddings enabled but no embed model configured "
+                    "(set ASTLOOM_LITELLM_MODEL_EMBED)"
+                )
             gw_batch = getattr(self.gateway, "embed_many", None)
             if models and callable(gw_batch):
                 last_error: Exception | None = None
                 for model in models:
                     try:
-                        raw = list(gw_batch(texts, model=model))
-                        out: list[EmbeddingResult] = []
-                        for item in raw:
-                            vector = reduce_dims(list(item.vector), self.dims)
-                            out.append(
-                                EmbeddingResult(
-                                    vector, "ready", item.model, self.dims
-                                )
+                        raw = list(gw_batch(chunks, model=model))
+                        out = [
+                            EmbeddingResult(
+                                reduce_dims(list(item.vector), self.dims),
+                                "ready",
+                                item.model,
+                                self.dims,
                             )
+                            for item in raw
+                        ]
                         if out:
                             self.model = out[0].model
                             self._backend = "litellm"
                         return out
                     except Exception as exc:  # noqa: BLE001
                         last_error = exc
-                        if _is_embed_context_error(exc):
-                            texts = [
-                                truncate_embedding_input(
-                                    t, max_tokens=280, chars_per_token=2.0
-                                )
-                                for t in texts
-                            ]
-                            try:
-                                raw = list(gw_batch(texts, model=model))
-                                out = [
-                                    EmbeddingResult(
-                                        reduce_dims(list(item.vector), self.dims),
-                                        "ready",
-                                        item.model,
-                                        self.dims,
-                                    )
-                                    for item in raw
-                                ]
-                                if out:
-                                    self.model = out[0].model
-                                    self._backend = "litellm"
-                                return out
-                            except Exception as retry_exc:  # noqa: BLE001
-                                last_error = retry_exc
                         continue
                 if last_error is not None:
                     raise RuntimeError(
                         f"LiteLLM embedding batch failed: {last_error}"
                     ) from last_error
-        return [self.embed(text, is_query=is_query) for text in texts]
+            last_error = None
+            for model in models:
+                try:
+                    out = []
+                    for chunk in chunks:
+                        result = self.gateway.embed(chunk, model=model)
+                        out.append(
+                            EmbeddingResult(
+                                reduce_dims(list(result.vector), self.dims),
+                                "ready",
+                                result.model,
+                                self.dims,
+                            )
+                        )
+                    if out:
+                        self.model = out[0].model
+                        self._backend = "litellm"
+                    return out
+                except Exception as exc:  # noqa: BLE001
+                    last_error = exc
+                    continue
+            if last_error is not None and embeddings_generation_enabled():
+                raise RuntimeError(f"LiteLLM embedding failed: {last_error}") from last_error
+        if embeddings_generation_enabled() and (
+            self.gateway is None or not getattr(self.settings, "enabled", False)
+        ):
+            raise RuntimeError(
+                "LiteLLM embeddings enabled but gateway/settings unavailable"
+            )
+        self._backend = "stub"
+        return [self.stub.embed(chunk) for chunk in chunks]
+
+    def embed_many(
+        self,
+        texts: list[str],
+        *,
+        is_query: bool = False,
+    ) -> list[EmbeddingResult]:
+        if not texts:
+            return []
+        attempts = (
+            {},
+            {"max_tokens": 280, "chars_per_token": 2.0},
+        )
+        last_error: Exception | None = None
+        for extra in attempts:
+            groups = [chunk_embedding_input(text, **extra) for text in texts]
+            flat: list[str] = []
+            owners: list[int] = []
+            for index, parts in enumerate(groups):
+                for part in parts:
+                    flat.append(part)
+                    owners.append(index)
+            try:
+                raw = self._embed_sized_many(flat, is_query=is_query)
+                if len(raw) != len(flat):
+                    raise RuntimeError(
+                        f"embedding batch returned {len(raw)} results for {len(flat)} chunks"
+                    )
+                pooled = self._pool_chunk_results(raw, owners, len(texts))
+                if pooled:
+                    self.model = pooled[0].model
+                return pooled
+            except Exception as exc:  # noqa: BLE001
+                last_error = exc
+                if not _is_embed_context_error(exc):
+                    break
+        if last_error is not None and embeddings_generation_enabled():
+            raise RuntimeError(
+                f"LiteLLM embedding batch failed: {last_error}"
+            ) from last_error
+        self._backend = "stub"
+        return [self.stub.embed(text) for text in texts]
 
 def build_embeddings(
     gateway: Any | None = None,
