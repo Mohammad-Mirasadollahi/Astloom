@@ -316,11 +316,15 @@ class HybridEmbeddings:
                 except Exception:  # noqa: BLE001 — offline/cache miss → per-text fallback
                     self.local = None
         # Cloud path: one LiteLLM embedding call (+ one RPM acquire) per batch.
-        if self.gateway is not None:
+        # Same route contract as embed() — task class embed.symbol, no invented kwargs.
+        if (
+            self.gateway is not None
+            and embeddings_generation_enabled()
+            and getattr(self.settings, "enabled", False)
+        ):
             route = resolve_route(
-                "embeddings",
-                settings=self.settings,
-                allow_stub_default=True,
+                "embed.symbol",
+                default_model=getattr(self.settings, "default_model", "") or "",
             )
             models = route.models_in_order()
             gw_batch = getattr(self.gateway, "embed_many", None)
@@ -344,14 +348,10 @@ class HybridEmbeddings:
                     except Exception as exc:  # noqa: BLE001
                         last_error = exc
                         continue
-                if last_error is not None and embeddings_generation_enabled():
+                if last_error is not None:
                     raise RuntimeError(
                         f"LiteLLM embedding batch failed: {last_error}"
                     ) from last_error
-                if route.allow_stub or last_error is not None:
-                    self._backend = "stub"
-                    return [self.stub.embed(text) for text in texts]
-                raise RuntimeError(f"LiteLLM embedding batch failed: {last_error}")
         return [self.embed(text, is_query=is_query) for text in texts]
 
 def build_embeddings(

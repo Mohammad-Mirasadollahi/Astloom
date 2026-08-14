@@ -12,6 +12,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from ...domain.enums import SymbolKind
 from ...domain.errors import ValidationError
 from ...domain.freshness import extract_module_contract_docstring
 from ...domain.hashing import content_hash, now_iso
@@ -34,6 +35,64 @@ class FileIngestMixin(
     """Parse one source file into symbols/edges via focused mixins."""
 
     def ingest_file(
+        self,
+        scope: Scope,
+        actor_id: str,
+        correlation_id: str,
+        idempotency_key: str,
+        payload: dict[str, Any],
+    ) -> IngestResult:
+        file_path = str(payload.get("file_path") or "").strip()
+        try:
+            return self._ingest_file_apply(
+                scope, actor_id, correlation_id, idempotency_key, payload
+            )
+        except Exception:
+            if file_path:
+                self._rollback_incomplete_file(
+                    scope,
+                    file_id=f"file:{scope.project_id}:{file_path}",
+                    file_path=file_path,
+                )
+            raise
+
+    def _mark_file_ingest_complete(self, scope: Scope, file_id: str) -> None:
+        current = self._maybe_get(file_id, scope)
+        if current is None:
+            return
+        meta = dict(current.metadata or {})
+        if meta.get("ingest_complete"):
+            return
+        meta["ingest_complete"] = True
+        current.metadata = meta
+        self.store.put_symbol(current)
+
+    def _rollback_incomplete_file(
+        self, scope: Scope, *, file_id: str, file_path: str
+    ) -> None:
+        """Drop a FILE stub written before a failed ingest so hash-skip cannot hide it."""
+        current = self._maybe_get(file_id, scope)
+        if current is None:
+            return
+        if (current.metadata or {}).get("ingest_complete"):
+            return
+        lister = getattr(self.store, "list_symbols_for_file", None)
+        existing = (
+            lister(scope, file_path)
+            if callable(lister)
+            else []
+        )
+        if any(
+            s.kind in {SymbolKind.FUNCTION, SymbolKind.METHOD, SymbolKind.CLASS}
+            and s.id != file_id
+            for s in existing
+        ):
+            return
+        deleter = getattr(self.store, "delete_symbol", None)
+        if callable(deleter):
+            deleter(file_id, scope)
+
+    def _ingest_file_apply(
         self,
         scope: Scope,
         actor_id: str,
@@ -83,6 +142,7 @@ class FileIngestMixin(
             clearer = getattr(self, "clear_pending_sync", None)
             if callable(clearer):
                 clearer(file_path)
+            self._mark_file_ingest_complete(scope, file_id)
             self.store.complete_idempotency(
                 scope,
                 idempotency_key,
@@ -105,6 +165,7 @@ class FileIngestMixin(
             clearer = getattr(self, "clear_pending_sync", None)
             if callable(clearer):
                 clearer(file_path)
+            self._mark_file_ingest_complete(scope, file_id)
             self.store.complete_idempotency(scope, idempotency_key, "ingest_file", file_id)
             return IngestResult(file_id, 0, 0, 0, 0, [])
 
@@ -309,6 +370,7 @@ class FileIngestMixin(
                     {"symbol_ids": changed_ids, "count": documented},
                 )
             )
+        self._mark_file_ingest_complete(scope, file_id)
         self.store.complete_idempotency(scope, idempotency_key, "ingest_file", file_id)
         return IngestResult(
             file_id=file_id,

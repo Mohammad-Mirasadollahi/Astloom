@@ -380,12 +380,42 @@ class PushedIngestMixin:
 
     def file_content_hashes(self, scope: Any) -> dict[str, str]:
         """Map relative FILE paths → stored content ``hash_value`` for client skip."""
-        out: dict[str, str] = {}
+        files, _docs = self.content_hash_maps(scope)
+        return files
+
+    def content_hash_maps(self, scope: Any) -> tuple[dict[str, str], dict[str, str]]:
+        """Return ``(file_hashes, human_doc_hashes)`` for unchanged-content skip.
+
+        FILE hashes are published only for completed ingest (``ingest_complete``
+        or at least one code child). A FILE stub written before a failed embed
+        must not skip the client's retry.
+        """
+        files: dict[str, Any] = {}
+        children: set[str] = set()
+        docs: dict[str, str] = {}
+        child_kinds = {SymbolKind.FUNCTION, SymbolKind.METHOD, SymbolKind.CLASS}
         for symbol in self.store.list_symbols(scope):
-            if getattr(symbol, "kind", None) != SymbolKind.FILE:
-                continue
+            kind = getattr(symbol, "kind", None)
             path = str(getattr(symbol, "file_path", "") or "").replace("\\", "/")
             digest = str(getattr(symbol, "hash_value", "") or "").strip()
-            if path and digest:
+            if not path:
+                continue
+            if kind == SymbolKind.FILE:
+                files[path] = symbol
+            elif kind in child_kinds:
+                children.add(path)
+            elif (
+                kind == SymbolKind.DOCUMENTATION
+                and str(getattr(symbol, "id", "")).startswith("doc:human:")
+                and digest
+            ):
+                docs[path] = digest
+        out: dict[str, str] = {}
+        for path, symbol in files.items():
+            digest = str(getattr(symbol, "hash_value", "") or "").strip()
+            if not digest:
+                continue
+            meta = getattr(symbol, "metadata", None) or {}
+            if meta.get("ingest_complete") or path in children:
                 out[path] = digest
-        return out
+        return out, docs

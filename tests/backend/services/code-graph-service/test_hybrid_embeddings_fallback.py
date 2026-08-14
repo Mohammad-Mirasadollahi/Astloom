@@ -25,6 +25,22 @@ class _BrokenGateway:
         raise RuntimeError("openrouter down")
 
 
+class _OkBatchGateway:
+    def embed_many(self, texts: list[str], *, model: str | None = None):
+        return [
+            SimpleNamespace(vector=[0.1] * 8, model=model or "embed-ok")
+            for _ in texts
+        ]
+
+
+class _BrokenBatchGateway:
+    def embed(self, text: str, *, model: str | None = None):
+        raise RuntimeError("openrouter down")
+
+    def embed_many(self, texts: list[str], *, model: str | None = None):
+        raise RuntimeError("openrouter down")
+
+
 def test_hybrid_embed_falls_back_to_stub_when_local_fails(monkeypatch) -> None:
     monkeypatch.setenv("ASTLOOM_LITELLM_EMBEDDINGS_ENABLED", "false")
     emb = HybridEmbeddings(
@@ -77,3 +93,39 @@ def test_hybrid_embed_fail_closed_when_litellm_embeddings_enabled(monkeypatch) -
     )
     with pytest.raises(RuntimeError, match="LiteLLM embedding failed"):
         emb.embed("hello")
+
+
+def test_hybrid_embed_many_uses_embed_symbol_route(monkeypatch) -> None:
+    monkeypatch.setenv("ASTLOOM_LITELLM_EMBEDDINGS_ENABLED", "true")
+    monkeypatch.setenv("ASTLOOM_LITELLM_MODEL_EMBED", "openrouter/baai/bge-large-en-v1.5")
+    from llm_gateway.routing import clear_routing_profile_cache
+
+    clear_routing_profile_cache()
+    emb = HybridEmbeddings(
+        gateway=_OkBatchGateway(),
+        local=None,
+        stub=LocalEmbeddingStub(dims=8),
+        dims=8,
+        settings=SimpleNamespace(enabled=True, default_model="x"),
+    )
+    rows = emb.embed_many(["a", "b"])
+    assert len(rows) == 2
+    assert all(len(row.vector) == 8 for row in rows)
+    assert emb.backend_name.startswith("litellm")
+
+
+def test_hybrid_embed_many_fail_closed_when_litellm_batch_fails(monkeypatch) -> None:
+    monkeypatch.setenv("ASTLOOM_LITELLM_EMBEDDINGS_ENABLED", "true")
+    monkeypatch.setenv("ASTLOOM_LITELLM_MODEL_EMBED", "openrouter/baai/bge-large-en-v1.5")
+    from llm_gateway.routing import clear_routing_profile_cache
+
+    clear_routing_profile_cache()
+    emb = HybridEmbeddings(
+        gateway=_BrokenBatchGateway(),
+        local=None,
+        stub=LocalEmbeddingStub(dims=8),
+        dims=8,
+        settings=SimpleNamespace(enabled=True, default_model="x"),
+    )
+    with pytest.raises(RuntimeError, match="LiteLLM embedding batch failed"):
+        emb.embed_many(["a", "b"])

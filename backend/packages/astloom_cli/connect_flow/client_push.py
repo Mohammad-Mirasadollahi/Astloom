@@ -30,7 +30,7 @@ from astloom_cli.util import ensure_service_import_paths
 ensure_service_import_paths()
 
 from code_graph_service.domain.errors import ValidationError
-from code_graph_service.domain.hashing import content_hash
+from code_graph_service.domain.hashing import content_hash, digest
 from code_graph_service.domain.path_safety import safe_repo_rel_path
 from code_graph_service.domain.repo_discovery import (
     DEFAULT_MAX_FILE_BYTES,
@@ -208,8 +208,17 @@ def _batches(
     return out
 
 
-def build_push_docs(root: Path, args: Any) -> list[dict[str, Any]]:
-    """Discover human Markdown docs for optional content-push docs phase."""
+def build_push_docs(
+    root: Path,
+    args: Any,
+    *,
+    remote_hashes: dict[str, str] | None = None,
+) -> tuple[list[dict[str, Any]], int]:
+    """Discover human Markdown docs for optional content-push docs phase.
+
+    Returns ``(docs_to_push, unchanged_skipped)``. Remote ``doc_hashes`` skip
+    bodies that already match so a second sync does not re-embed them.
+    """
     from astloom_cli.markdown_frontmatter import (
         parse_markdown_frontmatter,
         provisional_frontmatter,
@@ -223,10 +232,10 @@ def build_push_docs(root: Path, args: Any) -> list[dict[str, Any]]:
         cli_include_extensions=list(getattr(args, "include_ext", None) or []) or None,
     )
     if not filters.get("docs_enabled", True):
-        return []
+        return [], 0
     match_globs = list(filters.get("doc_match_globs") or [])
     if not match_globs:
-        return []
+        return [], 0
     max_files = resolve_discovery_max_files(getattr(args, "max_files", None))
     # CLI/sync --include-path must scope docs the same way as code discovery.
     doc_paths = list(filters.get("doc_paths") or [])
@@ -242,6 +251,8 @@ def build_push_docs(root: Path, args: Any) -> list[dict[str, Any]]:
         max_files=max_files,
     )
     docs: list[dict[str, Any]] = []
+    skipped = 0
+    known = remote_hashes or {}
     for item in discovered:
         rel = item.relative_path.replace("\\", "/")
         try:
@@ -264,6 +275,9 @@ def build_push_docs(root: Path, args: Any) -> list[dict[str, Any]]:
         tokens = frontmatter.get("linked_symbols") or []
         if not isinstance(tokens, list):
             tokens = []
+        if known.get(rel) == digest(body):
+            skipped += 1
+            continue
         docs.append(
             {
                 "doc_id": doc_id,
@@ -273,7 +287,7 @@ def build_push_docs(root: Path, args: Any) -> list[dict[str, Any]]:
                 "linked_symbol_tokens": [str(t) for t in tokens if str(t).strip()],
             }
         )
-    return docs
+    return docs, skipped
 
 
 def _http_headers(
@@ -323,10 +337,12 @@ def _graph_http_ready(settings: ConnectSettings) -> bool:
     return bool((settings.graph_url or "").strip() and (settings.api_token or "").strip())
 
 
-def fetch_remote_file_hashes(settings: ConnectSettings, args: Any) -> dict[str, str]:
-    """Best-effort FILE hash map over HTTPS (empty when graph_url isn't ready)."""
+def fetch_remote_file_hashes(
+    settings: ConnectSettings, args: Any
+) -> tuple[dict[str, str], dict[str, str]]:
+    """Best-effort FILE + human-doc hash maps over HTTPS (empty when not ready)."""
     if not _graph_http_ready(settings):
-        return {}
+        return {}, {}
     import httpx
 
     project = str(getattr(args, "project", None) or settings.project or "project")
@@ -340,21 +356,32 @@ def fetch_remote_file_hashes(settings: ConnectSettings, args: Any) -> dict[str, 
             verify=httpx_verify(settings),
         )
     except httpx.HTTPError:
-        return {}
+        return {}, {}
     if response.status_code >= 400:
-        return {}
+        return {}, {}
     try:
         payload = response.json()
     except Exception:  # noqa: BLE001
-        return {}
+        return {}, {}
     hashes = payload.get("hashes") if isinstance(payload, dict) else None
     if not isinstance(hashes, dict):
-        return {}
-    return {
+        return {}, {}
+    files = {
         str(k).replace("\\", "/"): str(v)
         for k, v in hashes.items()
         if str(k).strip() and str(v).strip()
     }
+    raw_docs = payload.get("doc_hashes") if isinstance(payload, dict) else None
+    docs = (
+        {
+            str(k).replace("\\", "/"): str(v)
+            for k, v in raw_docs.items()
+            if str(k).strip() and str(v).strip()
+        }
+        if isinstance(raw_docs, dict)
+        else {}
+    )
+    return files, docs
 
 
 def _run_ingest_push_http(
@@ -482,14 +509,14 @@ def client_push_sync(settings: ConnectSettings, args: Any, *, work: Path) -> int
     )
 
     print(f"   {ui.warn('…')} client content-push sync via HTTPS (no durable server checkout)")
-    remote_hashes = fetch_remote_file_hashes(settings, args)
+    remote_hashes, remote_doc_hashes = fetch_remote_file_hashes(settings, args)
     if _graph_http_ready(settings) and not remote_hashes:
         print(
             f"   {ui.warn('!')} remote file-hashes empty — unchanged files cannot be skipped "
             f"(check token / TLS / graph file-hashes)"
         )
     files, present, skipped, prune_ok = build_push_files(work, args, remote_hashes=remote_hashes)
-    docs = build_push_docs(work, args)
+    docs, doc_skipped = build_push_docs(work, args, remote_hashes=remote_doc_hashes)
     batches = _batches(files, present, docs=docs, include_present_paths=prune_ok)
     auto = max_files_is_auto(getattr(args, "max_files", None))
     cap = resolve_discovery_max_files(getattr(args, "max_files", None))
@@ -497,7 +524,7 @@ def client_push_sync(settings: ConnectSettings, args: Any, *, work: Path) -> int
         f"   {ui.dim('note')} present={len(present)}  "
         f"push={len(files)}  unchanged_skip={skipped}  "
         f"remote_hashes={len(remote_hashes)}  "
-        f"batches={len(batches)}  docs={len(docs)}  "
+        f"batches={len(batches)}  docs={len(docs)}  docs_skip={doc_skipped}  "
         f"prune={'on' if prune_ok else 'off'}  "
         f"max_files={'auto/' + str(cap) if auto else str(cap)}"
     )
@@ -519,6 +546,7 @@ def client_push_sync(settings: ConnectSettings, args: Any, *, work: Path) -> int
         "docs_upserted": 0,
         "docs_failed": 0,
     }
+    fail_reasons: list[str] = []
 
     from astloom_cli.sync_progress import SyncProgressTracker
 
@@ -548,6 +576,16 @@ def client_push_sync(settings: ConnectSettings, args: Any, *, work: Path) -> int
             docs_part = result.get("docs") if isinstance(result.get("docs"), dict) else {}
             totals["docs_upserted"] += int(docs_part.get("docs_upserted") or 0)
             totals["docs_failed"] += int(docs_part.get("docs_failed") or 0)
+            for item in result.get("outcomes") or []:
+                if not isinstance(item, dict) or item.get("status") != "failed":
+                    continue
+                detail = str(item.get("detail") or "").strip()
+                if detail:
+                    fail_reasons.append(detail)
+            for err in docs_part.get("errors") or []:
+                text = str(err).strip()
+                if text:
+                    fail_reasons.append(text)
     except BaseException:
         # Any non-clean exit (Ctrl+C, stream error line, HTTP failure) must not print
         # a green "finished / 100%" block ahead of the error message.
@@ -563,5 +601,13 @@ def client_push_sync(settings: ConnectSettings, args: Any, *, work: Path) -> int
         f"docs_upserted={totals['docs_upserted']}  docs_failed={totals['docs_failed']}",
     )
     if totals["files_failed"] or totals["docs_failed"]:
+        seen: list[str] = []
+        for reason in fail_reasons:
+            if reason in seen:
+                continue
+            seen.append(reason)
+            print(f"   {ui.warn('!')} {reason[:200]}")
+            if len(seen) >= 5:
+                break
         return 1
     return 0

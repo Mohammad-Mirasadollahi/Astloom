@@ -202,6 +202,7 @@ def test_ingest_push_stream_emits_docs_phase(monkeypatch):
     events = [json.loads(ln) for ln in lines]
     docs_progress = [e for e in events if e.get("type") == "progress" and e.get("phase") == "docs"]
     assert docs_progress, events
+    assert any(e.get("docs_indexed") == 1 for e in docs_progress), docs_progress
     assert events[-1]["type"] == "result"
     assert events[-1]["docs"]["docs_upserted"] == 1
 

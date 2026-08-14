@@ -170,6 +170,7 @@ def register(api: FastAPI, service: CodeGraphService) -> None:
                             "total": total,
                             "file": rel,
                             "status": doc_status,
+                            "docs_indexed": upserted,
                         }
                     )
             out["docs"] = {
@@ -371,10 +372,10 @@ def register(api: FastAPI, service: CodeGraphService) -> None:
         x_workspace_id: str = Header(),
         x_project_group_id: str | None = Header(default=None),
     ) -> dict[str, Any]:
-        hashes = service.file_content_hashes(
+        files, docs = service.content_hash_maps(
             scope_from(project_id, x_tenant_id, x_workspace_id, x_project_group_id)
         )
-        return {"hashes": hashes}
+        return {"hashes": files, "doc_hashes": docs}
 
     @api.post("/api/v1/projects/{project_id}/graph/ingest-runtime-traces")
     async def ingest_runtime_traces(

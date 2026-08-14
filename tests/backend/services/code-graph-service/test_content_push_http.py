@@ -66,6 +66,45 @@ def test_ingest_push_and_file_hashes_roundtrip(monkeypatch):
     )
     assert hashes.status_code == 200
     assert "src/a.py" in hashes.json()["hashes"]
+    assert hashes.json()["doc_hashes"]["docs/a.md"]
+
+
+def test_failed_ingest_does_not_publish_file_hash(monkeypatch):
+    from code_graph_service.domain.embeddings import LocalEmbeddingStub
+
+    class _BoomMany(LocalEmbeddingStub):
+        def embed_many(self, texts, *, is_query: bool = False):
+            raise RuntimeError("boom-embed-many")
+
+    monkeypatch.setenv("ASTLOOM_CODE_GRAPH_HTTP_TOKEN", "secret-token-123456")
+    service = CodeGraphService(InMemoryStore(), embeddings=_BoomMany())
+    client = TestClient(build_app(service))
+    headers = _headers(token="secret-token-123456")
+    push = client.post(
+        "/api/v1/projects/demo/graph/ingest-push",
+        headers=headers,
+        json={
+            "files": [
+                {
+                    "file_path": "src/a.py",
+                    "source": "def alpha():\n    return 1\n",
+                    "language": "python",
+                }
+            ],
+            "include_outcomes": True,
+        },
+    )
+    assert push.status_code == 200, push.text
+    assert push.json()["files_failed"] == 1
+    hashes = client.get(
+        "/api/v1/projects/demo/graph/file-hashes",
+        headers={
+            "X-Tenant-Id": "t",
+            "X-Workspace-Id": "w",
+            "Authorization": "Bearer secret-token-123456",
+        },
+    )
+    assert hashes.json()["hashes"] == {}
 
 
 def test_ingest_push_rejects_bad_token(monkeypatch):

@@ -422,9 +422,9 @@ def test_client_push_sync_stream_failure_marks_run_not_finished(monkeypatch, tmp
 
     monkeypatch.setattr(sync_progress, "SyncProgressTracker", _Tracker)
     monkeypatch.setattr(graph_cmd, "_require_cloud_llm_consent", lambda *a, **k: None)
-    monkeypatch.setattr(cp, "fetch_remote_file_hashes", lambda *a, **k: {})
+    monkeypatch.setattr(cp, "fetch_remote_file_hashes", lambda *a, **k: ({}, {}))
     monkeypatch.setattr(cp, "build_push_files", lambda *a, **k: ([], [], 0, True))
-    monkeypatch.setattr(cp, "build_push_docs", lambda *a, **k: [])
+    monkeypatch.setattr(cp, "build_push_docs", lambda *a, **k: ([], 0))
 
     def boom(*_a, **_k):
         raise SystemExit("error: ingest-push stream: boom")
@@ -455,7 +455,7 @@ def test_client_push_sync_note_shows_remote_hashes_and_batch_total(tmp_path: Pat
     from astloom_cli.connect_flow import client_push as cp
 
     monkeypatch.setattr(graph_cmd, "_require_cloud_llm_consent", lambda *a, **k: None)
-    monkeypatch.setattr(cp, "fetch_remote_file_hashes", lambda *a, **k: {"a.py": "h1"})
+    monkeypatch.setattr(cp, "fetch_remote_file_hashes", lambda *a, **k: ({"a.py": "h1"}, {}))
     monkeypatch.setattr(
         cp,
         "build_push_files",
@@ -466,7 +466,7 @@ def test_client_push_sync_note_shows_remote_hashes_and_batch_total(tmp_path: Pat
             True,
         ),
     )
-    monkeypatch.setattr(cp, "build_push_docs", lambda *a, **k: [])
+    monkeypatch.setattr(cp, "build_push_docs", lambda *a, **k: ([], 0))
     monkeypatch.setattr(cp, "_run_ingest_push", lambda *a, **k: {"files_ingested": 1, "files_failed": 0})
 
     class _Tracker:
@@ -499,6 +499,69 @@ def test_client_push_sync_note_shows_remote_hashes_and_batch_total(tmp_path: Pat
     assert "batches=1" in out
     assert "push batch 1/1" in out
     assert "prune=on" in out
+
+
+def test_client_push_sync_prints_unique_failure_details(tmp_path: Path, monkeypatch, capsys):
+    from argparse import Namespace
+
+    from astloom_cli import sync_progress
+    from astloom_cli.commands import graph as graph_cmd
+    from astloom_cli.connect_config import ConnectSettings
+    from astloom_cli.connect_flow import client_push as cp
+
+    monkeypatch.setattr(graph_cmd, "_require_cloud_llm_consent", lambda *a, **k: None)
+    monkeypatch.setattr(cp, "fetch_remote_file_hashes", lambda *a, **k: ({}, {}))
+    monkeypatch.setattr(
+        cp,
+        "build_push_files",
+        lambda *a, **k: (
+            [{"file_path": "a.py", "source": "x=1\n", "language": "python"}],
+            ["a.py"],
+            0,
+            True,
+        ),
+    )
+    monkeypatch.setattr(cp, "build_push_docs", lambda *a, **k: ([], 0))
+    monkeypatch.setattr(
+        cp,
+        "_run_ingest_push",
+        lambda *a, **k: {
+            "files_ingested": 0,
+            "files_failed": 2,
+            "outcomes": [
+                {"status": "failed", "detail": "resolve_route() got an unexpected keyword argument 'settings'"},
+                {"status": "failed", "detail": "resolve_route() got an unexpected keyword argument 'settings'"},
+            ],
+        },
+    )
+
+    class _Tracker:
+        def __init__(self, **_kwargs):
+            pass
+
+        def __call__(self, _event):
+            pass
+
+        def begin_phase(self):
+            pass
+
+        def finish(self, *, cancelled: bool = False):
+            pass
+
+    monkeypatch.setattr(sync_progress, "SyncProgressTracker", _Tracker)
+    settings = ConnectSettings(
+        graph_url="https://g.example",
+        api_token="tokentokentoken12",
+        tenant="t",
+        workspace="w",
+        project="p",
+    )
+    assert (
+        cp.client_push_sync(settings, Namespace(project="p", sync_mode="", progress_interval=30), work=tmp_path)
+        == 1
+    )
+    out = capsys.readouterr().out
+    assert out.count("unexpected keyword argument 'settings'") == 1
 
 
 def test_build_push_files_prune_ok_false_when_include_path(tmp_path: Path):
@@ -618,7 +681,8 @@ def test_build_push_docs_includes_frontmatter_doc(tmp_path: Path):
         encoding="utf-8",
     )
     args = Namespace(exclude_dir=[], include_path=[], include_ext=[], max_files=50)
-    docs = build_push_docs(tmp_path, args)
+    docs, skipped = build_push_docs(tmp_path, args)
+    assert skipped == 0
     assert any(d["doc_id"] == "as.doc.test.note" for d in docs)
     batches = _batches([], ["src/a.py"], docs=docs)
     assert len(batches) == 1
@@ -660,10 +724,52 @@ def test_build_push_docs_honors_include_path(tmp_path: Path):
         include_ext=[],
         max_files=50,
     )
-    docs = build_push_docs(tmp_path, args)
+    docs, skipped = build_push_docs(tmp_path, args)
+    assert skipped == 0
     ids = {d["doc_id"] for d in docs}
     assert "as.doc.chat.readme" in ids
     assert "as.doc.other.readme" not in ids
+
+
+def test_build_push_docs_skips_matching_remote_hash(tmp_path: Path):
+    from argparse import Namespace
+
+    from astloom_cli.connect_flow.client_push import build_push_docs
+    from astloom_cli.markdown_frontmatter import parse_markdown_frontmatter
+    from code_graph_service.domain.hashing import digest
+
+    (tmp_path / "astloom.sync.yaml").write_text(
+        "code:\n  exclude: []\ndocs:\n  match:\n    - '**/*.md'\n  exclude: []\n",
+        encoding="utf-8",
+    )
+    docs_dir = tmp_path / "docs"
+    docs_dir.mkdir()
+    (docs_dir / "note.md").write_text(
+        "---\n"
+        "doc_id: as.doc.test.note\n"
+        "title: Note\n"
+        "doc_type: note\n"
+        "status: active\n"
+        "schema_version: '1.0'\n"
+        "owner: tests\n"
+        "summary: test\n"
+        "tags: [test]\n"
+        "phase: test\n"
+        "canonical_path: docs/note.md\n"
+        "---\n"
+        "\n"
+        "# Note\n",
+        encoding="utf-8",
+    )
+    args = Namespace(exclude_dir=[], include_path=[], include_ext=[], max_files=50)
+    _docs, first_skip = build_push_docs(tmp_path, args)
+    assert first_skip == 0
+    _fm, body = parse_markdown_frontmatter((tmp_path / "docs" / "note.md").read_text())
+    docs, skipped = build_push_docs(
+        tmp_path, args, remote_hashes={"docs/note.md": digest(body)}
+    )
+    assert docs == []
+    assert skipped == 1
 
 
 def test_fetch_remote_file_hashes_prefers_http(monkeypatch):
@@ -699,8 +805,9 @@ def test_fetch_remote_file_hashes_prefers_http(monkeypatch):
         workspace="w",
     )
     assert cp._graph_http_ready(settings)
-    hashes = cp.fetch_remote_file_hashes(settings, Namespace(project="p"))
-    assert hashes == {"a.py": "abc"}
+    files, docs = cp.fetch_remote_file_hashes(settings, Namespace(project="p"))
+    assert files == {"a.py": "abc"}
+    assert docs == {}
 
 
 def test_cmd_ingest_push_applies_docs(monkeypatch):
