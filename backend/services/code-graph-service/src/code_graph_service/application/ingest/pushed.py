@@ -386,9 +386,8 @@ class PushedIngestMixin:
     def content_hash_maps(self, scope: Any) -> tuple[dict[str, str], dict[str, str]]:
         """Return ``(file_hashes, human_doc_hashes)`` for unchanged-content skip.
 
-        FILE hashes are published only for completed ingest (``ingest_complete``
-        or at least one code child). A FILE stub written before a failed embed
-        must not skip the client's retry.
+        FILE hashes are published only when the file has code children.
+        A FILE stub written before a failed embed must not skip the retry.
         """
         files: dict[str, Any] = {}
         children: set[str] = set()
@@ -413,9 +412,6 @@ class PushedIngestMixin:
         out: dict[str, str] = {}
         for path, symbol in files.items():
             digest = str(getattr(symbol, "hash_value", "") or "").strip()
-            if not digest:
-                continue
-            meta = getattr(symbol, "metadata", None) or {}
-            if meta.get("ingest_complete") or path in children:
+            if digest and path in children:
                 out[path] = digest
         return out, docs

@@ -67,6 +67,17 @@ class FileIngestMixin(
         current.metadata = meta
         self.store.put_symbol(current)
 
+    def _file_has_code_children(
+        self, scope: Scope, *, file_id: str, file_path: str
+    ) -> bool:
+        lister = getattr(self.store, "list_symbols_for_file", None)
+        existing = lister(scope, file_path) if callable(lister) else []
+        return any(
+            s.kind in {SymbolKind.FUNCTION, SymbolKind.METHOD, SymbolKind.CLASS}
+            and s.id != file_id
+            for s in existing
+        )
+
     def _rollback_incomplete_file(
         self, scope: Scope, *, file_id: str, file_path: str
     ) -> None:
@@ -74,19 +85,7 @@ class FileIngestMixin(
         current = self._maybe_get(file_id, scope)
         if current is None:
             return
-        if (current.metadata or {}).get("ingest_complete"):
-            return
-        lister = getattr(self.store, "list_symbols_for_file", None)
-        existing = (
-            lister(scope, file_path)
-            if callable(lister)
-            else []
-        )
-        if any(
-            s.kind in {SymbolKind.FUNCTION, SymbolKind.METHOD, SymbolKind.CLASS}
-            and s.id != file_id
-            for s in existing
-        ):
+        if self._file_has_code_children(scope, file_id=file_id, file_path=file_path):
             return
         deleter = getattr(self.store, "delete_symbol", None)
         if callable(deleter):
@@ -150,14 +149,16 @@ class FileIngestMixin(
                 file_id,
             )
             return IngestResult(file_id, updated, 0, 0, 0, [])
-        # Skip only when content is unchanged, language is persisted, and CONTAINS
-        # edges still exist (edgeless FILE rows need repair after graph wipe/drift).
+        # Skip only when content is unchanged, language is persisted, code
+        # children exist, and CONTAINS edges are intact. A FILE stub written
+        # before a failed embed has no children — must not skip.
         if (
             previous_file is not None
             and previous_file.hash_value == file_hash
             and previous_file.hash_version == hash_version
             and previous_file.parser_version == parser_ver
             and str(previous_file.language or "").strip()
+            and self._file_has_code_children(scope, file_id=file_id, file_path=file_path)
             and not file_needs_contains_repair(
                 self.store, scope, file_id=file_id, file_path=file_path
             )
@@ -165,7 +166,6 @@ class FileIngestMixin(
             clearer = getattr(self, "clear_pending_sync", None)
             if callable(clearer):
                 clearer(file_path)
-            self._mark_file_ingest_complete(scope, file_id)
             self.store.complete_idempotency(scope, idempotency_key, "ingest_file", file_id)
             return IngestResult(file_id, 0, 0, 0, 0, [])
 

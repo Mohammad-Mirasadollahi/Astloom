@@ -69,6 +69,65 @@ def test_ingest_push_and_file_hashes_roundtrip(monkeypatch):
     assert hashes.json()["doc_hashes"]["docs/a.md"]
 
 
+def test_file_stub_without_children_is_not_hash_skipped(monkeypatch):
+    from code_graph_service.domain.enums import DocStatus, SymbolKind
+    from code_graph_service.domain.hashing import content_hash, now_iso
+    from code_graph_service.domain.models import GraphSymbol, Scope
+
+    monkeypatch.setenv("ASTLOOM_CODE_GRAPH_HTTP_TOKEN", "secret-token-123456")
+    store = InMemoryStore()
+    source = "def alpha():\n    return 1\n"
+    hashed = content_hash(source, "python")
+    scope = Scope("t", "w", "demo")
+    store.put_symbol(
+        GraphSymbol(
+            id="file:demo:src/a.py",
+            scope=scope,
+            kind=SymbolKind.FILE,
+            file_path="src/a.py",
+            name="a.py",
+            qualified_name="src/a.py",
+            signature="src/a.py",
+            body=source,
+            hash_value=hashed["hash"],
+            ai_documentation="",
+            doc_status=DocStatus.UNCHANGED,
+            embedding=[0.1] * 8,
+            language="python",
+            hash_version=hashed["hash_version"],
+            parser_version=hashed["parser_version"],
+            created_at=now_iso(),
+            updated_at=now_iso(),
+            metadata={"ingest_complete": True},
+        )
+    )
+    service = CodeGraphService(store)
+    client = TestClient(build_app(service))
+    headers = {
+        "X-Tenant-Id": "t",
+        "X-Workspace-Id": "w",
+        "Authorization": "Bearer secret-token-123456",
+    }
+    assert client.get("/api/v1/projects/demo/graph/file-hashes", headers=headers).json()[
+        "hashes"
+    ] == {}
+    push = client.post(
+        "/api/v1/projects/demo/graph/ingest-push",
+        headers={**headers, "X-Actor-Id": "tester", "Idempotency-Key": "retry-stub"},
+        json={
+            "files": [
+                {"file_path": "src/a.py", "source": source, "language": "python"}
+            ],
+            "include_outcomes": True,
+        },
+    )
+    assert push.status_code == 200, push.text
+    assert push.json()["files_ingested"] == 1
+    assert "src/a.py" in client.get(
+        "/api/v1/projects/demo/graph/file-hashes", headers=headers
+    ).json()["hashes"]
+
+
 def test_failed_ingest_does_not_publish_file_hash(monkeypatch):
     from code_graph_service.domain.embeddings import LocalEmbeddingStub
 
