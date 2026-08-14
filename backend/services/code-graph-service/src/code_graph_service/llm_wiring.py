@@ -48,6 +48,11 @@ def reduce_dims(vector: list[float], dims: int) -> list[float]:
     return [round(v / norm, 6) for v in out]
 
 
+def _is_embed_context_error(exc: BaseException) -> bool:
+    msg = str(exc).lower()
+    return "context length" in msg or "input tokens" in msg
+
+
 def truncate_embedding_input(
     text: str,
     *,
@@ -57,23 +62,23 @@ def truncate_embedding_input(
     """Clamp embed text under the model context (BGE-large hosted = 512 tokens).
 
     Local SentenceTransformers silently truncates; OpenRouter BGE rejects over-limit
-    prompts with HTTP 400. Use a conservative chars/token ratio — code+docs often
-    tokenize denser than 4 chars/token (480×4 still produced 513-token rejects).
+    prompts with HTTP 400. Code+docs tokenize denser than 3–4 chars/token
+    (480×3 still produced 513-token rejects). Default 360×2.5 stays under 512.
     """
     import os
 
     if max_tokens is None:
-        raw = str(os.environ.get("ASTLOOM_EMBEDDING_MAX_INPUT_TOKENS", "480")).strip()
+        raw = str(os.environ.get("ASTLOOM_EMBEDDING_MAX_INPUT_TOKENS", "360")).strip()
         try:
-            max_tokens = int(raw) if raw else 480
+            max_tokens = int(raw) if raw else 360
         except ValueError:
-            max_tokens = 480
+            max_tokens = 360
     if chars_per_token is None:
-        raw_cpt = str(os.environ.get("ASTLOOM_EMBEDDING_CHARS_PER_TOKEN", "3")).strip()
+        raw_cpt = str(os.environ.get("ASTLOOM_EMBEDDING_CHARS_PER_TOKEN", "2.5")).strip()
         try:
-            chars_per_token = float(raw_cpt) if raw_cpt else 3.0
+            chars_per_token = float(raw_cpt) if raw_cpt else 2.5
         except ValueError:
-            chars_per_token = 3.0
+            chars_per_token = 2.5
     if max_tokens <= 0:
         return text
     max_chars = max(8, int(max_tokens * float(chars_per_token)))
@@ -269,10 +274,9 @@ class HybridEmbeddings:
             except Exception as exc:  # noqa: BLE001
                 last_error = exc
                 # Hosted BGE-large is hard-capped at 512 tokens; shrink and retry once.
-                msg = str(exc).lower()
-                if "context length" in msg or "input tokens" in msg:
+                if _is_embed_context_error(exc):
                     text = truncate_embedding_input(
-                        text, max_tokens=360, chars_per_token=2.5
+                        text, max_tokens=280, chars_per_token=2.0
                     )
                     try:
                         result = self.gateway.embed(text, model=model)
@@ -347,6 +351,30 @@ class HybridEmbeddings:
                         return out
                     except Exception as exc:  # noqa: BLE001
                         last_error = exc
+                        if _is_embed_context_error(exc):
+                            texts = [
+                                truncate_embedding_input(
+                                    t, max_tokens=280, chars_per_token=2.0
+                                )
+                                for t in texts
+                            ]
+                            try:
+                                raw = list(gw_batch(texts, model=model))
+                                out = [
+                                    EmbeddingResult(
+                                        reduce_dims(list(item.vector), self.dims),
+                                        "ready",
+                                        item.model,
+                                        self.dims,
+                                    )
+                                    for item in raw
+                                ]
+                                if out:
+                                    self.model = out[0].model
+                                    self._backend = "litellm"
+                                return out
+                            except Exception as retry_exc:  # noqa: BLE001
+                                last_error = retry_exc
                         continue
                 if last_error is not None:
                     raise RuntimeError(

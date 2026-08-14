@@ -67,6 +67,16 @@ def test_hybrid_embed_many_falls_back_when_local_batch_fails(monkeypatch) -> Non
     assert all(len(row.vector) == 8 for row in rows)
 
 
+def test_truncate_embedding_input_default_stays_under_bge_cap(monkeypatch) -> None:
+    from code_graph_service.llm_wiring import truncate_embedding_input
+
+    monkeypatch.delenv("ASTLOOM_EMBEDDING_MAX_INPUT_TOKENS", raising=False)
+    monkeypatch.delenv("ASTLOOM_EMBEDDING_CHARS_PER_TOKEN", raising=False)
+    out = truncate_embedding_input("x" * 5000)
+    assert len(out) <= 360 * 2.5
+    assert out.endswith("…")
+
+
 def test_truncate_embedding_input_respects_token_budget(monkeypatch) -> None:
     from code_graph_service.llm_wiring import truncate_embedding_input
 
@@ -129,3 +139,36 @@ def test_hybrid_embed_many_fail_closed_when_litellm_batch_fails(monkeypatch) -> 
     )
     with pytest.raises(RuntimeError, match="LiteLLM embedding batch failed"):
         emb.embed_many(["a", "b"])
+
+
+def test_hybrid_embed_many_retries_after_token_limit(monkeypatch) -> None:
+    monkeypatch.setenv("ASTLOOM_LITELLM_EMBEDDINGS_ENABLED", "true")
+    monkeypatch.setenv("ASTLOOM_LITELLM_MODEL_EMBED", "openrouter/baai/bge-large-en-v1.5")
+    from llm_gateway.routing import clear_routing_profile_cache
+
+    clear_routing_profile_cache()
+
+    class _TokenThenOk:
+        calls = 0
+
+        def embed_many(self, texts: list[str], *, model: str | None = None):
+            type(self).calls += 1
+            if type(self).calls == 1:
+                raise RuntimeError(
+                    "You passed 513 input tokens and requested 0 output tokens."
+                )
+            return [
+                SimpleNamespace(vector=[0.1] * 8, model=model or "embed-ok")
+                for _ in texts
+            ]
+
+    emb = HybridEmbeddings(
+        gateway=_TokenThenOk(),
+        local=None,
+        stub=LocalEmbeddingStub(dims=8),
+        dims=8,
+        settings=SimpleNamespace(enabled=True, default_model="x"),
+    )
+    rows = emb.embed_many(["a" * 2000, "b" * 2000])
+    assert len(rows) == 2
+    assert _TokenThenOk.calls == 2
