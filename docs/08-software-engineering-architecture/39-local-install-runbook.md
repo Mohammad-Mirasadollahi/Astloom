@@ -42,6 +42,8 @@ linked_symbols:
 - backend/packages/astloom_cli/install_auth.py::print_auth_summary
 - backend/packages/astloom_cli/service_runtime/mcp.py::prepare_mcp_env
 - backend/packages/astloom_cli/service_runtime/mcp.py::start_mcp_http
+- backend/packages/astloom_cli/service_runtime/https_apis.py::start_https_apis
+- backend/packages/astloom_cli/service_runtime/lifecycle.py::start_all
 - scripts/install/tls_edge/ensure_certs.sh
 - backend/packages/astloom_cli/data_root.py::ensure_data_root
 - backend/packages/astloom_cli/tls_certs.py::ensure_tls_material
@@ -157,6 +159,11 @@ Host MCP (`astloom service start` / install stage 06) and Compose `mcp-gateway` 
 `ASTLOOM_MCP_HTTP_PUBLIC_URL` defaults to `https://…:32500` (set `ASTLOOM_PUBLIC_HOSTNAME`
 for the advertise host clients should use). Escape hatch: `ASTLOOM_MCP_TLS=0` (plain HTTP;
 clients then need `ASTLOOM_ALLOW_INSECURE_HTTP=1`).
+
+The same `astloom service start` **must** also start **code-graph HTTPS** on
+`ASTLOOM_CODE_GRAPH_PORT` (default `32140`). Remote `astloom-client sync` calls
+`server.graph_url` for `file-hashes` / `ingest-push`; databases + MCP alone are a
+false “Astloom is up” for content-push (`Connection refused` on ingest-push).
 
 Client certificate validation is separate: see
 [52 - Client TLS Trust And Certificate Verify](./52-client-tls-trust-and-verify.md)
@@ -316,6 +323,7 @@ Recipe, example Caddyfile, and routing table: [`scripts/install/tls_edge/README.
 | Compose env placeholder password | Example file copied without replace | Re-run `bash install.sh --stage 03_compose_env` |
 | Neo4j wait timeout | Slow first pull / plugins | Increase `--compose-timeout 300`; check `docker logs astloom-neo4j-1` |
 | `ingest-push` Bolt handshake / `Couldn't connect` to `:32287` | Neo4j JVM heap OOM (historically 512M) | Raise `ASTLOOM_NEO4J_HEAP_MAX_SIZE` (default **4G**), recreate `neo4j`; [81](../07-code-knowledge-graph/81-neo4j-memory-and-content-push-oom-runbook.md) |
+| `HTTP ingest-push failed: Connection refused` / empty `file-hashes` | code-graph HTTPS not listening on `ASTLOOM_CODE_GRAPH_PORT` (32140) | `astloom service start` must start code-graph HTTPS (not only MCP); check `astloom service status` / `.astloom/run/code-graph-https.log` |
 | `astloom doctor` fail | Incomplete venv | `bash install.sh --stage 02_venv` |
 
 State markers (optional resume hints): `.astloom/install-state.env`.

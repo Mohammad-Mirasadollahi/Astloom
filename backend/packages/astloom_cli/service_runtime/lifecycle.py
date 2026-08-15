@@ -9,21 +9,33 @@ from typing import Any
 from astloom_cli.service_runtime.progress import progress
 
 
-def service_state(compose: dict[str, Any], mcp: dict[str, Any]) -> str:
+def service_state(
+    compose: dict[str, Any],
+    mcp: dict[str, Any],
+    https_apis: dict[str, Any] | None = None,
+) -> str:
     """Human-readable overall state — names what is wrong, never vague labels."""
     compose_ok = bool(compose.get("ok"))
     mcp_ok = bool(mcp.get("ok"))
     mcp_running = bool(mcp.get("running"))
     mcp_reachable = bool(mcp.get("reachable"))
-    if compose_ok and mcp_ok:
+    graph = https_apis if https_apis is not None else {"ok": True, "running": True, "reachable": True}
+    graph_ok = bool(graph.get("ok"))
+    graph_running = bool(graph.get("running"))
+    graph_reachable = bool(graph.get("reachable"))
+    if compose_ok and mcp_ok and graph_ok:
         return "all running"
-    if not compose_ok and not mcp_running:
+    if not compose_ok and not mcp_running and not graph_running:
         return "stopped"
+    if compose_ok and not graph_running:
+        return "code-graph HTTPS stopped"
+    if compose_ok and graph_running and not graph_reachable:
+        return "code-graph HTTPS not reachable"
     if compose_ok and not mcp_running:
         return "MCP HTTP stopped"
     if compose_ok and mcp_running and not mcp_reachable:
         return "MCP HTTP not reachable"
-    if not compose_ok and mcp_ok:
+    if not compose_ok and mcp_ok and graph_ok:
         return "Compose not healthy"
     return "not fully running"
 
@@ -36,6 +48,7 @@ def status_all(root: Path) -> dict[str, Any]:
     load_dotenv_files(root=root)
     compose = runtime.compose_status(root)
     mcp = runtime.mcp_status(root)
+    https_apis = runtime.https_apis_status(root)
     boot = runtime.boot_status(root)
     stamps: list[str | None] = [
         (info or {}).get("started_at")
@@ -44,12 +57,15 @@ def status_all(root: Path) -> dict[str, Any]:
     ]
     if mcp.get("running"):
         stamps.append(mcp.get("started_at"))
+    if https_apis.get("running"):
+        stamps.append(https_apis.get("started_at"))
     restarted_at = stack_restarted_at(*stamps)
     out: dict[str, Any] = {
-        "status": service_state(compose, mcp),
+        "status": service_state(compose, mcp, https_apis),
         "repo_root": str(root),
         "compose": compose,
         "mcp": mcp,
+        "https_apis": https_apis,
         "boot": boot,
     }
     if restarted_at:
@@ -66,11 +82,12 @@ def start_all(root: Path, *, as_part_of: str | None = None) -> dict[str, Any]:
     if as_part_of == "restart":
         progress("Restart: starting services")
     else:
-        progress("Starting Astloom (databases, then MCP HTTP)")
+        progress("Starting Astloom (databases, code-graph HTTPS, then MCP HTTP)")
     _run_port_preflight(root)
     compose = runtime.start_compose(root)
+    https_apis = runtime.start_https_apis(root)
     mcp = runtime.start_mcp_http(root)
-    ok = bool(compose.get("ok") and mcp.get("ok"))
+    ok = bool(compose.get("ok") and https_apis.get("ok") and mcp.get("ok"))
     if ok:
         if as_part_of == "restart":
             progress("Restart: services are up")
@@ -81,7 +98,7 @@ def start_all(root: Path, *, as_part_of: str | None = None) -> dict[str, Any]:
             progress("Restart: start finished with errors")
         else:
             progress("Start finished with errors — Astloom is not fully up")
-    return {"ok": ok, "compose": compose, "mcp": mcp}
+    return {"ok": ok, "compose": compose, "https_apis": https_apis, "mcp": mcp}
 
 
 def _run_port_preflight(root: Path) -> None:
@@ -92,11 +109,15 @@ def _run_port_preflight(root: Path) -> None:
 
     progress("Port preflight: checking profile ports")
     profile = load_profile()
+    allowed: set[int] = set()
     mcp_pid = runtime.read_mcp_pid(root)
+    if mcp_pid is not None:
+        allowed.add(mcp_pid)
+    allowed |= runtime.read_https_api_pids(root)
     report = run_preflight(
         profile,
         allow_ours=True,
-        allowed_pids={mcp_pid} if mcp_pid is not None else set(),
+        allowed_pids=allowed,
         repo_root=root,
     )
     map_path = write_port_map(root / DEFAULT_PORT_MAP_REL, report)
@@ -128,10 +149,11 @@ def stop_all(root: Path, *, as_part_of: str | None = None) -> dict[str, Any]:
     if as_part_of == "restart":
         progress("Restart: stopping services")
     else:
-        progress("Stopping Astloom (MCP HTTP, then databases)")
+        progress("Stopping Astloom (MCP HTTP, code-graph HTTPS, then databases)")
     mcp = runtime.stop_mcp_http(root)
+    https_apis = runtime.stop_https_apis(root)
     compose = runtime.stop_compose(root)
-    ok = bool(mcp.get("ok") and compose.get("ok"))
+    ok = bool(mcp.get("ok") and https_apis.get("ok") and compose.get("ok"))
     if ok:
         if as_part_of == "restart":
             progress("Restart: services are stopped")
@@ -142,7 +164,7 @@ def stop_all(root: Path, *, as_part_of: str | None = None) -> dict[str, Any]:
             progress("Restart: stop finished with errors")
         else:
             progress("Stop finished with errors — Astloom may still be partly up")
-    return {"ok": ok, "mcp": mcp, "compose": compose}
+    return {"ok": ok, "mcp": mcp, "https_apis": https_apis, "compose": compose}
 
 
 def restart_all(root: Path) -> dict[str, Any]:
@@ -203,7 +225,7 @@ def ensure_running_or_offer_start(
 
     print()
     print(f"Software is not running ({state}).")
-    print("Sync needs Compose (postgres/neo4j) and MCP HTTP.")
+    print("Sync needs Compose (postgres/neo4j), code-graph HTTPS, and MCP HTTP.")
     answer = (input_fn or _read_yes_no)("Start software now? [y/N]: ").strip().lower()
     if answer not in {"y", "yes"}:
         raise SystemExit("error: sync cancelled (software not running)")

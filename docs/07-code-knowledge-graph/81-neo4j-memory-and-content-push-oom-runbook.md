@@ -179,6 +179,15 @@ To temporarily lower memory on a small host, set the three `ASTLOOM_NEO4J_*_SIZE
 vars downward and recreate `neo4j`. Do **not** reintroduce a hard-coded `512M`
 in `compose.yaml`.
 
+## Related failure: code-graph HTTPS down
+
+If the client shows `HTTP ingest-push failed: [Errno 111] Connection refused`
+(and often empty remote `file-hashes`) while `astloom service start` reported
+success, the server likely started **only** Compose + MCP HTTP. Content-push
+requires **code-graph HTTPS** on `ASTLOOM_CODE_GRAPH_PORT` (default `32140`).
+Current `astloom service start` starts that listener; verify with
+`astloom service status` and `.astloom/run/code-graph-https.log`.
+
 ## Related Documents
 
 - [12 - Neo4j Runtime Plugins](./12-neo4j-runtime-plugins.md)

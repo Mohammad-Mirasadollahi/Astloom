@@ -24,6 +24,13 @@ from astloom_cli.service_runtime.compose import (
     stop_compose,
     stop_mcp_gateway,
 )
+from astloom_cli.service_runtime.https_apis import (
+    https_apis_status,
+    read_code_graph_pid,
+    read_https_api_pids,
+    start_https_apis,
+    stop_https_apis,
+)
 from astloom_cli.service_runtime.lifecycle import (
     ensure_running_or_offer_start,
     restart_all,
@@ -43,10 +50,16 @@ from astloom_cli.service_runtime.mcp import (
     tcp_ok as _tcp_ok,
 )
 from astloom_cli.service_runtime.paths import (
+    CODE_GRAPH_READY_TIMEOUT_SEC,
     COMPOSE_SERVICES,
+    DEFAULT_CODE_GRAPH_HOST,
+    DEFAULT_CODE_GRAPH_PORT,
     DEFAULT_MCP_HOST,
     DEFAULT_MCP_PORT,
+    DEFAULT_PROJECT_PROFILE_PORT,
     UNIT_NAME,
+    code_graph_log_path,
+    code_graph_pid_path,
     compose_dir,
     compose_env_file,
     compose_file,
@@ -56,6 +69,8 @@ from astloom_cli.service_runtime.paths import (
     mcp_pid_path,
     mcp_secret_path,
     missing_local_stack_message,
+    project_profile_log_path,
+    project_profile_pid_path,
     run_dir,
 )
 from astloom_cli.service_runtime.progress import (
@@ -68,9 +83,13 @@ from astloom_cli.service_runtime.progress import (
 )
 
 __all__ = [
+    "CODE_GRAPH_READY_TIMEOUT_SEC",
     "COMPOSE_SERVICES",
+    "DEFAULT_CODE_GRAPH_HOST",
+    "DEFAULT_CODE_GRAPH_PORT",
     "DEFAULT_MCP_HOST",
     "DEFAULT_MCP_PORT",
+    "DEFAULT_PROJECT_PROFILE_PORT",
     "UNIT_NAME",
     "_format_docker_started_at",
     "_pid_alive",
@@ -82,6 +101,8 @@ __all__ = [
     "boot_disable",
     "boot_enable",
     "boot_status",
+    "code_graph_log_path",
+    "code_graph_pid_path",
     "collect_detail",
     "compose_base_cmd",
     "compose_dir",
@@ -93,6 +114,7 @@ __all__ = [
     "dump_json",
     "ensure_running_or_offer_start",
     "format_process_started_at",
+    "https_apis_status",
     "install_role",
     "local_compose_stack_present",
     "mcp_log_path",
@@ -101,6 +123,10 @@ __all__ = [
     "mcp_status",
     "missing_local_stack_message",
     "prepare_mcp_env",
+    "project_profile_log_path",
+    "project_profile_pid_path",
+    "read_code_graph_pid",
+    "read_https_api_pids",
     "read_log_tail",
     "read_mcp_pid",
     "restart_all",
@@ -109,10 +135,12 @@ __all__ = [
     "stack_restarted_at",
     "start_all",
     "start_compose",
+    "start_https_apis",
     "start_mcp_http",
     "status_all",
     "stop_all",
     "stop_compose",
+    "stop_https_apis",
     "stop_mcp_gateway",
     "stop_mcp_http",
     "unit_body",

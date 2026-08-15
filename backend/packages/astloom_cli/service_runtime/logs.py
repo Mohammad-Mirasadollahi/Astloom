@@ -6,7 +6,7 @@ import json
 from pathlib import Path
 from typing import Any
 
-from astloom_cli.service_runtime.paths import mcp_log_path
+from astloom_cli.service_runtime.paths import code_graph_log_path, mcp_log_path
 
 
 def read_log_tail(path: Path, *, lines: int = 80) -> dict[str, Any]:
@@ -42,14 +42,17 @@ def read_log_tail(path: Path, *, lines: int = 80) -> dict[str, Any]:
 
 
 def collect_detail(root: Path, report: dict[str, Any], *, lines: int = 80) -> dict[str, Any]:
-    """Gather MCP + unhealthy Compose log tails for ``astloom service detail``."""
+    """Gather MCP + code-graph + unhealthy Compose log tails for ``astloom service detail``."""
     # Late lookup so tests can monkeypatch ``service_runtime.compose_logs_tail``.
     from astloom_cli import service_runtime as runtime
 
     mcp = report.get("mcp") or {}
+    https_apis = report.get("https_apis") or {}
     log_path = Path(str(mcp.get("log") or mcp_log_path(root)))
+    graph_log = Path(str(https_apis.get("log") or code_graph_log_path(root)))
     detail: dict[str, Any] = {
         "mcp_http": read_log_tail(log_path, lines=lines),
+        "code_graph_https": read_log_tail(graph_log, lines=lines),
         "compose": {},
     }
     compose = report.get("compose") or {}

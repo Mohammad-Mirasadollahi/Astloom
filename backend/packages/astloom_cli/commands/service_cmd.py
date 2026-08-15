@@ -100,14 +100,49 @@ def _print_mcp_stopped(mcp: dict) -> None:
         ui.kv("Process", ui.err(action))
 
 
+def _print_https_started(https_apis: dict) -> None:
+    ui.blank()
+    ui.section("code-graph HTTPS")
+    if not https_apis.get("ok"):
+        ui.kv("State", ui.err(str(https_apis.get("action") or "failed")))
+        if https_apis.get("log"):
+            ui.kv("Log", str(https_apis["log"]))
+        return
+    ts = https_apis.get("started_at") or "?"
+    bits = [f"started at {ts}"]
+    if https_apis.get("pid"):
+        bits.append(f"pid {https_apis['pid']}")
+    if https_apis.get("host") is not None and https_apis.get("port") is not None:
+        bits.append(f"{https_apis['host']}:{https_apis['port']}")
+    ui.kv("Process", ui.ok("  ".join(bits)))
+    if https_apis.get("log"):
+        ui.kv("Log", str(https_apis["log"]))
+
+
+def _print_https_stopped(https_apis: dict) -> None:
+    ui.blank()
+    ui.section("code-graph HTTPS")
+    action = str(https_apis.get("action") or ("stopped" if https_apis.get("ok") else "failed"))
+    if action == "already_stopped":
+        ui.kv("Process", ui.dim("already stopped"))
+        return
+    if https_apis.get("ok"):
+        pid = https_apis.get("pid")
+        ui.kv("Process", ui.ok(f"stopped (was pid {pid})" if pid else "stopped"))
+    else:
+        ui.kv("Process", ui.err(action))
+
+
 def _print_start_report(report: dict) -> None:
     _print_compose_started(report.get("compose") or {})
+    _print_https_started(report.get("https_apis") or {})
     _print_mcp_started(report.get("mcp") or {})
     ui.blank()
 
 
 def _print_stop_report(report: dict) -> None:
     _print_mcp_stopped(report.get("mcp") or {})
+    _print_https_stopped(report.get("https_apis") or {})
     _print_compose_stopped(report.get("compose") or {})
     ui.blank()
 
@@ -118,6 +153,7 @@ def _print_restart_report(report: dict) -> None:
     ui.blank()
     ui.section("Stopped")
     mcp_stop = stop.get("mcp") or {}
+    https_stop = stop.get("https_apis") or {}
     compose_stop = stop.get("compose") or {}
     action = str(mcp_stop.get("action") or "")
     if action == "already_stopped":
@@ -127,6 +163,14 @@ def _print_restart_report(report: dict) -> None:
         ui.kv("MCP HTTP", ui.ok(f"stopped (was pid {pid})" if pid else "stopped"))
     else:
         ui.kv("MCP HTTP", ui.err(action or "failed"))
+    https_action = str(https_stop.get("action") or "")
+    if https_action == "already_stopped":
+        ui.kv("code-graph HTTPS", ui.dim("already stopped"))
+    elif https_stop.get("ok"):
+        pid = https_stop.get("pid")
+        ui.kv("code-graph HTTPS", ui.ok(f"stopped (was pid {pid})" if pid else "stopped"))
+    else:
+        ui.kv("code-graph HTTPS", ui.err(https_action or "failed"))
     for name in compose_stop.get("services") or []:
         text = "stopped" if compose_stop.get("ok") else "failed"
         if compose_stop.get("forced"):
@@ -140,6 +184,19 @@ def _print_restart_report(report: dict) -> None:
     for name in compose.get("services") or []:
         detail = f"started at {service_times.get(name) or compose.get('started_at') or '?'}"
         ui.kv(str(name), _docker_mark(detail if compose.get("ok") else "failed", ok=bool(compose.get("ok"))))
+    https_apis = start.get("https_apis") or {}
+    if https_apis.get("ok"):
+        ts = https_apis.get("started_at") or "?"
+        bits = [f"started at {ts}"]
+        if https_apis.get("pid"):
+            bits.append(f"pid {https_apis['pid']}")
+        if https_apis.get("host") is not None and https_apis.get("port") is not None:
+            bits.append(f"{https_apis['host']}:{https_apis['port']}")
+        ui.kv("code-graph HTTPS", ui.ok("  ".join(bits)))
+    else:
+        ui.kv("code-graph HTTPS", ui.err(str(https_apis.get("action") or "failed")))
+        if https_apis.get("log"):
+            ui.kv("Log", str(https_apis["log"]))
     mcp = start.get("mcp") or {}
     if mcp.get("ok"):
         ts = mcp.get("started_at") or "?"
@@ -192,6 +249,22 @@ def _print_service_status(report: dict, *, detail: dict | None = None) -> None:
     if mcp.get("log"):
         ui.kv("Log", str(mcp["log"]))
 
+    https_apis = report.get("https_apis") or {}
+    ui.blank()
+    ui.section("code-graph HTTPS")
+    if https_apis.get("running"):
+        if https_apis.get("pid") is not None:
+            ui.kv("Process", ui.ok(f"pid {https_apis.get('pid')}"))
+        else:
+            ui.kv("Process", ui.warn("reachable (pid unavailable)"))
+    else:
+        ui.kv("Process", ui.err("stopped"))
+    ui.kv("Listen", f"{https_apis.get('host')}:{https_apis.get('port')}")
+    graph_reach = ui.ok("yes") if https_apis.get("reachable") else ui.err("no")
+    ui.kv("Reachable", graph_reach)
+    if https_apis.get("log"):
+        ui.kv("Log", str(https_apis["log"]))
+
     boot = report.get("boot") or {}
     modes = boot.get("modes") or {}
     ui.blank()
@@ -204,6 +277,7 @@ def _print_service_status(report: dict, *, detail: dict | None = None) -> None:
 
     if detail is not None:
         _print_log_block("Detail — MCP HTTP log", detail.get("mcp_http") or {})
+        _print_log_block("Detail — code-graph HTTPS log", detail.get("code_graph_https") or {})
         for name, payload in (detail.get("compose") or {}).items():
             title = f"Detail — Compose {name} log"
             if payload.get("text") is not None and not payload.get("path"):

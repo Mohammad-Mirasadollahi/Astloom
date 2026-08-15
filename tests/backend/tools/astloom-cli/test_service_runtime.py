@@ -174,7 +174,7 @@ def test_read_mcp_pid_clears_stale(tmp_path: Path, monkeypatch):
     assert not pid_path.is_file()
 
 
-def test_start_all_calls_compose_and_mcp(tmp_path: Path, monkeypatch, capsys):
+def test_start_all_calls_compose_https_and_mcp(tmp_path: Path, monkeypatch, capsys):
     from astloom_cli.service_runtime import lifecycle
 
     calls: list[str] = []
@@ -183,19 +183,25 @@ def test_start_all_calls_compose_and_mcp(tmp_path: Path, monkeypatch, capsys):
         calls.append("compose")
         return {"ok": True}
 
+    def fake_https(_root: Path):
+        calls.append("https")
+        return {"ok": True, "pid": 2}
+
     def fake_mcp(_root: Path):
         calls.append("mcp")
         return {"ok": True, "pid": 1}
 
     monkeypatch.setattr(runtime, "start_compose", fake_compose)
+    monkeypatch.setattr(runtime, "start_https_apis", fake_https)
     monkeypatch.setattr(runtime, "start_mcp_http", fake_mcp)
     monkeypatch.setattr(lifecycle, "_run_port_preflight", lambda _root: None)
     report = runtime.start_all(tmp_path)
     assert report["ok"] is True
-    assert calls == ["compose", "mcp"]
+    assert calls == ["compose", "https", "mcp"]
     out = capsys.readouterr().out
     assert "Starting Astloom" in out
     assert "Astloom is up" in out
+    assert "code-graph HTTPS" in out
 
 
 def test_run_port_preflight_passes_repo_root(tmp_path: Path, monkeypatch):
@@ -239,6 +245,7 @@ def test_restart_all_stop_then_start(tmp_path: Path, monkeypatch, capsys):
 
 def test_stop_all_logs_shutdown_steps(tmp_path: Path, monkeypatch, capsys):
     monkeypatch.setattr(runtime, "stop_mcp_http", lambda _r: {"ok": True, "action": "stopped"})
+    monkeypatch.setattr(runtime, "stop_https_apis", lambda _r: {"ok": True, "action": "stopped"})
     monkeypatch.setattr(runtime, "stop_compose", lambda _r: {"ok": True, "action": "compose_stop"})
     report = runtime.stop_all(tmp_path)
     assert report["ok"] is True
@@ -440,37 +447,24 @@ def test_prepare_mcp_env_tls_off_keeps_http_public_url(tmp_path: Path, monkeypat
 def test_service_state_names_what_is_wrong():
     compose_ok = {"ok": True, "services": {}}
     compose_bad = {"ok": False, "services": {}}
+    mcp_ok = {"ok": True, "running": True, "reachable": True}
+    mcp_stopped = {"ok": False, "running": False, "reachable": False}
+    mcp_unreachable = {"ok": False, "running": True, "reachable": False}
+    graph_ok = {"ok": True, "running": True, "reachable": True}
+    graph_stopped = {"ok": False, "running": False, "reachable": False}
+    graph_unreachable = {"ok": False, "running": True, "reachable": False}
+    assert runtime.service_state(compose_ok, mcp_ok, graph_ok) == "all running"
+    assert runtime.service_state(compose_ok, mcp_ok, graph_stopped) == "code-graph HTTPS stopped"
     assert (
-        runtime.service_state(
-            compose_ok,
-            {"ok": True, "running": True, "reachable": True},
-        )
-        == "all running"
+        runtime.service_state(compose_ok, mcp_ok, graph_unreachable)
+        == "code-graph HTTPS not reachable"
     )
-    assert (
-        runtime.service_state(
-            compose_ok,
-            {"ok": False, "running": False, "reachable": False},
-        )
-        == "MCP HTTP stopped"
-    )
-    assert (
-        runtime.service_state(
-            compose_bad,
-            {"ok": False, "running": False, "reachable": False},
-        )
-        == "stopped"
-    )
-    assert (
-        runtime.service_state(
-            compose_ok,
-            {"ok": False, "running": True, "reachable": False},
-        )
-        == "MCP HTTP not reachable"
-    )
+    assert runtime.service_state(compose_ok, mcp_stopped, graph_ok) == "MCP HTTP stopped"
+    assert runtime.service_state(compose_bad, mcp_stopped, graph_stopped) == "stopped"
+    assert runtime.service_state(compose_ok, mcp_unreachable, graph_ok) == "MCP HTTP not reachable"
     assert "degraded" not in {
-        runtime.service_state(compose_ok, {"ok": False, "running": False, "reachable": False}),
-        runtime.service_state(compose_bad, {"ok": True, "running": True, "reachable": True}),
+        runtime.service_state(compose_ok, mcp_stopped, graph_ok),
+        runtime.service_state(compose_bad, mcp_ok, graph_ok),
     }
 
 
@@ -487,6 +481,7 @@ def test_mcp_status_reachable_without_pid_is_operational(tmp_path: Path, monkeyp
     assert runtime.service_state(
         {"ok": True},
         status,
+        {"ok": True, "running": True, "reachable": True},
     ) == "all running"
 
 

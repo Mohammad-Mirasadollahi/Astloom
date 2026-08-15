@@ -8,9 +8,14 @@ UNIT_NAME = "astloom.service"
 COMPOSE_SERVICES = ("postgres", "neo4j")
 DEFAULT_MCP_HOST = "0.0.0.0"
 DEFAULT_MCP_PORT = 32500
+DEFAULT_CODE_GRAPH_HOST = "0.0.0.0"
+DEFAULT_CODE_GRAPH_PORT = 32140
+DEFAULT_PROJECT_PROFILE_PORT = 32194
 # Host MCP builds postgres/neo4j stores before uvicorn binds; cold start is ~4–8s
 # and can exceed the old 6s poll budget under load after compose restart.
 MCP_HTTP_READY_TIMEOUT_SEC = 60.0
+# code-graph HTTPS binds after Neo4j/Postgres env load; keep parity with MCP budget.
+CODE_GRAPH_READY_TIMEOUT_SEC = 60.0
 # client = CLI-only; server = Compose+MCP; both = dogfood (server stack + client connect)
 _VALID_INSTALL_ROLES = frozenset({"client", "server", "both"})
 
@@ -31,6 +36,22 @@ def mcp_log_path(root: Path) -> Path:
 
 def mcp_secret_path(root: Path) -> Path:
     return root / ".astloom" / "mcp-http.secret"
+
+
+def code_graph_pid_path(root: Path) -> Path:
+    return run_dir(root) / "code-graph-https.pid"
+
+
+def code_graph_log_path(root: Path) -> Path:
+    return run_dir(root) / "code-graph-https.log"
+
+
+def project_profile_pid_path(root: Path) -> Path:
+    return run_dir(root) / "project-profile-https.pid"
+
+
+def project_profile_log_path(root: Path) -> Path:
+    return run_dir(root) / "project-profile-https.log"
 
 
 def compose_dir(root: Path) -> Path:
