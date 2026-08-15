@@ -41,8 +41,8 @@ related_docs:
 - docs/08-software-engineering-architecture/42-astloom-cli-command-reference-continued-continued-continued.md
 - docs/15-agent-workspace-guidance/06-mcp-first-agent-skills-and-rules.md
 - docs/00-master-plan/10-documentation-standardization-procedure.md
-doc_version: 1.3.1
-updated_at: 2026-08-10
+doc_version: 1.3.2
+updated_at: 2026-08-15
 audience:
 - engineer
 - operator
@@ -81,14 +81,14 @@ the operator can **change their mind later** from one obvious place: the
 
 | Layer | Status |
 | --- | --- |
-| CLI standards gate (`ask` / `--skip-nonconforming` / `--sync-nonconforming`) | **Shipped** — docs Phase 2 auto-detect; code list reserved |
+| CLI standards gate (`ask` / `--skip-nonconforming` / `--sync-nonconforming`) | **Shipped** — docs Phase 2 auto-detect; code list reserved; same gate on `astloom-client sync` content-push |
 | Batched pending-sync poller (`astloom graph watch`) | **Shipped** — marks freshness only; does **not** flush ingest by itself |
 | Astloom Client durable preference UI + storage | **Not shipped** — this document is the normative product contract |
 | Watcher / auto-flush reading Client preference | **Not shipped** |
 
-Until Client preference ships, interactive `astloom sync` remains the only
-human-facing Skip/Ingest ask. CI and scripts keep the existing flag / non-TTY
-rules.
+Until Client preference ships, interactive TTY `astloom sync` and
+`astloom-client sync` share the same Skip/Ingest ask. CI and scripts keep the
+existing flag / non-TTY rules.
 
 ## Problem
 

@@ -425,6 +425,7 @@ def test_client_push_sync_stream_failure_marks_run_not_finished(monkeypatch, tmp
     monkeypatch.setattr(cp, "fetch_remote_file_hashes", lambda *a, **k: ({}, {}))
     monkeypatch.setattr(cp, "build_push_files", lambda *a, **k: ([], [], 0, True))
     monkeypatch.setattr(cp, "build_push_docs", lambda *a, **k: ([], 0))
+    (tmp_path / "astloom.sync.yaml").write_text("code:\n  exclude: []\n", encoding="utf-8")
 
     def boom(*_a, **_k):
         raise SystemExit("error: ingest-push stream: boom")
@@ -455,6 +456,7 @@ def test_client_push_sync_note_shows_remote_hashes_and_batch_total(tmp_path: Pat
     from astloom_cli.connect_flow import client_push as cp
 
     monkeypatch.setattr(graph_cmd, "_require_cloud_llm_consent", lambda *a, **k: None)
+    (tmp_path / "astloom.sync.yaml").write_text("code:\n  exclude: []\n", encoding="utf-8")
     monkeypatch.setattr(cp, "fetch_remote_file_hashes", lambda *a, **k: ({"a.py": "h1"}, {}))
     monkeypatch.setattr(
         cp,
@@ -510,6 +512,7 @@ def test_client_push_sync_prints_unique_failure_details(tmp_path: Path, monkeypa
     from astloom_cli.connect_flow import client_push as cp
 
     monkeypatch.setattr(graph_cmd, "_require_cloud_llm_consent", lambda *a, **k: None)
+    (tmp_path / "astloom.sync.yaml").write_text("code:\n  exclude: []\n", encoding="utf-8")
     monkeypatch.setattr(cp, "fetch_remote_file_hashes", lambda *a, **k: ({}, {}))
     monkeypatch.setattr(
         cp,
@@ -770,6 +773,89 @@ def test_build_push_docs_skips_matching_remote_hash(tmp_path: Path):
     )
     assert docs == []
     assert skipped == 1
+
+
+def test_resolve_push_filters_skip_excludes_nonconforming_docs(tmp_path: Path, monkeypatch):
+    from astloom_cli.connect_flow.client_push import build_push_docs, resolve_push_filters
+
+    (tmp_path / "astloom.sync.yaml").write_text(
+        "code:\n  exclude: []\ndocs:\n  match:\n    - '**/*.md'\n  exclude: []\n",
+        encoding="utf-8",
+    )
+    docs_dir = tmp_path / "docs"
+    docs_dir.mkdir()
+    (docs_dir / "note.md").write_text(
+        "---\n"
+        "doc_id: as.doc.test.note\n"
+        "title: Note\n"
+        "doc_type: note\n"
+        "status: active\n"
+        "schema_version: '1.0'\n"
+        "owner: tests\n"
+        "summary: test\n"
+        "tags: [test]\n"
+        "phase: test\n"
+        "canonical_path: docs/note.md\n"
+        "---\n"
+        "\n"
+        "# Note\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(
+        "astloom_cli.sync_standards_gate.list_nonconforming_docs",
+        lambda **_k: ["docs/note.md"],
+    )
+    args = Namespace(
+        exclude_dir=[],
+        include_path=[],
+        include_ext=[],
+        max_files=50,
+        skip_nonconforming=True,
+        sync_nonconforming=False,
+    )
+    filters, gate = resolve_push_filters(tmp_path, args)
+    assert gate.skipped is True
+    assert gate.skipped_docs == ["docs/note.md"]
+    docs, skipped = build_push_docs(tmp_path, args, filters=filters)
+    assert docs == []
+    assert skipped == 0
+
+
+def test_client_push_sync_runs_standards_gate(tmp_path: Path, monkeypatch):
+    from astloom_cli.commands import graph as graph_cmd
+    from astloom_cli.connect_config import ConnectSettings
+    from astloom_cli.connect_flow import client_push as cp
+    from astloom_cli.sync_standards_gate import StandardsGateResult
+
+    called: list[Path] = []
+
+    def _gate(root, args):
+        called.append(root)
+        return cp.filters_from_args(root, args), StandardsGateResult()
+
+    monkeypatch.setattr(graph_cmd, "_require_cloud_llm_consent", lambda *a, **k: None)
+    monkeypatch.setattr(cp, "resolve_push_filters", _gate)
+    monkeypatch.setattr(cp, "fetch_remote_file_hashes", lambda *a, **k: ({"a.py": "h"}, {}))
+    monkeypatch.setattr(cp, "build_push_files", lambda *a, **k: ([], ["a.py"], 0, True))
+    monkeypatch.setattr(cp, "build_push_docs", lambda *a, **k: ([], 0))
+    monkeypatch.setattr(cp, "_run_ingest_push", lambda *a, **k: {"files_ingested": 0, "files_failed": 0})
+    (tmp_path / "astloom.sync.yaml").write_text("code:\n  exclude: []\n", encoding="utf-8")
+    settings = ConnectSettings(
+        graph_url="https://g.example",
+        api_token="tokentokentoken12",
+        tenant="t",
+        workspace="w",
+        project="p",
+    )
+    assert (
+        cp.client_push_sync(
+            settings,
+            Namespace(project="p", sync_mode="", progress_interval=30),
+            work=tmp_path,
+        )
+        == 0
+    )
+    assert called == [tmp_path]
 
 
 def test_fetch_remote_file_hashes_prefers_http(monkeypatch):

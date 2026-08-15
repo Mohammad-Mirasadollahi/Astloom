@@ -84,11 +84,35 @@ def _looks_like_secret_path(rel: str) -> bool:
     return any(lower.endswith(suf) for suf in _SECRET_SUFFIXES)
 
 
+def filters_from_args(root: Path, args: Any) -> dict[str, Any]:
+    """Resolve sync.yaml + CLI filters for one content-push root."""
+    filters = resolve_sync_filters(
+        root=root,
+        cli_exclude_dirs=list(getattr(args, "exclude_dir", None) or []),
+        cli_include_paths=list(getattr(args, "include_path", None) or []),
+        cli_include_extensions=list(getattr(args, "include_ext", None) or []) or None,
+    )
+    return {**filters, "max_files": resolve_discovery_max_files(getattr(args, "max_files", None))}
+
+
+def resolve_push_filters(root: Path, args: Any) -> tuple[dict[str, Any], Any]:
+    """Same standards gate as local ``astloom sync`` (TTY ask / skip / include flags)."""
+    from astloom_cli.sync_standards_gate import resolve_standards_gate
+
+    return resolve_standards_gate(
+        root_path=root,
+        filters=filters_from_args(root, args),
+        skip_nonconforming=bool(getattr(args, "skip_nonconforming", False)),
+        sync_nonconforming=bool(getattr(args, "sync_nonconforming", False)),
+    )
+
+
 def build_push_files(
     root: Path,
     args: Any,
     *,
     remote_hashes: dict[str, str] | None = None,
+    filters: dict[str, Any] | None = None,
 ) -> tuple[list[dict[str, str]], list[str], int, bool]:
     """Discover local sources; return (files, present_paths, skipped, prune_ok).
 
@@ -96,13 +120,8 @@ def build_push_files(
     (no ``--include-path`` scope and not truncated by ``max_files``). Callers must
     omit ``present_paths`` when False so partial syncs cannot prune the graph.
     """
-    filters = resolve_sync_filters(
-        root=root,
-        cli_exclude_dirs=list(getattr(args, "exclude_dir", None) or []),
-        cli_include_paths=list(getattr(args, "include_path", None) or []),
-        cli_include_extensions=list(getattr(args, "include_ext", None) or []) or None,
-    )
-    max_files = resolve_discovery_max_files(getattr(args, "max_files", None))
+    filters = filters if filters is not None else filters_from_args(root, args)
+    max_files = int(filters.get("max_files") or resolve_discovery_max_files(getattr(args, "max_files", None)))
     discovered = discover_source_files(
         root,
         include_extensions=filters.get("include_extensions"),
@@ -213,6 +232,7 @@ def build_push_docs(
     args: Any,
     *,
     remote_hashes: dict[str, str] | None = None,
+    filters: dict[str, Any] | None = None,
 ) -> tuple[list[dict[str, Any]], int]:
     """Discover human Markdown docs for optional content-push docs phase.
 
@@ -225,18 +245,13 @@ def build_push_docs(
     )
     from code_graph_service.domain.doc_discovery import discover_documentation_files
 
-    filters = resolve_sync_filters(
-        root=root,
-        cli_exclude_dirs=list(getattr(args, "exclude_dir", None) or []),
-        cli_include_paths=list(getattr(args, "include_path", None) or []),
-        cli_include_extensions=list(getattr(args, "include_ext", None) or []) or None,
-    )
+    filters = filters if filters is not None else filters_from_args(root, args)
     if not filters.get("docs_enabled", True):
         return [], 0
     match_globs = list(filters.get("doc_match_globs") or [])
     if not match_globs:
         return [], 0
-    max_files = resolve_discovery_max_files(getattr(args, "max_files", None))
+    max_files = int(filters.get("max_files") or resolve_discovery_max_files(getattr(args, "max_files", None)))
     # CLI/sync --include-path must scope docs the same way as code discovery.
     doc_paths = list(filters.get("doc_paths") or [])
     include_paths = list(filters.get("include_paths") or [])
@@ -509,14 +524,29 @@ def client_push_sync(settings: ConnectSettings, args: Any, *, work: Path) -> int
     )
 
     print(f"   {ui.warn('…')} client content-push sync via HTTPS (no durable server checkout)")
+    filters, standards_gate = resolve_push_filters(work, args)
+    if standards_gate.docs_nonconforming or standards_gate.code_nonconforming:
+        ui.kv(
+            "Standards gate",
+            (
+                f"skipped={standards_gate.skipped}  "
+                f"docs_bad={len(standards_gate.docs_nonconforming)}  "
+                f"docs_excluded={len(standards_gate.skipped_docs)}  "
+                f"code_excluded={len(standards_gate.skipped_code)}"
+            ),
+        )
     remote_hashes, remote_doc_hashes = fetch_remote_file_hashes(settings, args)
     if _graph_http_ready(settings) and not remote_hashes:
         print(
             f"   {ui.warn('!')} remote file-hashes empty — unchanged files cannot be skipped "
             f"(check token / TLS / graph file-hashes)"
         )
-    files, present, skipped, prune_ok = build_push_files(work, args, remote_hashes=remote_hashes)
-    docs, doc_skipped = build_push_docs(work, args, remote_hashes=remote_doc_hashes)
+    files, present, skipped, prune_ok = build_push_files(
+        work, args, remote_hashes=remote_hashes, filters=filters
+    )
+    docs, doc_skipped = build_push_docs(
+        work, args, remote_hashes=remote_doc_hashes, filters=filters
+    )
     batches = _batches(files, present, docs=docs, include_present_paths=prune_ok)
     auto = max_files_is_auto(getattr(args, "max_files", None))
     cap = resolve_discovery_max_files(getattr(args, "max_files", None))
