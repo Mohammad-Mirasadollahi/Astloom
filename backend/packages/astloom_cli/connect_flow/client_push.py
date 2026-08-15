@@ -8,8 +8,10 @@ back to SSH.
 from __future__ import annotations
 
 import json
+import sys
 from collections.abc import Callable
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Any
 
 from astloom_cli import ui
@@ -493,7 +495,12 @@ def client_push_sync(settings: ConnectSettings, args: Any, *, work: Path) -> int
     from astloom_cli.commands.graph import _require_cloud_llm_consent
 
     class _HttpLlmProbe:
+        def __init__(self) -> None:
+            self._config: dict[str, Any] | None = None
+
         def llm_config(self) -> dict[str, Any]:
+            if self._config is not None:
+                return self._config
             import httpx
 
             url = f"{settings.graph_url.rstrip('/')}/api/v1/llm/config"
@@ -505,17 +512,29 @@ def client_push_sync(settings: ConnectSettings, args: Any, *, work: Path) -> int
                     verify=httpx_verify(settings),
                 )
             except httpx.HTTPError:
-                return dict(ASSUME_CLOUD_LLM_CONFIG)
+                self._config = dict(ASSUME_CLOUD_LLM_CONFIG)
+                return self._config
             if response.status_code >= 400:
-                return dict(ASSUME_CLOUD_LLM_CONFIG)
+                self._config = dict(ASSUME_CLOUD_LLM_CONFIG)
+                return self._config
             try:
                 payload = response.json()
             except Exception:  # noqa: BLE001
-                return dict(ASSUME_CLOUD_LLM_CONFIG)
-            return payload if isinstance(payload, dict) else dict(ASSUME_CLOUD_LLM_CONFIG)
+                self._config = dict(ASSUME_CLOUD_LLM_CONFIG)
+                return self._config
+            self._config = payload if isinstance(payload, dict) else dict(ASSUME_CLOUD_LLM_CONFIG)
+            return self._config
 
+        def llm_sessions_snapshot(self) -> dict[str, Any]:
+            cfg = self._config or {}
+            rpm = int(cfg.get("rpm") or 0)
+            if rpm < 1:
+                return {}
+            return {"rpm": rpm, "inflight_cap": int(cfg.get("inflight_cap") or rpm)}
+
+    probe = _HttpLlmProbe()
     _require_cloud_llm_consent(
-        _HttpLlmProbe(),
+        probe,
         allowed=bool(getattr(args, "allow_cloud_llm", False)),
         tenant=tenant,
         workspace=workspace,
@@ -525,58 +544,24 @@ def client_push_sync(settings: ConnectSettings, args: Any, *, work: Path) -> int
 
     print(f"   {ui.warn('…')} client content-push sync via HTTPS (no durable server checkout)")
     filters, standards_gate = resolve_push_filters(work, args)
-    if standards_gate.docs_nonconforming or standards_gate.code_nonconforming:
-        ui.kv(
-            "Standards gate",
-            (
-                f"skipped={standards_gate.skipped}  "
-                f"docs_bad={len(standards_gate.docs_nonconforming)}  "
-                f"docs_excluded={len(standards_gate.skipped_docs)}  "
-                f"code_excluded={len(standards_gate.skipped_code)}"
-            ),
-        )
-    remote_hashes, remote_doc_hashes = fetch_remote_file_hashes(settings, args)
-    if _graph_http_ready(settings) and not remote_hashes:
-        print(
-            f"   {ui.warn('!')} remote file-hashes empty — unchanged files cannot be skipped "
-            f"(check token / TLS / graph file-hashes)"
-        )
-    files, present, skipped, prune_ok = build_push_files(
-        work, args, remote_hashes=remote_hashes, filters=filters
+    from astloom_cli.commands.sync.banner import print_filters_banner
+
+    print_filters_banner(
+        scope=SimpleNamespace(tenant_id=tenant, workspace_id=workspace, project_id=project),
+        root_path=work,
+        args=args,
+        filters=filters,
+        standards_gate=standards_gate,
+        svc=probe,
     )
-    docs, doc_skipped = build_push_docs(
-        work, args, remote_hashes=remote_doc_hashes, filters=filters
-    )
-    batches = _batches(files, present, docs=docs, include_present_paths=prune_ok)
-    auto = max_files_is_auto(getattr(args, "max_files", None))
-    cap = resolve_discovery_max_files(getattr(args, "max_files", None))
     print(
-        f"   {ui.dim('note')} present={len(present)}  "
-        f"push={len(files)}  unchanged_skip={skipped}  "
-        f"remote_hashes={len(remote_hashes)}  "
-        f"batches={len(batches)}  docs={len(docs)}  docs_skip={doc_skipped}  "
-        f"prune={'on' if prune_ok else 'off'}  "
-        f"max_files={'auto/' + str(cap) if auto else str(cap)}"
+        f"   {ui.dim('note')} Fetching remote hashes + discovering files "
+        f"(first percent line after inventory)…"
     )
-    if not prune_ok:
-        print(
-            f"   {ui.dim('note')} prune off — partial discovery "
-            f"(include-path and/or max-files cap); will not delete other graph files"
-        )
-    if auto and len(present) >= HARD_SYNC_MAX_FILES:
-        print(
-            f"   {ui.warn('!')} discovery hit hard cap {HARD_SYNC_MAX_FILES} — "
-            f"raise is not available; split the tree or exclude paths"
-        )
-    totals = {
-        "files_ingested": 0,
-        "files_failed": 0,
-        "files_skipped": skipped,
-        "files_discovered": len(present),
-        "docs_upserted": 0,
-        "docs_failed": 0,
-    }
-    fail_reasons: list[str] = []
+    try:
+        sys.stdout.flush()
+    except Exception:  # noqa: BLE001
+        pass
 
     from astloom_cli.sync_progress import SyncProgressTracker
 
@@ -588,6 +573,51 @@ def client_push_sync(settings: ConnectSettings, args: Any, *, work: Path) -> int
     )
     cancelled = False
     try:
+        tracker({"status": "preparing", "file": "fetching remote file hashes", "done": 0, "total": 0})
+        remote_hashes, remote_doc_hashes = fetch_remote_file_hashes(settings, args)
+        if _graph_http_ready(settings) and not remote_hashes:
+            print(
+                f"   {ui.warn('!')} remote file-hashes empty — unchanged files cannot be skipped "
+                f"(check token / TLS / graph file-hashes)"
+            )
+        tracker({"status": "discovering", "file": "discovering source files", "done": 0, "total": 0})
+        files, present, skipped, prune_ok = build_push_files(
+            work, args, remote_hashes=remote_hashes, filters=filters
+        )
+        docs, doc_skipped = build_push_docs(
+            work, args, remote_hashes=remote_doc_hashes, filters=filters
+        )
+        tracker({"status": "preparing", "file": "planning push batches", "done": 0, "total": 0})
+        batches = _batches(files, present, docs=docs, include_present_paths=prune_ok)
+        auto = max_files_is_auto(getattr(args, "max_files", None))
+        cap = resolve_discovery_max_files(getattr(args, "max_files", None))
+        print(
+            f"   {ui.dim('note')} present={len(present)}  "
+            f"push={len(files)}  unchanged_skip={skipped}  "
+            f"remote_hashes={len(remote_hashes)}  "
+            f"batches={len(batches)}  docs={len(docs)}  docs_skip={doc_skipped}  "
+            f"prune={'on' if prune_ok else 'off'}  "
+            f"max_files={'auto/' + str(cap) if auto else str(cap)}"
+        )
+        if not prune_ok:
+            print(
+                f"   {ui.dim('note')} prune off — partial discovery "
+                f"(include-path and/or max-files cap); will not delete other graph files"
+            )
+        if auto and len(present) >= HARD_SYNC_MAX_FILES:
+            print(
+                f"   {ui.warn('!')} discovery hit hard cap {HARD_SYNC_MAX_FILES} — "
+                f"raise is not available; split the tree or exclude paths"
+            )
+        totals = {
+            "files_ingested": 0,
+            "files_failed": 0,
+            "files_skipped": skipped,
+            "files_discovered": len(present),
+            "docs_upserted": 0,
+            "docs_failed": 0,
+        }
+        fail_reasons: list[str] = []
         total_batches = len(batches)
         for index, batch in enumerate(batches, start=1):
             print(

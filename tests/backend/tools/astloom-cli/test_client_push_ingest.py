@@ -471,12 +471,14 @@ def test_client_push_sync_note_shows_remote_hashes_and_batch_total(tmp_path: Pat
     monkeypatch.setattr(cp, "build_push_docs", lambda *a, **k: ([], 0))
     monkeypatch.setattr(cp, "_run_ingest_push", lambda *a, **k: {"files_ingested": 1, "files_failed": 0})
 
+    events: list[dict] = []
+
     class _Tracker:
         def __init__(self, **_kwargs):
             pass
 
-        def __call__(self, _event):
-            pass
+        def __call__(self, event):
+            events.append(dict(event))
 
         def begin_phase(self):
             pass
@@ -497,10 +499,16 @@ def test_client_push_sync_note_shows_remote_hashes_and_batch_total(tmp_path: Pat
         == 0
     )
     out = capsys.readouterr().out
+    assert "Syncing" in out
+    assert "Path" in out
+    assert "Code exclude" in out
+    assert "Fetching remote hashes" in out
     assert "remote_hashes=1" in out
     assert "batches=1" in out
     assert "push batch 1/1" in out
     assert "prune=on" in out
+    assert any(e.get("status") == "discovering" for e in events)
+    assert any(e.get("file") == "fetching remote file hashes" for e in events)
 
 
 def test_client_push_sync_prints_unique_failure_details(tmp_path: Path, monkeypatch, capsys):

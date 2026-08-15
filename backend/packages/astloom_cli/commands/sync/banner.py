@@ -31,7 +31,8 @@ def print_filters_banner(
             "Embeddings",
             "touched files only (noop: capped backlog; use sync heal for full project)",
         )
-    ui.kv("Progress", f"updates about every {int(args.progress_interval)}s (adapts ETA from observed rate)")
+    interval = int(getattr(args, "progress_interval", 30) or 30)
+    ui.kv("Progress", f"updates about every {interval}s (adapts ETA from observed rate)")
     if standards_gate.docs_nonconforming or standards_gate.code_nonconforming:
         ui.kv(
             "Standards gate",
