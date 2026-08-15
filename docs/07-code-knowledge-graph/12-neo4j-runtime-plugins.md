@@ -27,7 +27,8 @@ related_docs:
 - docs/07-code-knowledge-graph/02-neo4j-schema-design.md
 - docs/07-code-knowledge-graph/11-neo4j-migration-plan.md
 - docs/07-code-knowledge-graph/32-intentional-fallbacks-and-neo4j-plugin-licensing.md
-doc_version: 1.1.1
+- docs/07-code-knowledge-graph/81-neo4j-memory-and-content-push-oom-runbook.md
+doc_version: 1.2.0
 audience:
 - engineer
 - architect
@@ -47,7 +48,7 @@ chunk_hints:
   overlap_tokens: 48
 language: en
 security_classification: internal
-updated_at: 2026-08-10
+updated_at: 2026-08-15
 ---
 
 # 12 - Neo4j Runtime Plugins
@@ -78,6 +79,10 @@ Embeddings remain in PostgreSQL pgvector. Plugins do not replace pgvector.
 
 Host ports remain non-default from the port profile (`32287` Bolt, `32474` HTTP).
 
+Memory sizing for content-push is documented in
+[`81-neo4j-memory-and-content-push-oom-runbook.md`](81-neo4j-memory-and-content-push-oom-runbook.md)
+(`ASTLOOM_NEO4J_HEAP_*_SIZE`, `ASTLOOM_NEO4J_PAGECACHE_SIZE`).
+
 ## Capability Probe
 
 `Neo4jStore.capabilities()` reports:
@@ -100,10 +105,21 @@ supported fallback runtime (Store CRUD still works; expansion/degree fall back).
 | `ASTLOOM_NEO4J_PLUGINS` | `["apoc"]` | Compose plugin list. Add `graph-data-science` only when startup can reach its download host. |
 | `ASTLOOM_NEO4J_GDS_ENABLED` | `true` | When `false`, skip all GDS calls (Cypher degree only) |
 | `ASTLOOM_NEO4J_GDS_CONCURRENCY` | `4` | Passed to `gds.degree.stream`; **clamped to 1–4** (Community Edition core limit) |
+| `ASTLOOM_NEO4J_HEAP_INITIAL_SIZE` | `4G` | Compose → `NEO4J_server_memory_heap_initial__size` |
+| `ASTLOOM_NEO4J_HEAP_MAX_SIZE` | `4G` | Compose → `NEO4J_server_memory_heap_max__size`. Raise for large multi-hour content-push; see [`81`](81-neo4j-memory-and-content-push-oom-runbook.md). |
+| `ASTLOOM_NEO4J_PAGECACHE_SIZE` | `1G` | Compose → `NEO4J_server_memory_pagecache_size` |
 
 Compose installs GDS only when the plugin list opts in; the GDS-enabled env flag
 separately controls whether Astloom **uses** an installed copy. Details:
 [`32`](32-intentional-fallbacks-and-neo4j-plugin-licensing.md).
+
+## JVM memory (Compose)
+
+Compose **must not** hard-code a 512M heap. Defaults are **4G heap** and **1G
+pagecache**, overridable via the env vars above. Under-sized heaps cause
+`OutOfMemoryError: Java heap space` during long `ingest-push` runs; clients then
+see Bolt handshake failures on `ASTLOOM_NEO4J_BOLT_PORT`. Operator runbook:
+[`81-neo4j-memory-and-content-push-oom-runbook.md`](81-neo4j-memory-and-content-push-oom-runbook.md).
 
 ## Usage Boundaries
 

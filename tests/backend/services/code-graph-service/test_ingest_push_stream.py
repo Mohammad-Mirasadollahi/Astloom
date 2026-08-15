@@ -106,6 +106,19 @@ def test_run_push_with_progress_emits_error_then_sentinel_on_unexpected_exceptio
     assert "boom" in emitted[0]["message"]
 
 
+def test_run_push_with_progress_annotates_neo4j_bolt_handshake_failures():
+    emitted: list[dict | None] = []
+    msg = (
+        "Couldn't connect to 127.0.0.1:32287: "
+        "Failed to read four byte Bolt handshake response from server"
+    )
+    run_push_with_progress(emitted.append, lambda: (_ for _ in ()).throw(RuntimeError(msg)))
+    assert emitted[-1] is None
+    assert emitted[0]["type"] == "error"
+    assert "Bolt handshake" in emitted[0]["message"]
+    assert "ASTLOOM_NEO4J_HEAP_MAX_SIZE" in emitted[0]["message"]
+
+
 def test_iter_queue_with_heartbeat_emits_when_worker_silent():
     async def main():
         q: asyncio.Queue[dict | None] = asyncio.Queue()

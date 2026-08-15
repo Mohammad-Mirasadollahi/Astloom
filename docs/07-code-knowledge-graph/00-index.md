@@ -22,8 +22,8 @@ authority: informative
 visibility: internal
 linked_symbols:
 - backend/services/code-graph-service/src/code_graph_service/application/service.py::CodeGraphService
-doc_version: 1.1.13
-updated_at: 2026-08-10
+doc_version: 1.1.14
+updated_at: 2026-08-15
 ---
 
 # 07 - Code-Knowledge Graph Index
@@ -47,7 +47,8 @@ This design extends the existing Docs-as-Code and Technical Logic sections. It f
 - `09-context-pack-retrieval-and-agent-workflow.md` defines context packs, retrieval algorithms, agent workflows, use cases, metrics, and safety rules.
 - `10-language-support-policy.md` defines mandatory Python support and the planned language matrix.
 - `11-neo4j-migration-plan.md` defines Postgres → Neo4j cutover steps without regressing Python.
-- `12-neo4j-runtime-plugins.md` defines required APOC and Graph Data Science plugins for Neo4j.
+- `12-neo4j-runtime-plugins.md` defines required APOC and Graph Data Science plugins for Neo4j (and Compose JVM heap / pagecache env defaults).
+- `81-neo4j-memory-and-content-push-oom-runbook.md` diagnoses Bolt handshake failures from Neo4j heap OOM during long content-push / `ingest-push` syncs.
 - `13-codesymbol-projection-adr.md` accepts `CodeSymbol` + `CODE_REL` as the canonical Neo4j runtime projection.
 - `14-repository-code-wiki-feature-specification.md` defines Repository Code Wiki (holistic repo-level wiki generation; CodeWiki / Google Code Wiki–inspired).
 - `15-call-graph-confidence-and-runtime-traces.md` defines CALL evidence classes, confidence caps/boosts, impact eligibility, and runtime-trace reconciliation (GAP-T02).
@@ -131,6 +132,7 @@ Code evidence anchor: `backend/services/code-graph-service/src/code_graph_servic
 
 ## History
 
+- 2026-08-15: Added `81-neo4j-memory-and-content-push-oom-runbook.md` (Compose heap defaults 4G / pagecache 1G; content-push Bolt OOM remediation).
 - 2026-08-02: Extended `77` with MCP/pgvector URL fallback and operator failure signals (`embedding_index_unavailable`, hybrid `semantic_error`).
 - 2026-08-01: Added `77-sync-embedding-heal-operator-runbook.md` (scoped sync vs `sync heal`, stats/inventory/preflight guidance).
 - 2026-07-28: Added imperfect-graph agent decision pack `56`–`71` (`lifecycle_lane: future`); retired research dump `docs/1.txt` after transfer.

@@ -57,14 +57,14 @@ related_docs:
 - docs/08-software-engineering-architecture/52-client-tls-trust-and-verify.md
 - docs/08-software-engineering-architecture/43-app-docker-and-wheelhouse-runbook.md
 - docs/08-software-engineering-architecture/51-software-upgrade-server-and-client.md
-doc_version: 1.7.2
+doc_version: 1.7.3
 audience:
 - engineer
 - operator
 - agent
 language: en
 security_classification: internal
-updated_at: 2026-08-10
+updated_at: 2026-08-15
 ---
 
 # 39 - Local Install Runbook
@@ -283,6 +283,7 @@ Automatic OS package install supports **Debian/Ubuntu** via `apt` only. Elsewher
 - Example template: `backend/deployments/compose/neo4j.example.env`
 - The installer **never prints** generated passwords
 - Default ports come from the port profile / example env (Postgres `32232`, Neo4j Bolt `32287`)
+- Neo4j Compose defaults: heap **4G**, pagecache **1G** (`ASTLOOM_NEO4J_HEAP_*_SIZE`, `ASTLOOM_NEO4J_PAGECACHE_SIZE`). Under-sized heaps cause Bolt handshake failures during long content-push — see [81 - Neo4j Memory And Content-Push OOM Runbook](../07-code-knowledge-graph/81-neo4j-memory-and-content-push-oom-runbook.md)
 
 Start infra alone (after env exists):
 
@@ -314,6 +315,7 @@ Recipe, example Caddyfile, and routing table: [`scripts/install/tls_edge/README.
 | `docker daemon not reachable` | Docker stopped or user not in `docker` group | `sudo systemctl start docker`; log out/in after group add |
 | Compose env placeholder password | Example file copied without replace | Re-run `bash install.sh --stage 03_compose_env` |
 | Neo4j wait timeout | Slow first pull / plugins | Increase `--compose-timeout 300`; check `docker logs astloom-neo4j-1` |
+| `ingest-push` Bolt handshake / `Couldn't connect` to `:32287` | Neo4j JVM heap OOM (historically 512M) | Raise `ASTLOOM_NEO4J_HEAP_MAX_SIZE` (default **4G**), recreate `neo4j`; [81](../07-code-knowledge-graph/81-neo4j-memory-and-content-push-oom-runbook.md) |
 | `astloom doctor` fail | Incomplete venv | `bash install.sh --stage 02_venv` |
 
 State markers (optional resume hints): `.astloom/install-state.env`.

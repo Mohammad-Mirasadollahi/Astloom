@@ -76,6 +76,25 @@ async def iter_queue_with_heartbeat(
         yield item
 
 
+def _format_push_error(exc: Exception) -> str:
+    """Keep operator-facing Neo4j outage hints short and actionable."""
+    msg = str(exc).strip() or exc.__class__.__name__
+    lowered = msg.lower()
+    if (
+        "bolt handshake" in lowered
+        or "couldn't connect" in lowered
+        or "serviceunavailable" in lowered
+        or "defunct connection" in lowered
+    ):
+        hint = (
+            "Neo4j Bolt unreachable (often JVM heap OOM or restart). "
+            "Check neo4j docker logs for OutOfMemoryError; raise "
+            "ASTLOOM_NEO4J_HEAP_MAX_SIZE / ASTLOOM_NEO4J_PAGECACHE_SIZE and recreate neo4j."
+        )
+        msg = f"{msg} — {hint}"
+    return msg[:500]
+
+
 def run_push_with_progress(emit: Emit, work: Callable[[], dict[str, Any]]) -> None:
     """Run ``work()`` and emit its terminal outcome, then a stop sentinel.
 
@@ -89,6 +108,6 @@ def run_push_with_progress(emit: Emit, work: Callable[[], dict[str, Any]]) -> No
     except ClientDisconnected as exc:
         emit({"type": ERROR, "message": str(exc.message or "cancelled during ingest-push")})
     except Exception as exc:  # noqa: BLE001 — surface any worker failure as an error line
-        emit({"type": ERROR, "message": str(exc)[:500]})
+        emit({"type": ERROR, "message": _format_push_error(exc)})
     finally:
         emit(None)

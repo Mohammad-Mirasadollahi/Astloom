@@ -67,6 +67,8 @@ When `ASTLOOM_CODE_GRAPH_DATABASE_URL` is set alongside Neo4j:
 
 Schema constraints in `cypher/0001_code_graph_constraints.cypher` are applied by `Neo4jStore.ensure_schema()` on startup. Do not bind whole directories or conf files under `/var/lib/neo4j/` as read-only mounts; Neo4j chowns that tree on startup. Keep `conf/apoc.conf` as a reference and configure APOC through Compose `NEO4J_apoc_*` variables.
 
+Compose defaults Neo4j to **4G heap** and **1G pagecache** (`ASTLOOM_NEO4J_HEAP_*_SIZE`, `ASTLOOM_NEO4J_PAGECACHE_SIZE`). A 512M heap OOMs during large multi-hour content-push ingest; the client then sees Bolt handshake failures on `ASTLOOM_NEO4J_BOLT_PORT`. Recreate the `neo4j` service after changing these values. Operator runbook: `docs/07-code-knowledge-graph/81-neo4j-memory-and-content-push-oom-runbook.md`.
+
 ## Language Policy
 
 Python is a **required** (mandatory) code-graph language. The Neo4j cutover must not regress Python ingest, symbol hashing, call/import edges, or generation-context packs.
