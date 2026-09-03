@@ -87,8 +87,9 @@ This is **not** the Neo4j heap OOM path — see [`81`](81-neo4j-memory-and-conte
 | Cause | Fix (code) |
 | --- | --- |
 | One Neo4j `delete_edge` + `put_edge` per unresolved CALL during finalize | Batched `delete_edges` / `put_edges` in `finalize_cross_file_resolution` |
-| One LiteLLM `complete` per changed symbol for living docs | `LlmBackedDocGenerator.generate_many` — one JSON completion per file (chunks of 8) |
+| One LiteLLM `complete` per changed symbol for living docs | `LlmBackedDocGenerator.generate_many` — budgeted adaptive chunks (`pack_docs_batches`) |
 | Provider SSL hang ignored `ASTLOOM_LITELLM_TIMEOUT_SECONDS` (workers/RPM wedged) | Hard wall-clock deadline in `LiteLlmGateway.complete`/`embed`; docs chunk falls back to heuristic |
+| Large-file living docs (many symbols / long bodies) hung Provider on mega-prompts | Adaptive `pack_docs_batches` under prompt-char budget; split+retry on timeout before heuristic |
 | LLM-hot worker cap `RPM // 6` undersized after batching | `_LLM_HOT_CALLS_PER_FILE = 2` → `RPM // 2` when docs/cloud embeds are on |
 | Content-push ran full-project finalize after **every** HTTP batch | `finalize_cross_file=false` on intermediate batches; `true` on last only |
 | Progress silent during finalize | `status=finalizing` + step `file=` for local sync, content-push, and CLI render |

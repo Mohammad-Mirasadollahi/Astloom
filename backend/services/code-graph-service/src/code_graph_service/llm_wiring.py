@@ -134,11 +134,15 @@ def _mean_pool_vectors(vectors: list[list[float]]) -> list[float]:
 class LlmBackedDocGenerator:
     """Generate symbol docs via LiteLLM; fall back to heuristic on failure/stub.
 
-    Prefer ``generate_many`` for ingest: one completion documents every changed
-    symbol in a file (root cause of sync RPM cost was one complete per symbol).
+    Prefer ``generate_many`` for ingest: one completion documents a budgeted
+    chunk of changed symbols (not one complete per symbol). Large files are
+    packed under a prompt-char budget and split further after Provider timeout.
     """
 
     _BATCH_CHUNK = 8
+    _BODY_CAPS = (800, 400, 200)
+    _PROMPT_BUDGET_CHARS = 20_000
+    _MAX_SPLIT_DEPTH = 3
 
     def __init__(
         self,
@@ -161,12 +165,33 @@ class LlmBackedDocGenerator:
             return [self.fallback.generate(symbol, neighbors) for symbol, neighbors in items]
 
         out: list[str] = []
-        for start in range(0, len(items), self._BATCH_CHUNK):
-            chunk = items[start : start + self._BATCH_CHUNK]
-            out.extend(self._generate_many_chunk(chunk))
+        for chunk, body_cap in pack_docs_batches(
+            items,
+            prompt_budget=self._prompt_budget_chars(),
+            max_chunk=self._BATCH_CHUNK,
+            body_caps=self._BODY_CAPS,
+        ):
+            out.extend(self._generate_many_chunk(chunk, body_cap=body_cap))
         return out
 
-    def _generate_many_chunk(self, items: list[tuple[GraphSymbol, list[str]]]) -> list[str]:
+    def _prompt_budget_chars(self) -> int:
+        import os
+
+        raw = str(os.environ.get("ASTLOOM_LITELLM_DOCS_PROMPT_CHARS", "") or "").strip()
+        if raw:
+            try:
+                return max(4_000, int(raw))
+            except ValueError:
+                pass
+        return self._PROMPT_BUDGET_CHARS
+
+    def _generate_many_chunk(
+        self,
+        items: list[tuple[GraphSymbol, list[str]]],
+        *,
+        body_cap: int,
+        split_depth: int = 0,
+    ) -> list[str]:
         route = resolve_route(
             "docs.generate",
             default_model=getattr(self.settings, "default_model", "") or "",
@@ -175,25 +200,11 @@ class LlmBackedDocGenerator:
         if not models:
             return [self.fallback.generate(symbol, neighbors) for symbol, neighbors in items]
 
-        entries: list[str] = []
-        for index, (symbol, neighbors) in enumerate(items):
-            neighbor_text = ", ".join(neighbors[:8]) if neighbors else "none"
-            body = (symbol.body or "")[:1200]
-            entries.append(
-                f"[{index}] kind={symbol.kind.value}\n"
-                f"qualified_name={symbol.qualified_name}\n"
-                f"signature={symbol.signature or symbol.name}\n"
-                f"file_path={symbol.file_path}\n"
-                f"related={neighbor_text}\n"
-                f"body:\n{body}\n"
-            )
-        prompt = (
-            "Document each code symbol below for a knowledge graph. "
-            "Return ONLY a JSON object mapping each qualified_name string to a "
-            "short plain-text doc string. Do not invent APIs. Keep each value concise.\n\n"
-            + "\n---\n".join(entries)
-        )
-        max_tokens = max(int(route.max_tokens or 512), min(4096, 180 * len(items)))
+        prompt = build_docs_batch_prompt(items, body_cap=body_cap)
+        # Keep completion short so Provider time stays inside the hard deadline.
+        max_tokens = max(256, min(2048, 100 * len(items) + 200))
+        if route.max_tokens:
+            max_tokens = max(256, min(max_tokens, int(route.max_tokens)))
         for model in models:
             try:
                 result = self.gateway.complete(
@@ -221,11 +232,107 @@ class LlmBackedDocGenerator:
                         text or self.fallback.generate(symbol, neighbors)
                         for text, (symbol, neighbors) in zip(parsed, items, strict=True)
                     ]
-            except Exception:  # noqa: BLE001 — next model, then heuristic
+            except Exception:  # noqa: BLE001 — next model, then split / heuristic
                 continue
 
-        # Provider hang/timeout/error: keep ingest moving with heuristic docs.
+        # Oversized / hung batch: split and retry before giving up on LLM docs.
+        if len(items) > 1 and split_depth < self._MAX_SPLIT_DEPTH:
+            mid = max(1, len(items) // 2)
+            next_cap = max(self._BODY_CAPS[-1], body_cap // 2)
+            return self._generate_many_chunk(
+                items[:mid], body_cap=next_cap, split_depth=split_depth + 1
+            ) + self._generate_many_chunk(
+                items[mid:], body_cap=next_cap, split_depth=split_depth + 1
+            )
+
         return [self.fallback.generate(symbol, neighbors) for symbol, neighbors in items]
+
+
+def _docs_entry_chars(
+    symbol: GraphSymbol,
+    neighbors: list[str],
+    *,
+    body_cap: int,
+) -> int:
+    body = (symbol.body or "")[: max(0, int(body_cap))]
+    neighbor_text = ", ".join(neighbors[:8]) if neighbors else "none"
+    return (
+        80
+        + len(symbol.kind.value)
+        + len(symbol.qualified_name or "")
+        + len(symbol.signature or symbol.name or "")
+        + len(symbol.file_path or "")
+        + len(neighbor_text)
+        + len(body)
+    )
+
+
+def build_docs_batch_prompt(
+    items: list[tuple[GraphSymbol, list[str]]],
+    *,
+    body_cap: int,
+) -> str:
+    entries: list[str] = []
+    for index, (symbol, neighbors) in enumerate(items):
+        neighbor_text = ", ".join(neighbors[:8]) if neighbors else "none"
+        body = (symbol.body or "")[: max(0, int(body_cap))]
+        entries.append(
+            f"[{index}] kind={symbol.kind.value}\n"
+            f"qualified_name={symbol.qualified_name}\n"
+            f"signature={symbol.signature or symbol.name}\n"
+            f"file_path={symbol.file_path}\n"
+            f"related={neighbor_text}\n"
+            f"body:\n{body}\n"
+        )
+    return (
+        "Document each code symbol below for a knowledge graph. "
+        "Return ONLY a JSON object mapping each qualified_name string to a "
+        "short plain-text doc string. Do not invent APIs. Keep each value concise.\n\n"
+        + "\n---\n".join(entries)
+    )
+
+
+def pack_docs_batches(
+    items: list[tuple[GraphSymbol, list[str]]],
+    *,
+    prompt_budget: int = LlmBackedDocGenerator._PROMPT_BUDGET_CHARS,
+    max_chunk: int = LlmBackedDocGenerator._BATCH_CHUNK,
+    body_caps: tuple[int, ...] = LlmBackedDocGenerator._BODY_CAPS,
+) -> list[tuple[list[tuple[GraphSymbol, list[str]]], int]]:
+    """Pack symbols into Provider-safe chunks under a prompt-char budget.
+
+    Large files (many symbols / long bodies) automatically use fewer symbols
+    per complete and shorter body excerpts so requests finish inside the
+    LiteLLM hard deadline instead of hanging on a mega-prompt.
+    """
+    if not items:
+        return []
+    budget = max(4_000, int(prompt_budget))
+    caps = body_caps or (800, 400, 200)
+    prefix = 220  # instruction text
+    out: list[tuple[list[tuple[GraphSymbol, list[str]]], int]] = []
+    index = 0
+    while index < len(items):
+        packed = False
+        remaining = len(items) - index
+        for size in range(min(int(max_chunk), remaining), 0, -1):
+            chunk = items[index : index + size]
+            for body_cap in caps:
+                est = prefix + sum(
+                    _docs_entry_chars(sym, neigh, body_cap=body_cap)
+                    for sym, neigh in chunk
+                )
+                if est <= budget:
+                    out.append((chunk, int(body_cap)))
+                    index += size
+                    packed = True
+                    break
+            if packed:
+                break
+        if not packed:
+            out.append((items[index : index + 1], int(caps[-1])))
+            index += 1
+    return out
 
 
 def _parse_docs_batch_json(

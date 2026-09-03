@@ -101,10 +101,12 @@ Only changed or new symbols are sent to the AI documentation pipeline. Unchanged
 
 When living LLM docs are enabled (`ASTLOOM_LITELLM_DOCS_ENABLED`), each changed
 **file** sends one batched Provider `complete` (`generate_many`) covering the
-changed symbols in that file (JSON map, chunks of 8). This is not one call per
-symbol. When the Provider hangs or exceeds `ASTLOOM_LITELLM_TIMEOUT_SECONDS`,
-that chunk falls back to the heuristic generator so file ingest continues.
-When docs are disabled, the heuristic generator fills stubs without RPM.
+changed symbols in that file (JSON map, adaptively chunked under a prompt-char
+budget — default ~20k chars / env `ASTLOOM_LITELLM_DOCS_PROMPT_CHARS`). This is
+not one call per symbol. Oversized or hung chunks split and retry, then fall
+back to the heuristic generator so file ingest continues. Human Markdown docs
+already embed via full-coverage windows (`chunk_embedding_input`). When docs
+are disabled, the heuristic generator fills stubs without RPM.
 
 Generated documentation includes:
 
