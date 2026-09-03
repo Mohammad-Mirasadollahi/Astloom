@@ -20,6 +20,15 @@ from ..support import unresolved_symbol_id
 class FileEmissionsMixin:
     """Framework routes, HTTP client calls, DI injections, test links, rationale, dispatch."""
 
+    def _symbols_compact(self, scope: Scope) -> list[GraphSymbol]:
+        """Resolution-sized symbol list (no bodies) — never use full list_symbols in emit hot paths."""
+        lister = getattr(self.store, "list_symbols_index", None)
+        if not callable(lister):
+            lister = getattr(self.store, "list_symbols_lean", None)
+        if callable(lister):
+            return list(lister(scope))
+        return list(self.store.list_symbols(scope))
+
     def _emit_framework_routes(
         self,
         scope: Scope,
@@ -34,7 +43,7 @@ class FileEmissionsMixin:
         written = 0
         if short_names is None:
             by_name: dict[str, list[str]] = {}
-            for sym in self.store.list_symbols(scope):
+            for sym in self._symbols_compact(scope):
                 if sym.kind in {SymbolKind.FUNCTION, SymbolKind.METHOD}:
                     by_name.setdefault(sym.name, []).append(sym.id)
         else:
@@ -117,41 +126,48 @@ class FileEmissionsMixin:
         file_path: str,
         source: str,
         language: str,
+        routes_by_path: dict[str, list[str]] | None = None,
     ) -> int:
         """Emit HTTP_CALLS from client call sites to ROUTE/handler or unresolved targets."""
         calls = extract_http_calls(source, language=language, file_path=file_path)
         if not calls:
             return 0
 
-        # Prefer file-level caller: functions in this file that contain the call line (best-effort: all funcs in file)
+        # Prefer file-level callers (bodies available on per-file listing only).
+        lister = getattr(self.store, "list_symbols_for_file", None)
+        if callable(lister):
+            file_syms = list(lister(scope, file_path))
+        else:
+            file_syms = [
+                s
+                for s in self._symbols_compact(scope)
+                if s.file_path == file_path
+            ]
         file_funcs = [
             s
-            for s in self.store.list_symbols(scope)
-            if s.file_path == file_path
-            and s.kind in {SymbolKind.FUNCTION, SymbolKind.METHOD}
+            for s in file_syms
+            if s.kind in {SymbolKind.FUNCTION, SymbolKind.METHOD}
         ]
-        routes_by_path: dict[str, list[str]] = {}
-        for sym in self.store.list_symbols(scope):
-            if sym.kind != SymbolKind.ROUTE:
-                continue
-            # qualified_name: route:METHOD:/path
-            parts = sym.qualified_name.split(":", 2)
-            path = parts[2] if len(parts) >= 3 else ""
-            if path:
-                routes_by_path.setdefault(normalize_http_path(path), []).append(sym.id)
+        if routes_by_path is None:
+            routes_by_path = {}
+            for sym in self._symbols_compact(scope):
+                if sym.kind != SymbolKind.ROUTE:
+                    continue
+                parts = sym.qualified_name.split(":", 2)
+                path = parts[2] if len(parts) >= 3 else ""
+                if path:
+                    routes_by_path.setdefault(normalize_http_path(path), []).append(sym.id)
 
         written = 0
         for call in calls:
             path = normalize_http_path(call.url_or_path)
             targets = list(routes_by_path.get(path, []))
-            # Also match ROUTES_TO handlers via route metadata path
+            # Scoped fallback: ROUTES_TO only (never unfiltered list_edges(scope)).
             if not targets:
-                for edge in self.store.list_edges(scope):
-                    if edge.rel_type != RelType.ROUTES_TO.value:
-                        continue
+                for edge in self.store.list_edges(scope, rel_type=RelType.ROUTES_TO.value):
                     meta_path = normalize_http_path(str(edge.metadata.get("path") or ""))
                     if meta_path == path:
-                        targets.append(edge.source_id)  # route node
+                        targets.append(edge.source_id)
             targets = list(dict.fromkeys(targets))
             confidence = (
                 CallConfidence.EXACT
@@ -208,16 +224,20 @@ class FileEmissionsMixin:
         file_path: str,
         source: str,
         language: str,
+        short_names: dict[str, list[str]] | None = None,
     ) -> int:
         """Emit CALLS edges for Depends / constructor DI bindings."""
-        by_name: dict[str, list[str]] = {}
-        for sym in self.store.list_symbols(scope):
-            if sym.kind in {
-                SymbolKind.FUNCTION,
-                SymbolKind.METHOD,
-                SymbolKind.CLASS,
-            }:
-                by_name.setdefault(sym.name, []).append(sym.id)
+        if short_names is None:
+            by_name: dict[str, list[str]] = {}
+            for sym in self._symbols_compact(scope):
+                if sym.kind in {
+                    SymbolKind.FUNCTION,
+                    SymbolKind.METHOD,
+                    SymbolKind.CLASS,
+                }:
+                    by_name.setdefault(sym.name, []).append(sym.id)
+        else:
+            by_name = short_names
 
         written = 0
         for inj in extract_injections(source, language=language, file_path=file_path):
@@ -281,7 +301,7 @@ class FileEmissionsMixin:
         """Emit convention-based TESTED_BY edges (production → test)."""
         triples: list[tuple[str, str, str]] = []
         id_by_qn: dict[str, str] = {}
-        symbol_snapshot = symbols if symbols is not None else self.store.list_symbols(scope)
+        symbol_snapshot = symbols if symbols is not None else self._symbols_compact(scope)
         for sym in symbol_snapshot:
             if sym.kind not in {SymbolKind.FUNCTION, SymbolKind.METHOD, SymbolKind.CLASS}:
                 continue
@@ -406,7 +426,7 @@ class FileEmissionsMixin:
         edges: Sequence[GraphEdge] | None = None,
     ) -> int:
         symbol_snapshot = (
-            list(symbols) if symbols is not None else self.store.list_symbols(scope)
+            list(symbols) if symbols is not None else self._symbols_compact(scope)
         )
         edge_snapshot = (
             list(edges)

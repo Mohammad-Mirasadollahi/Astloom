@@ -156,11 +156,12 @@ class PushedIngestMixin:
             "short_names": {},
         }
         try:
-            indexes, by_qualified, short_names = self._resolution_indexes(scope)
+            indexes, by_qualified, short_names, routes_by_path = self._resolution_indexes(scope)
             shared_resolution = {
                 "indexes": indexes,
                 "by_qualified": by_qualified,
                 "short_names": short_names,
+                "routes_by_path": routes_by_path,
             }
         except Exception:  # noqa: BLE001
             pass

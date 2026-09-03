@@ -235,8 +235,9 @@ class FileIngestMixin(
             indexes = shared["indexes"]
             by_qualified = shared.get("by_qualified") or {}
             short_names = shared.get("short_names") or {}
+            routes_by_path = shared.get("routes_by_path") or {}
         else:
-            indexes, by_qualified, short_names = self._resolution_indexes(scope)
+            indexes, by_qualified, short_names, routes_by_path = self._resolution_indexes(scope)
         package_aliases = payload.get("package_aliases")
         if not isinstance(package_aliases, dict):
             package_aliases = {}
@@ -277,10 +278,18 @@ class FileIngestMixin(
             short_names=short_names if defer_cross_file else None,
         )
         edges_written += self._emit_http_calls(
-            scope, file_path=file_path, source=source, language=language
+            scope,
+            file_path=file_path,
+            source=source,
+            language=language,
+            routes_by_path=routes_by_path if defer_cross_file else None,
         )
         edges_written += self._emit_di_injections(
-            scope, file_path=file_path, source=source, language=language
+            scope,
+            file_path=file_path,
+            source=source,
+            language=language,
+            short_names=short_names if defer_cross_file else None,
         )
         if not defer_cross_file:
             edges_written += self._emit_test_links(scope)

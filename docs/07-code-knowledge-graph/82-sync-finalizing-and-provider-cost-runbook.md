@@ -77,6 +77,7 @@ This is **not** the Neo4j heap OOM path — see [`81`](81-neo4j-memory-and-conte
 | Local `astloom sync` | Bar at `code N/N` 100%; `status=finalizing` in `.astloom/sync-progress.json`; py-spy in `delete_edge` / `_relink_unresolved_calls` |
 | Client content-push | Stream idle between batches or long silence after last files; UI looks stuck at 100% |
 | Client prep | Long pause on `fetching remote file hashes` or `building resolution indexes` / `loading graph snapshots` before `%` moves |
+| Client stall at 0% | `parallel 0 active / N workers`, RPM idle after indexes — often per-file full-graph `list_symbols` holding LockedStore slots (fixed via shared resolution maps) |
 | Provider | High `complete` count ≈ changed **symbols** (legacy) rather than changed **files** |
 
 ## Root causes (shipped fixes)
@@ -91,6 +92,7 @@ This is **not** the Neo4j heap OOM path — see [`81`](81-neo4j-memory-and-conte
 | Partial push dumped full `list_symbols` (with bodies) before workers | Prune dump only when `inventory_complete`; resolution uses `list_symbols_index` |
 | `file-hashes` scanned full symbols (or slow `EXISTS` correlated subquery) | Neo4j `content_hash_maps` via compact `LIST_CONTENT_HASH_ROWS` |
 | Finalize loaded **all** CALL/IMPORT edges | Relink reads `target_id_prefixes` (`unresolved:` / `ext:`) first; dispatch still needs broader CALL reads |
+| Per-file DI/HTTP emit re-ran full `list_symbols` / unfiltered `list_edges` under LockedStore | Pass shared `short_names` / `routes_by_path`; HTTP uses `list_symbols_for_file` + `ROUTES_TO`-scoped edge fallback |
 
 ## Diagnosis
 

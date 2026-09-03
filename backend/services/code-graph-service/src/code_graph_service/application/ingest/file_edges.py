@@ -12,6 +12,7 @@ from ...domain.cross_language import (
 from ...domain.enums import CallConfidence, DocStatus, SymbolKind
 from ...domain.external_calls import classify_external_call, external_call_symbol_id
 from ...domain.hashing import digest
+from ...domain.http_calls import normalize_http_path
 from ...domain.models import GraphSymbol, ParseResult, Scope
 from ..support import unresolved_symbol_id
 
@@ -240,7 +241,7 @@ class FileEdgesMixin:
 
     def _resolution_indexes(
         self, scope: Scope
-    ) -> tuple[SymbolIndexes, dict[str, str], dict[str, list[str]]]:
+    ) -> tuple[SymbolIndexes, dict[str, str], dict[str, list[str]], dict[str, list[str]]]:
         lister = getattr(self.store, "list_symbols_index", None)
         if not callable(lister):
             lister = getattr(self.store, "list_symbols_lean", None)
@@ -252,8 +253,15 @@ class FileEdgesMixin:
             if s.kind not in {SymbolKind.FILE, SymbolKind.DOCUMENTATION}
         }
         short_names: dict[str, list[str]] = {}
+        routes_by_path: dict[str, list[str]] = {}
         for s in symbols:
             if s.kind in {SymbolKind.FILE, SymbolKind.DOCUMENTATION, SymbolKind.IMPORT}:
                 continue
+            if s.kind == SymbolKind.ROUTE:
+                parts = s.qualified_name.split(":", 2)
+                path = parts[2] if len(parts) >= 3 else ""
+                if path:
+                    routes_by_path.setdefault(normalize_http_path(path), []).append(s.id)
+                continue
             short_names.setdefault(s.name, []).append(s.id)
-        return indexes, by_qualified, short_names
+        return indexes, by_qualified, short_names, routes_by_path
