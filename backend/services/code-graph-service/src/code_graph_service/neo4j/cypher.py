@@ -93,6 +93,46 @@ RETURN n {
 } AS n
 """
 
+# Sync resolution / finalize indexes: no body, docs, or metadata blobs on the wire.
+LIST_SYMBOLS_INDEX = """
+MATCH (n:CodeSymbol)
+WHERE n.tenant_id = $tenant_id
+  AND n.workspace_id = $workspace_id
+  AND n.project_id = $project_id
+  AND n.kind IS NOT NULL
+  AND n.doc_status IS NOT NULL
+WITH n
+ORDER BY n.qualified_name, n.id
+RETURN n {
+  .id, .kind, .file_path, .name, .qualified_name, .doc_status, .language,
+  hash_value: coalesce(n.hash_value, ""),
+  signature: "",
+  body: "",
+  ai_documentation: "",
+  embedding: [],
+  visibility: coalesce(n.visibility, ""),
+  version: coalesce(n.version, 1),
+  created_at: coalesce(n.created_at, ""),
+  updated_at: coalesce(n.updated_at, ""),
+  hash_version: "",
+  parser_version: "",
+  metadata_json: "{}"
+} AS n
+"""
+
+# Client hash-skip: tiny rows only (no EXISTS correlated subquery).
+LIST_CONTENT_HASH_ROWS = """
+MATCH (n:CodeSymbol)
+WHERE n.tenant_id = $tenant_id
+  AND n.workspace_id = $workspace_id
+  AND n.project_id = $project_id
+  AND n.kind IN ['file', 'function', 'method', 'class', 'documentation']
+RETURN n.kind AS kind,
+       n.file_path AS path,
+       coalesce(n.hash_value, '') AS hash,
+       n.id AS id
+"""
+
 LIST_SYMBOLS_FOR_FILE = """
 MATCH (n:CodeSymbol)
 WHERE n.tenant_id = $tenant_id
@@ -178,6 +218,11 @@ WHERE r.tenant_id = $tenant_id
   AND ($rel_type IS NULL OR r.rel_type = $rel_type)
   AND ($source_id IS NULL OR source.id = $source_id)
   AND ($target_id IS NULL OR target.id = $target_id)
+  AND (
+    $target_id_prefixes IS NULL
+    OR size($target_id_prefixes) = 0
+    OR any(p IN $target_id_prefixes WHERE target.id STARTS WITH p)
+  )
 RETURN r.id AS id,
        r.rel_type AS rel_type,
        coalesce(r.confidence, 'exact') AS confidence,

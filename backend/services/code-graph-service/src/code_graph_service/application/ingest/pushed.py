@@ -89,16 +89,20 @@ class PushedIngestMixin:
                         "done": 0,
                         "total": 0,
                         "status": "preparing",
-                        "file": "loading graph snapshots",
+                        "file": "building resolution indexes",
                         "file_workers": sync_max_file_workers(),
                     }
                 )
             except Exception:  # noqa: BLE001
                 pass
 
-        stored_symbols = list(self.store.list_symbols(scope))
+        # Full symbol dump is only required for inventory-complete prune.
         if present_paths is not None:
-            stored_symbols = self._prune_removed_source_symbols(
+            prune_lister = getattr(self.store, "list_symbols_index", None)
+            if not callable(prune_lister):
+                prune_lister = self.store.list_symbols
+            stored_symbols = list(prune_lister(scope))
+            self._prune_removed_source_symbols(
                 scope,
                 stored_symbols=stored_symbols,
                 discovered_paths=present_paths,
@@ -415,12 +419,22 @@ class PushedIngestMixin:
 
         FILE hashes are published only when the file has code children.
         A FILE stub written before a failed embed must not skip the retry.
+        Prefer a store-native map (Neo4j Cypher) over a full ``list_symbols`` dump.
         """
+        native = getattr(self.store, "content_hash_maps", None)
+        if callable(native):
+            try:
+                return native(scope)
+            except TypeError:
+                pass
         files: dict[str, Any] = {}
         children: set[str] = set()
         docs: dict[str, str] = {}
         child_kinds = {SymbolKind.FUNCTION, SymbolKind.METHOD, SymbolKind.CLASS}
-        for symbol in self.store.list_symbols(scope):
+        lister = getattr(self.store, "list_symbols_index", None)
+        if not callable(lister):
+            lister = self.store.list_symbols
+        for symbol in lister(scope):
             kind = getattr(symbol, "kind", None)
             path = str(getattr(symbol, "file_path", "") or "").replace("\\", "/")
             digest = str(getattr(symbol, "hash_value", "") or "").strip()

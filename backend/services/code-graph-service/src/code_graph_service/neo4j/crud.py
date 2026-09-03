@@ -184,6 +184,53 @@ class Neo4jCrudMixin:
             )
         return self._symbols_from_rows(rows, scope)
 
+    def list_symbols_index(self, scope: Scope) -> list[GraphSymbol]:
+        """Compact symbols for sync resolution / finalize (no body or docs on the wire)."""
+        with self._driver.session(database=self._database) as session:
+            rows = list(
+                session.run(
+                    cypher.LIST_SYMBOLS_INDEX,
+                    tenant_id=scope.tenant_id,
+                    workspace_id=scope.workspace_id,
+                    project_id=scope.project_id,
+                )
+            )
+        return self._symbols_from_rows(rows, scope)
+
+    def content_hash_maps(self, scope: Scope) -> tuple[dict[str, str], dict[str, str]]:
+        """FILE + human-doc content hashes without loading full symbol bodies."""
+        with self._driver.session(database=self._database) as session:
+            rows = list(
+                session.run(
+                    cypher.LIST_CONTENT_HASH_ROWS,
+                    tenant_id=scope.tenant_id,
+                    workspace_id=scope.workspace_id,
+                    project_id=scope.project_id,
+                )
+            )
+        file_hashes: dict[str, str] = {}
+        children: set[str] = set()
+        docs: dict[str, str] = {}
+        child_kinds = {"function", "method", "class"}
+        for row in rows:
+            kind = str(row.get("kind") or "")
+            path = str(row.get("path") or "").replace("\\", "/")
+            digest = str(row.get("hash") or "").strip()
+            if not path:
+                continue
+            if kind == "file":
+                if digest:
+                    file_hashes[path] = digest
+            elif kind in child_kinds:
+                children.add(path)
+            elif (
+                kind == "documentation"
+                and str(row.get("id") or "").startswith("doc:human:")
+                and digest
+            ):
+                docs[path] = digest
+        return {path: digest for path, digest in file_hashes.items() if path in children}, docs
+
     def list_symbols_for_file(self, scope: Scope, file_path: str) -> list[GraphSymbol]:
         path = str(file_path or "").replace("\\", "/")
         with self._driver.session(database=self._database) as session:
@@ -296,7 +343,9 @@ class Neo4jCrudMixin:
         rel_type: str | None = None,
         source_id: str | None = None,
         target_id: str | None = None,
+        target_id_prefixes: list[str] | None = None,
     ) -> list[GraphEdge]:
+        prefixes = list(target_id_prefixes or [])
         with self._driver.session(database=self._database) as session:
             rows = list(
                 session.run(
@@ -307,6 +356,7 @@ class Neo4jCrudMixin:
                     rel_type=rel_type,
                     source_id=source_id,
                     target_id=target_id,
+                    target_id_prefixes=prefixes or None,
                 )
             )
         return [

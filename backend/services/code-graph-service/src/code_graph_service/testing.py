@@ -12,7 +12,7 @@ import threading
 from copy import deepcopy
 from typing import Any, Callable, TypeVar
 
-from .core import ConflictError, GraphEdge, GraphSymbol, NotFoundError, Scope
+from .core import ConflictError, GraphEdge, GraphSymbol, NotFoundError, Scope, SymbolKind
 
 _T = TypeVar("_T")
 
@@ -79,6 +79,43 @@ class InMemoryStore:
         for sym in symbols:
             sym.ai_documentation = ""
         return symbols
+
+    def list_symbols_index(self, scope: Scope) -> list[GraphSymbol]:
+        symbols = self.list_symbols(scope)
+        for sym in symbols:
+            sym.ai_documentation = ""
+            sym.body = ""
+            sym.embedding = []
+            sym.metadata = {}
+        return symbols
+
+    def content_hash_maps(self, scope: Scope) -> tuple[dict[str, str], dict[str, str]]:
+        files: dict[str, Any] = {}
+        children: set[str] = set()
+        docs: dict[str, str] = {}
+        child_kinds = {SymbolKind.FUNCTION, SymbolKind.METHOD, SymbolKind.CLASS}
+        for symbol in self.list_symbols(scope):
+            kind = getattr(symbol, "kind", None)
+            path = str(getattr(symbol, "file_path", "") or "").replace("\\", "/")
+            digest = str(getattr(symbol, "hash_value", "") or "").strip()
+            if not path:
+                continue
+            if kind == SymbolKind.FILE:
+                files[path] = symbol
+            elif kind in child_kinds:
+                children.add(path)
+            elif (
+                kind == SymbolKind.DOCUMENTATION
+                and str(getattr(symbol, "id", "")).startswith("doc:human:")
+                and digest
+            ):
+                docs[path] = digest
+        out: dict[str, str] = {}
+        for path, symbol in files.items():
+            digest = str(getattr(symbol, "hash_value", "") or "").strip()
+            if digest and path in children:
+                out[path] = digest
+        return out, docs
 
     def list_symbols_for_file(self, scope: Scope, file_path: str) -> list[GraphSymbol]:
         path = str(file_path or "").replace("\\", "/")
@@ -149,7 +186,10 @@ class InMemoryStore:
         rel_type: str | None = None,
         source_id: str | None = None,
         target_id: str | None = None,
+        target_id_prefixes: list[str] | None = None,
     ) -> list[GraphEdge]:
+        prefixes = tuple(target_id_prefixes or ())
+
         def _run() -> list[GraphEdge]:
             items = [
                 item
@@ -158,6 +198,10 @@ class InMemoryStore:
                 and (rel_type is None or item.rel_type == rel_type)
                 and (source_id is None or item.source_id == source_id)
                 and (target_id is None or item.target_id == target_id)
+                and (
+                    not prefixes
+                    or any(str(item.target_id).startswith(p) for p in prefixes)
+                )
             ]
             return deepcopy(sorted(items, key=lambda item: item.id))
 

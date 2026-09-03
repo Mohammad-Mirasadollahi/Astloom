@@ -304,6 +304,15 @@ class PostgresStore:
             sym.ai_documentation = ""
         return symbols
 
+    def list_symbols_index(self, scope: Scope) -> list[GraphSymbol]:
+        symbols = self.list_symbols(scope)
+        for sym in symbols:
+            sym.ai_documentation = ""
+            sym.body = ""
+            sym.embedding = []
+            sym.metadata = {}
+        return symbols
+
     def list_symbols_for_file(self, scope: Scope, file_path: str) -> list[GraphSymbol]:
         path = str(file_path or "").replace("\\", "/")
         with self._connection.cursor() as cur:
@@ -403,6 +412,7 @@ class PostgresStore:
         rel_type: str | None = None,
         source_id: str | None = None,
         target_id: str | None = None,
+        target_id_prefixes: list[str] | None = None,
     ) -> list[GraphEdge]:
         with self._connection.cursor() as cur:
             cur.execute(
@@ -427,7 +437,8 @@ class PostgresStore:
                 ),
             )
             rows = cur.fetchall()
-        return [
+        prefixes = tuple(target_id_prefixes or ())
+        edges = [
             GraphEdge(
                 id=row["id"],
                 scope=scope,
@@ -438,6 +449,13 @@ class PostgresStore:
                 metadata=dict(row["metadata"] or {}),
             )
             for row in rows
+        ]
+        if not prefixes:
+            return edges
+        return [
+            edge
+            for edge in edges
+            if any(str(edge.target_id).startswith(p) for p in prefixes)
         ]
 
     def begin_idempotency(self, scope: Scope, key: str, resource: str) -> str | None:

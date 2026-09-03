@@ -192,11 +192,27 @@ class FileRelinkMixin:
                 return
 
         _note("loading graph snapshots")
-        symbols = self.store.list_symbols(scope)
-        call_edges = self.store.list_edges(scope, rel_type="CALLS")
+        lister = getattr(self.store, "list_symbols_index", None)
+        if not callable(lister):
+            lister = getattr(self.store, "list_symbols_lean", None)
+        symbols = list(lister(scope) if callable(lister) else self.store.list_symbols(scope))
+        # Relink only pending targets — full CALL scans dominate finalize wall time.
+        call_edges = self.store.list_edges(
+            scope,
+            rel_type="CALLS",
+            target_id_prefixes=["unresolved:"],
+        )
         reference_edges = [
-            *self.store.list_edges(scope, rel_type="IMPORTS"),
-            *self.store.list_edges(scope, rel_type="INHERITS_FROM"),
+            *self.store.list_edges(
+                scope,
+                rel_type="IMPORTS",
+                target_id_prefixes=["ext:"],
+            ),
+            *self.store.list_edges(
+                scope,
+                rel_type="INHERITS_FROM",
+                target_id_prefixes=["unresolved:"],
+            ),
         ]
         self._placeholder_id_cache = {symbol.id for symbol in symbols}
         self._begin_edge_batch_for_scope(scope)

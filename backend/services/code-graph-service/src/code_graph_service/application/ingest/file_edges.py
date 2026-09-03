@@ -241,7 +241,10 @@ class FileEdgesMixin:
     def _resolution_indexes(
         self, scope: Scope
     ) -> tuple[SymbolIndexes, dict[str, str], dict[str, list[str]]]:
-        symbols = self.store.list_symbols(scope)
+        lister = getattr(self.store, "list_symbols_index", None)
+        if not callable(lister):
+            lister = getattr(self.store, "list_symbols_lean", None)
+        symbols = list(lister(scope) if callable(lister) else self.store.list_symbols(scope))
         indexes = build_symbol_indexes(symbols)
         by_qualified = {
             s.qualified_name: s.id
