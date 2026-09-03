@@ -258,6 +258,9 @@ diagnostics/
 reports/generated/
 artifacts/generated/
 
+# Ephemeral live QA outputs under tests/artifacts (keep tracked summaries; ignore local speed probes)
+tests/artifacts/code-graph-live/client-content-push-speed.json
+
 # Synthetic CPU-bench modules (local load fixtures — never commit / never sync-ingest)
 _cpu_bench/
 **/_cpu_bench/
