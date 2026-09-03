@@ -96,6 +96,40 @@ def _error_detail(exc: BaseException) -> str:
     return type(exc).__name__
 
 
+def _as_httpx_timeout(seconds: float) -> Any:
+    """Explicit connect/read/write timeouts (float alone is easy for providers to ignore)."""
+    import httpx
+
+    total = max(0.1, float(seconds))
+    connect = min(30.0, total)
+    return httpx.Timeout(connect=connect, read=total, write=total, pool=total)
+
+
+def _run_with_deadline(fn: Any, timeout_seconds: float) -> Any:
+    """Hard wall-clock deadline around provider I/O.
+
+    httpx/OpenAI timeouts are not always honored on a stalled TLS read; without
+    this, RPM slots and file workers stay wedged indefinitely on living-docs.
+    """
+    import concurrent.futures
+
+    deadline = max(0.1, float(timeout_seconds))
+    executor = concurrent.futures.ThreadPoolExecutor(
+        max_workers=1, thread_name_prefix="llm-deadline"
+    )
+    try:
+        future = executor.submit(fn)
+        try:
+            return future.result(timeout=deadline)
+        except concurrent.futures.TimeoutError as exc:
+            raise TimeoutError(
+                f"LiteLLM call exceeded deadline of {deadline:g}s"
+            ) from exc
+    finally:
+        # Do not wait for a hung provider socket; allow the worker to drain later.
+        executor.shutdown(wait=False, cancel_futures=False)
+
+
 def _effective_num_retries(configured: int) -> int:
     """LiteLLM retries need tenacity; without it, retries become a hard failure."""
     if configured <= 0:
@@ -155,6 +189,13 @@ def _apply_litellm_runtime(litellm: Any, settings: LlmGatewaySettings) -> None:
     # Always suppress the noisy "Give Feedback / Get Help" tip; we log real errors.
     litellm.suppress_debug_info = True
     litellm.drop_params = settings.drop_params
+    # Prefer explicit global request timeout when call-site kwargs are dropped.
+    try:
+        litellm.request_timeout = float(settings.timeout_seconds)
+        if hasattr(litellm, "request_timeout_explicitly_set"):
+            litellm.request_timeout_explicitly_set = True
+    except Exception:  # noqa: BLE001
+        pass
     if settings.debug and not _litellm_debug_on:
         turn_on = getattr(litellm, "_turn_on_debug", None)
         if callable(turn_on):
@@ -207,7 +248,7 @@ class LiteLlmGateway:
                 "model": model,
                 "messages": messages,
                 "temperature": request.temperature,
-                "timeout": self.settings.timeout_seconds,
+                "timeout": _as_httpx_timeout(self.settings.timeout_seconds),
                 "num_retries": _effective_num_retries(self.settings.num_retries),
                 "api_base": self.settings.api_base,
             }
@@ -225,7 +266,10 @@ class LiteLlmGateway:
             if reasoning is not None:
                 kwargs["extra_body"] = {"reasoning": reasoning}
 
-            response = litellm.completion(**kwargs)
+            response = _run_with_deadline(
+                lambda kw=kwargs: litellm.completion(**kw),
+                self.settings.timeout_seconds,
+            )
             content = _message_content(response)
             usage = {}
             raw_usage = getattr(response, "usage", None)
@@ -273,13 +317,16 @@ class LiteLlmGateway:
             kwargs: dict[str, Any] = {
                 "model": resolved,
                 "input": [text],
-                "timeout": self.settings.timeout_seconds,
+                "timeout": _as_httpx_timeout(self.settings.timeout_seconds),
                 "num_retries": _effective_num_retries(self.settings.num_retries),
                 "api_base": self.settings.api_base,
             }
             if self.settings.api_key:
                 kwargs["api_key"] = self.settings.api_key
-            response = litellm.embedding(**kwargs)
+            response = _run_with_deadline(
+                lambda kw=kwargs: litellm.embedding(**kw),
+                self.settings.timeout_seconds,
+            )
             data = getattr(response, "data", None) or []
             if not data:
                 raise RuntimeError("LiteLLM embedding returned no data")
@@ -346,13 +393,16 @@ class LiteLlmGateway:
                 kwargs: dict[str, Any] = {
                     "model": resolved,
                     "input": chunk,
-                    "timeout": self.settings.timeout_seconds,
+                    "timeout": _as_httpx_timeout(self.settings.timeout_seconds),
                     "num_retries": _effective_num_retries(self.settings.num_retries),
                     "api_base": self.settings.api_base,
                 }
                 if self.settings.api_key:
                     kwargs["api_key"] = self.settings.api_key
-                response = litellm.embedding(**kwargs)
+                response = _run_with_deadline(
+                    lambda kw=kwargs: litellm.embedding(**kw),
+                    self.settings.timeout_seconds,
+                )
                 data = getattr(response, "data", None) or []
                 if len(data) != len(chunk):
                     raise RuntimeError(

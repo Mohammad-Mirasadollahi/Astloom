@@ -81,7 +81,7 @@ Last verified: 2026-07-25
 | C-06 | Retry accounting | SDK `num_retries` multiplies provider load | One outer session per gateway invocation (LLD); document load effect |
 | C-07 | Heuristic / stub false RPM | Runtime fallback must not acquire or leave sessions | No `acquire` on runtime heuristic/local-stub paths; `FakeLlmGateway` explicitly emulates network-session semantics in tests |
 | C-08 | Local BGE vs LiteLLM embed | BGE must not consume RPM slots or serialize all files | Only `gateway.embed` acquires; model construction is process-serialized and inference is bounded to four concurrent calls process-wide across cached models |
-| C-09 | Hung sessions | Provider hang beyond operator patience | Timeout = `ASTLOOM_LITELLM_TIMEOUT_SECONDS`; forced end |
+| C-09 | Hung sessions | Provider hang beyond operator patience | Hard deadline = `ASTLOOM_LITELLM_TIMEOUT_SECONDS` in `LiteLlmGateway` (httpx timeout + wall clock); RPM released; docs fall back to heuristic |
 | C-10 | Multi-process CLI | Two `astloom sync` processes do not share registry | Document known limit; no Redis in v1 |
 | C-11 | File monopoly | One huge file’s network-backed symbol work can starve others | Living docs are one `complete` per file (`generate_many`); RPM gate still serializes Provider starts; an explicit round-robin DocWork scheduler is not implemented |
 | C-12 | Progress races | Unsynchronized counters mislead ETA | Lock/queue in `SyncProgressTracker` |

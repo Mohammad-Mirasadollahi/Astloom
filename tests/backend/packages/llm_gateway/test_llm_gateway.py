@@ -408,3 +408,68 @@ def test_resolve_route_cloud_profile(monkeypatch):
     assert decision.profile_id == "astloom-cloud-default"
     assert decision.json_mode is True
     assert decision.primary_model.startswith("anthropic/")
+
+
+def test_run_with_deadline_raises_timeout():
+    import time
+
+    from llm_gateway.gateway import _run_with_deadline
+
+    with pytest.raises(TimeoutError, match="deadline"):
+        _run_with_deadline(lambda: time.sleep(2.0), 0.2)
+
+
+def test_complete_enforces_deadline_and_releases_rpm(monkeypatch):
+    import time
+
+    import llm_gateway.gateway as gw_mod
+    from llm_gateway import reset_provider_quota_trip
+
+    reset_provider_quota_trip()
+    monkeypatch.setattr(gw_mod, "_litellm_debug_on", False)
+
+    class HangLiteLlm:
+        drop_params = False
+        set_verbose = False
+        suppress_debug_info = False
+        request_timeout = 600
+        request_timeout_explicitly_set = False
+
+        @staticmethod
+        def completion(**_kwargs):
+            time.sleep(5.0)
+            raise AssertionError("should have been abandoned by deadline")
+
+        @staticmethod
+        def embedding(**_kwargs):
+            raise RuntimeError("not used")
+
+    monkeypatch.setitem(sys.modules, "litellm", HangLiteLlm())
+    base = FakeLlmGateway().settings
+    settings = LlmGatewaySettings(
+        enabled=True,
+        api_base=base.api_base,
+        api_base_override=base.api_base_override,
+        api_base_is_auto=base.api_base_is_auto,
+        api_key="sk-test",
+        default_model="fake/model",
+        timeout_seconds=0.3,
+        num_retries=0,
+        rpm=2,
+        host=base.host,
+        port=base.port,
+        drop_params=True,
+        debug=False,
+        reasoning_enabled=False,
+        reasoning_effort="",
+    )
+    gateway = LiteLlmGateway(settings=settings)
+    with pytest.raises(TimeoutError, match="deadline"):
+        gateway.complete(
+            CompletionRequest(
+                messages=(ChatMessage(role="user", content="hi"),),
+                model="fake/model",
+            )
+        )
+    snap = gateway.rpm_sessions_snapshot()
+    assert snap.get("inflight_count") == 0

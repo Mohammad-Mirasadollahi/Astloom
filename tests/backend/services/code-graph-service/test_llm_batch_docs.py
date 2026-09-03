@@ -82,3 +82,25 @@ def test_parse_docs_batch_json_partial_fills_empty():
     b = _symbol("b")
     raw = json.dumps({"docs": {a.qualified_name: "only-a"}})
     assert _parse_docs_batch_json(raw, [(a, []), (b, [])]) == ["only-a", ""]
+
+
+def test_generate_many_falls_back_on_provider_timeout(monkeypatch):
+    monkeypatch.setenv("ASTLOOM_LITELLM_DOCS_ENABLED", "true")
+    a = _symbol("alpha")
+
+    class _BoomGateway:
+        settings = SimpleNamespace(enabled=True, default_model="test-model")
+
+        def complete(self, request: Any) -> SimpleNamespace:
+            raise TimeoutError("LiteLLM call exceeded deadline of 0.3s")
+
+    class _Heuristic:
+        def generate(self, symbol: GraphSymbol, neighbors: list[str]) -> str:
+            return f"heuristic:{symbol.name}"
+
+        def generate_many(self, items: list[tuple[GraphSymbol, list[str]]]) -> list[str]:
+            return [self.generate(s, n) for s, n in items]
+
+    gen = LlmBackedDocGenerator(_BoomGateway(), fallback=_Heuristic(), settings=_BoomGateway.settings)
+    out = gen.generate_many([(a, [])])
+    assert out == ["heuristic:alpha"]

@@ -308,7 +308,7 @@ No API keys, raw prompts, or completion bodies.
 | Variable | Default | Role |
 | --- | --- | --- |
 | `ASTLOOM_LITELLM_RPM` | `30` | Starts per rolling minute |
-| `ASTLOOM_LITELLM_TIMEOUT_SECONDS` | `180` | Session max duration; release on timeout |
+| `ASTLOOM_LITELLM_TIMEOUT_SECONDS` | `180` | Session max duration; hard deadline releases RPM even if TLS read stalls |
 | `ASTLOOM_LITELLM_NUM_RETRIES` | `3` | SDK retries inside one session |
 | `ASTLOOM_SYNC_MAX_FILE_WORKERS` | auto (`min(cpu, rpm)`) | Parse/hash workers; optional int override |
 | `HISTORY_SIZE` | `100` | Code constant for ring buffer |

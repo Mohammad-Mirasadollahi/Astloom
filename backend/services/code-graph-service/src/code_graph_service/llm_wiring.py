@@ -138,7 +138,7 @@ class LlmBackedDocGenerator:
     symbol in a file (root cause of sync RPM cost was one complete per symbol).
     """
 
-    _BATCH_CHUNK = 16
+    _BATCH_CHUNK = 8
 
     def __init__(
         self,
@@ -194,7 +194,6 @@ class LlmBackedDocGenerator:
             + "\n---\n".join(entries)
         )
         max_tokens = max(int(route.max_tokens or 512), min(4096, 180 * len(items)))
-        last_error: Exception | None = None
         for model in models:
             try:
                 result = self.gateway.complete(
@@ -222,13 +221,11 @@ class LlmBackedDocGenerator:
                         text or self.fallback.generate(symbol, neighbors)
                         for text, (symbol, neighbors) in zip(parsed, items, strict=True)
                     ]
-            except Exception as exc:  # noqa: BLE001 — try next model / fallback
-                last_error = exc
+            except Exception:  # noqa: BLE001 — next model, then heuristic
                 continue
 
-        if route.allow_stub or last_error is not None:
-            return [self.fallback.generate(symbol, neighbors) for symbol, neighbors in items]
-        raise RuntimeError(f"LiteLLM batch docs generation failed: {last_error}")
+        # Provider hang/timeout/error: keep ingest moving with heuristic docs.
+        return [self.fallback.generate(symbol, neighbors) for symbol, neighbors in items]
 
 
 def _parse_docs_batch_json(
