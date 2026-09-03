@@ -98,7 +98,7 @@ def test_file_stub_without_children_is_not_hash_skipped(monkeypatch):
             parser_version=hashed["parser_version"],
             created_at=now_iso(),
             updated_at=now_iso(),
-            metadata={"ingest_complete": True},
+            metadata={},  # incomplete stub: no ingest_complete
         )
     )
     service = CodeGraphService(store)
@@ -126,6 +126,58 @@ def test_file_stub_without_children_is_not_hash_skipped(monkeypatch):
     assert "src/a.py" in client.get(
         "/api/v1/projects/demo/graph/file-hashes", headers=headers
     ).json()["hashes"]
+
+
+def test_constants_only_file_hash_skips_on_second_push(monkeypatch):
+    """Childless modules still publish hash after ingest_complete."""
+    monkeypatch.setenv("ASTLOOM_CODE_GRAPH_HTTP_TOKEN", "secret-token-123456")
+    service = CodeGraphService(InMemoryStore())
+    client = TestClient(build_app(service))
+    headers = _headers(token="secret-token-123456")
+    source = "LIMIT = 10\nTIMEOUT_SEC = 30\n"
+    first = client.post(
+        "/api/v1/projects/demo/graph/ingest-push",
+        headers=headers,
+        json={
+            "files": [
+                {
+                    "file_path": "constants/limits.py",
+                    "source": source,
+                    "language": "python",
+                }
+            ],
+            "include_outcomes": True,
+            "embedding_refresh_mode": "skip",
+        },
+    )
+    assert first.status_code == 200, first.text
+    assert first.json()["files_ingested"] == 1
+    hashes = client.get("/api/v1/projects/demo/graph/file-hashes", headers=headers).json()[
+        "hashes"
+    ]
+    assert "constants/limits.py" in hashes
+    second = client.post(
+        "/api/v1/projects/demo/graph/ingest-push",
+        headers={**headers, "Idempotency-Key": "retry-constants"},
+        json={
+            "files": [
+                {
+                    "file_path": "constants/limits.py",
+                    "source": source,
+                    "language": "python",
+                }
+            ],
+            "include_outcomes": True,
+            "embedding_refresh_mode": "skip",
+        },
+    )
+    assert second.status_code == 200, second.text
+    body = second.json()
+    assert body["files_failed"] == 0
+    assert body["files_ingested"] == 0
+    assert body["files_skipped"] == 1
+    outcomes = body.get("outcomes") or []
+    assert outcomes and outcomes[0].get("status") == "unchanged"
 
 
 def test_failed_ingest_does_not_publish_file_hash(monkeypatch):

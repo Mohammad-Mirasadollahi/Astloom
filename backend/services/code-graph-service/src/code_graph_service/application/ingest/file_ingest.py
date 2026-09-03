@@ -1,11 +1,14 @@
 """Single-file ingest orchestration (symbols / edges / emissions / relink).
 
 Role: parse one source file into FILE/symbol nodes and structural edges.
-SoT: content hash + language on FILE; CONTAINS required for code children.
-Invariants: hash-stable skip only when language set and CONTAINS intact;
-edgeless FILE rows re-ingest (repair). Idempotency key short-circuits.
+SoT: content hash + language on FILE; CONTAINS required for code children;
+``metadata.ingest_complete`` for childless constants-only modules.
+Invariants: hash-stable skip when language set and (CONTAINS intact for
+children, or ingest_complete for childless files). Incomplete FILE stubs
+re-ingest. Idempotency key short-circuits.
 Allowed failure: ValidationError on missing path/source; per-call store errors.
-Forbidden: treating edgeless hash-stable FILE rows as up-to-date.
+Forbidden: treating incomplete FILE stubs (no children, no ingest_complete)
+as up-to-date.
 """
 
 from __future__ import annotations
@@ -19,7 +22,10 @@ from ...domain.hashing import content_hash, now_iso
 from ...domain.languages import assert_language_supported, detect_language_from_path
 from ...domain.models import IngestResult, Scope
 from ...domain.parsers import parse_source
-from ...domain.structural_integrity import file_needs_contains_repair
+from ...domain.structural_integrity import (
+    file_content_hash_publishable,
+    file_needs_contains_repair,
+)
 from .file_edges import FileEdgesMixin
 from .file_emissions import FileEmissionsMixin
 from .file_relink import FileRelinkMixin
@@ -149,18 +155,28 @@ class FileIngestMixin(
                 file_id,
             )
             return IngestResult(file_id, updated, 0, 0, 0, [])
-        # Skip only when content is unchanged, language is persisted, code
-        # children exist, and CONTAINS edges are intact. A FILE stub written
-        # before a failed embed has no children — must not skip.
+        # Skip when content is unchanged, language is persisted, and either
+        # code children + CONTAINS are intact, or ingest_complete (constants-
+        # only). A FILE stub written before a failed embed has neither.
+        has_children = self._file_has_code_children(
+            scope, file_id=file_id, file_path=file_path
+        )
         if (
             previous_file is not None
             and previous_file.hash_value == file_hash
             and previous_file.hash_version == hash_version
             and previous_file.parser_version == parser_ver
             and str(previous_file.language or "").strip()
-            and self._file_has_code_children(scope, file_id=file_id, file_path=file_path)
-            and not file_needs_contains_repair(
-                self.store, scope, file_id=file_id, file_path=file_path
+            and file_content_hash_publishable(
+                digest=file_hash,
+                has_code_children=has_children,
+                metadata=previous_file.metadata,
+            )
+            and (
+                not has_children
+                or not file_needs_contains_repair(
+                    self.store, scope, file_id=file_id, file_path=file_path
+                )
             )
         ):
             clearer = getattr(self, "clear_pending_sync", None)

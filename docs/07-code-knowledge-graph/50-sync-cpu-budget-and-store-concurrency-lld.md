@@ -174,7 +174,7 @@ content-push prep. Sync paths now prefer:
 | API | Use |
 | --- | --- |
 | `list_symbols_index` | Resolution + finalize symbol snapshot (no body/docs on the wire) |
-| `content_hash_maps` | Client `file-hashes` skip map (compact kind/path/hash rows) |
+| `content_hash_maps` | Client `file-hashes` skip map (compact kind/path/hash[/metadata] rows; publish when code children **or** `ingest_complete`) |
 | `list_edges(..., target_id_prefixes=…)` | Finalize relink of pending `unresolved:` / `ext:` targets |
 | `list_symbols` / lean | Full or doc-stripped scans when a feature truly needs bodies |
 

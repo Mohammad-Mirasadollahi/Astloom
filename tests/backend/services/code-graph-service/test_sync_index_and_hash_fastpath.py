@@ -54,7 +54,7 @@ def test_list_symbols_index_strips_bulky_fields() -> None:
     assert all(s.embedding == [] for s in indexed)
 
 
-def test_content_hash_maps_requires_code_children() -> None:
+def test_content_hash_maps_incomplete_stub_unpublished() -> None:
     store = InMemoryStore()
     scope = _scope()
     store.put_symbol(_sym(scope, sid="f1", name="a.py", kind=SymbolKind.FILE, path="a.py"))
@@ -63,8 +63,21 @@ def test_content_hash_maps_requires_code_children() -> None:
     svc = CodeGraphService(store)
     files, docs = svc.content_hash_maps(scope)
     assert "a.py" in files
-    assert "b.py" not in files
+    assert "b.py" not in files  # no children and no ingest_complete
     assert docs == {}
+
+
+def test_content_hash_maps_publishes_childless_when_ingest_complete() -> None:
+    store = InMemoryStore()
+    scope = _scope()
+    constants = _sym(
+        scope, sid="f-const", name="limits.py", kind=SymbolKind.FILE, path="limits.py"
+    )
+    constants.metadata = {"ingest_complete": True}
+    store.put_symbol(constants)
+    svc = CodeGraphService(store)
+    files, _docs = svc.content_hash_maps(scope)
+    assert files.get("limits.py") == constants.hash_value
 
 
 def test_list_edges_target_id_prefixes_filters_pending_only() -> None:

@@ -199,6 +199,8 @@ class Neo4jCrudMixin:
 
     def content_hash_maps(self, scope: Scope) -> tuple[dict[str, str], dict[str, str]]:
         """FILE + human-doc content hashes without loading full symbol bodies."""
+        from ..domain.structural_integrity import file_content_hash_publishable
+
         with self._driver.session(database=self._database) as session:
             rows = list(
                 session.run(
@@ -208,7 +210,7 @@ class Neo4jCrudMixin:
                     project_id=scope.project_id,
                 )
             )
-        file_hashes: dict[str, str] = {}
+        file_rows: dict[str, tuple[str, dict[str, Any]]] = {}
         children: set[str] = set()
         docs: dict[str, str] = {}
         child_kinds = {"function", "method", "class"}
@@ -220,7 +222,15 @@ class Neo4jCrudMixin:
                 continue
             if kind == "file":
                 if digest:
-                    file_hashes[path] = digest
+                    meta_raw = row.get("metadata_json") or "{}"
+                    if isinstance(meta_raw, str):
+                        try:
+                            metadata = json.loads(meta_raw or "{}")
+                        except json.JSONDecodeError:
+                            metadata = {}
+                    else:
+                        metadata = dict(meta_raw or {})
+                    file_rows[path] = (digest, metadata)
             elif kind in child_kinds:
                 children.add(path)
             elif (
@@ -229,7 +239,16 @@ class Neo4jCrudMixin:
                 and digest
             ):
                 docs[path] = digest
-        return {path: digest for path, digest in file_hashes.items() if path in children}, docs
+        out = {
+            path: digest
+            for path, (digest, metadata) in file_rows.items()
+            if file_content_hash_publishable(
+                digest=digest,
+                has_code_children=path in children,
+                metadata=metadata,
+            )
+        }
+        return out, docs
 
     def list_symbols_for_file(self, scope: Scope, file_path: str) -> list[GraphSymbol]:
         path = str(file_path or "").replace("\\", "/")

@@ -130,7 +130,8 @@ WHERE n.tenant_id = $tenant_id
 RETURN n.kind AS kind,
        n.file_path AS path,
        coalesce(n.hash_value, '') AS hash,
-       n.id AS id
+       n.id AS id,
+       coalesce(n.metadata_json, '{}') AS metadata_json
 """
 
 LIST_SYMBOLS_FOR_FILE = """

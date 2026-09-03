@@ -90,6 +90,8 @@ class InMemoryStore:
         return symbols
 
     def content_hash_maps(self, scope: Scope) -> tuple[dict[str, str], dict[str, str]]:
+        from .domain.structural_integrity import file_content_hash_publishable
+
         files: dict[str, Any] = {}
         children: set[str] = set()
         docs: dict[str, str] = {}
@@ -113,7 +115,11 @@ class InMemoryStore:
         out: dict[str, str] = {}
         for path, symbol in files.items():
             digest = str(getattr(symbol, "hash_value", "") or "").strip()
-            if digest and path in children:
+            if file_content_hash_publishable(
+                digest=digest,
+                has_code_children=path in children,
+                metadata=getattr(symbol, "metadata", None),
+            ):
                 out[path] = digest
         return out, docs
 

@@ -418,10 +418,12 @@ class PushedIngestMixin:
     def content_hash_maps(self, scope: Any) -> tuple[dict[str, str], dict[str, str]]:
         """Return ``(file_hashes, human_doc_hashes)`` for unchanged-content skip.
 
-        FILE hashes are published only when the file has code children.
-        A FILE stub written before a failed embed must not skip the retry.
+        FILE hashes publish when the file has code children, or when ingest
+        stamped ``metadata.ingest_complete`` (constants-only modules).
         Prefer a store-native map (Neo4j Cypher) over a full ``list_symbols`` dump.
         """
+        from ...domain.structural_integrity import file_content_hash_publishable
+
         native = getattr(self.store, "content_hash_maps", None)
         if callable(native):
             try:
@@ -454,6 +456,10 @@ class PushedIngestMixin:
         out: dict[str, str] = {}
         for path, symbol in files.items():
             digest = str(getattr(symbol, "hash_value", "") or "").strip()
-            if digest and path in children:
+            if file_content_hash_publishable(
+                digest=digest,
+                has_code_children=path in children,
+                metadata=getattr(symbol, "metadata", None),
+            ):
                 out[path] = digest
         return out, docs

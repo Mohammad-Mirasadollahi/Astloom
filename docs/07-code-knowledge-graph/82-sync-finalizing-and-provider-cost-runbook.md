@@ -43,8 +43,10 @@ linked_symbols:
 - backend/services/code-graph-service/src/code_graph_service/application/ingest/pushed.py::content_hash_maps
 - backend/services/code-graph-service/src/code_graph_service/neo4j/crud.py::list_symbols_index
 - backend/services/code-graph-service/src/code_graph_service/neo4j/crud.py::content_hash_maps
+- backend/services/code-graph-service/src/code_graph_service/domain/structural_integrity.py::file_content_hash_publishable
 - tests/live/code-graph-service/test_client_content_push_speed_live.py
 - tests/backend/services/code-graph-service/test_sync_index_and_hash_fastpath.py
+- tests/backend/services/code-graph-service/test_content_push_http.py
 related_docs:
 - docs/07-code-knowledge-graph/50-sync-cpu-budget-and-store-concurrency-lld.md
 - docs/07-code-knowledge-graph/03-ingestion-and-living-documentation-workflow.md
@@ -93,6 +95,7 @@ This is **not** the Neo4j heap OOM path — see [`81`](81-neo4j-memory-and-conte
 | `file-hashes` scanned full symbols (or slow `EXISTS` correlated subquery) | Neo4j `content_hash_maps` via compact `LIST_CONTENT_HASH_ROWS` |
 | Finalize loaded **all** CALL/IMPORT edges | Relink reads `target_id_prefixes` (`unresolved:` / `ext:`) first; dispatch still needs broader CALL reads |
 | Per-file DI/HTTP emit re-ran full `list_symbols` / unfiltered `list_edges` under LockedStore | Pass shared `short_names` / `routes_by_path`; HTTP uses `list_symbols_for_file` + `ROUTES_TO`-scoped edge fallback |
+| Constants-only FILE hashes never published (no function/class/method children) | Publish when `metadata.ingest_complete` **or** code children exist (`file_content_hash_publishable`) |
 
 ## Diagnosis
 
@@ -147,7 +150,7 @@ flowchart TD
 
 | Step | Actor | Action | Outcome |
 | --- | --- | --- | --- |
-| 0 | Client | `GET …/file-hashes` | Compact FILE digests for hash-skip |
+| 0 | Client | `GET …/file-hashes` | Compact FILE digests for hash-skip (children **or** `ingest_complete`) |
 | 1 | File pool | Ingest with `defer_cross_file_pass` + index snapshot | Symbols + unresolved placeholders |
 | 2 | Living docs | `generate_many` per changed file | One Provider `complete` per file (chunked) |
 | 3 | Client batches | Intermediate: `finalize_cross_file=false` | Skip whole-graph relink |
@@ -171,10 +174,11 @@ astloom service restart
 
 | Check | Expectation |
 | --- | --- |
-| Unit | `test_finalize_batches_edge_rewrites.py`, `test_llm_batch_docs.py`, `test_sync_index_and_hash_fastpath.py`, client `_batches` finalize flags |
+| Unit | `test_finalize_batches_edge_rewrites.py`, `test_llm_batch_docs.py`, `test_sync_index_and_hash_fastpath.py`, `test_content_push_http.py` (constants-only skip), client `_batches` finalize flags |
 | Live local | Finalize wall time seconds–tens of seconds on ~5k–8k unresolved CALLS after batching (not tens of minutes of single deletes) |
 | Live client | `tests/live/code-graph-service/test_client_content_push_speed_live.py` — finalize events only on last batch; push completes |
 | Ops (ThinkingSOC-scale) | `file-hashes` ~1–3s (not ~7s+ body dump); resolution index ~5–8s; remaining multi-minute wall on small pushes is usually Provider docs/embeds |
+| Ops (hash-skip) | Second scoped client sync: `push=0` / `unchanged_skip=N` including constants-only modules; incomplete FILE stubs still unpublished |
 
 ## Related Documents
 

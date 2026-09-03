@@ -112,6 +112,11 @@ Ingest **must** store `hash_version` and `parser_version` on FILE / code symbols
 `metadata`) and include them on `FileIngested` events. After a `HASH_VERSION` bump, operators
 re-ingest affected roots; stale digests are not compared across versions.
 
+Client / server unchanged-skip publishes a FILE digest only when
+`file_content_hash_publishable` is true: the file has function/method/class children,
+**or** `metadata.ingest_complete` was stamped after a successful ingest (constants-only
+modules). Incomplete FILE stubs written before a failed embed stay unpublished.
+
 ## Language-Correct Normalization
 
 ### Must not change the hash

@@ -118,8 +118,11 @@ Generated documentation includes:
 After the file worker pool, one cross-file finalize pass relinks unresolved
 `CALLS` (batched Neo4j deletes/puts; pending-target edge filter). Content-push
 runs that pass only on the last HTTP batch. Client hash-skip uses compact
-`content_hash_maps` / `file-hashes` (not a full symbol body dump). Operator
-detail: [`82`](82-sync-finalizing-and-provider-cost-runbook.md).
+`content_hash_maps` / `file-hashes` (not a full symbol body dump). A FILE hash
+is published when the file has code children **or** `metadata.ingest_complete`
+is set (constants-only modules); incomplete FILE stubs stay unpublished so a
+failed embed cannot hide behind hash-skip. Operator detail:
+[`82`](82-sync-finalizing-and-provider-cost-runbook.md).
 
 ### 7. Embedding Generation
 
