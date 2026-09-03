@@ -26,6 +26,14 @@ def print_progress_line(snap: dict[str, Any]) -> None:
         print(f"   {ui.accent('…')}  {ui.bold(status)}  {ui.dim(detail)}")
         print()
         return
+    if status == "finalizing":
+        detail = file_name or "cross-file resolution"
+        print(
+            f"   {ui.accent('…')}  {ui.bold('finalizing')}  "
+            f"{ui.dim(detail)}"
+        )
+        print()
+        return
     pct = float(snap["percent"])
     bar = format_bar(pct)
     eta = snap.get("eta_sec")

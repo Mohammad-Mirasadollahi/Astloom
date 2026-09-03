@@ -550,9 +550,12 @@ def test_embeddings_phase_resets_percent_and_label(tmp_path: Path, monkeypatch, 
             "done": 17,
             "total": 17,
             "status": "finalizing",
+            "file": "relinking unresolved calls",
         }
     )
-    capsys.readouterr()
+    out = capsys.readouterr().out
+    assert "finalizing" in out
+    assert "relinking unresolved calls" in out
     tracker(
         {
             "phase": "embeddings",

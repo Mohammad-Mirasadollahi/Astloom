@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
+from typing import Any
 
 from ...domain.cross_language import build_symbol_indexes, resolve_call_target_polyglot, resolve_import_target
 from ...domain.enums import CallConfidence
@@ -42,7 +43,7 @@ class FileRelinkMixin:
             call = str(edge.metadata.get("call") or unresolved_call_name(edge.target_id))
             external_kind = classify_external_call(call)
             if external_kind:
-                self.store.delete_edge(scope, edge.id)
+                self._queue_delete_edge(scope, edge.id)
                 written += self._put_edge(
                     scope,
                     "CALLS",
@@ -73,7 +74,7 @@ class FileRelinkMixin:
             )
             if not targets or confidence == CallConfidence.UNRESOLVED:
                 continue
-            self.store.delete_edge(scope, edge.id)
+            self._queue_delete_edge(scope, edge.id)
             if confidence == CallConfidence.AMBIGUOUS:
                 for match in targets:
                     written += self._put_edge(
@@ -131,7 +132,7 @@ class FileRelinkMixin:
                 )
                 if target is None:
                     continue
-                self.store.delete_edge(scope, edge.id)
+                self._queue_delete_edge(scope, edge.id)
                 written += self._put_edge(
                     scope,
                     "IMPORTS",
@@ -154,7 +155,7 @@ class FileRelinkMixin:
                 target = by_qualified.get(base) or (indexes.short_names.get(base, [None])[0])
                 if target is None:
                     continue
-                self.store.delete_edge(scope, edge.id)
+                self._queue_delete_edge(scope, edge.id)
                 written += self._put_edge(
                     scope,
                     "INHERITS_FROM",
@@ -173,37 +174,67 @@ class FileRelinkMixin:
         *,
         source_language: str = "python",
         package_aliases: dict[str, str] | None = None,
+        on_progress: Callable[[dict[str, Any]], None] | None = None,
     ) -> int:
-        """One post-parallel pass using shared, relation-filtered snapshots."""
+        """One post-parallel pass using shared, relation-filtered snapshots.
+
+        Batches Neo4j deletes/puts — per-edge round-trips left sync stuck at
+        ``status=finalizing`` for thousands of unresolved CALLS.
+        """
         aliases = package_aliases if isinstance(package_aliases, dict) else {}
+
+        def _note(step: str) -> None:
+            if not callable(on_progress):
+                return
+            try:
+                on_progress({"status": "finalizing", "file": step})
+            except Exception:  # noqa: BLE001 — progress must never break finalize
+                return
+
+        _note("loading graph snapshots")
         symbols = self.store.list_symbols(scope)
         call_edges = self.store.list_edges(scope, rel_type="CALLS")
         reference_edges = [
             *self.store.list_edges(scope, rel_type="IMPORTS"),
             *self.store.list_edges(scope, rel_type="INHERITS_FROM"),
         ]
+        self._placeholder_id_cache = {symbol.id for symbol in symbols}
+        self._begin_edge_batch_for_scope(scope)
         written = 0
-        written += self._relink_unresolved_calls(
-            scope,
-            source_language=source_language,
-            symbols=symbols,
-            edges=call_edges,
-        )
-        written += self._relink_unresolved_references(
-            scope,
-            source_language=source_language,
-            package_aliases=aliases,
-            symbols=symbols,
-            edges=reference_edges,
-        )
-        written += self._emit_test_links(scope, symbols=symbols)
-        dispatch_edges = [
-            *self.store.list_edges(scope, rel_type="CALLS"),
-            *self.store.list_edges(scope, rel_type="INHERITS_FROM"),
-        ]
-        written += self._emit_dynamic_dispatch(
-            scope,
-            symbols=symbols,
-            edges=dispatch_edges,
-        )
+        try:
+            _note("relinking unresolved calls")
+            written += self._relink_unresolved_calls(
+                scope,
+                source_language=source_language,
+                symbols=symbols,
+                edges=call_edges,
+            )
+            _note("relinking imports and inheritance")
+            written += self._relink_unresolved_references(
+                scope,
+                source_language=source_language,
+                package_aliases=aliases,
+                symbols=symbols,
+                edges=reference_edges,
+            )
+            _note("emitting test links")
+            written += self._emit_test_links(scope, symbols=symbols)
+            # Flush first wave before re-reading CALLS/INHERITS for dispatch.
+            self._flush_edge_batch()
+            self._begin_edge_batch_for_scope(scope)
+            _note("loading dispatch edges")
+            dispatch_edges = [
+                *self.store.list_edges(scope, rel_type="CALLS"),
+                *self.store.list_edges(scope, rel_type="INHERITS_FROM"),
+            ]
+            _note("emitting dynamic dispatch")
+            written += self._emit_dynamic_dispatch(
+                scope,
+                symbols=symbols,
+                edges=dispatch_edges,
+            )
+        finally:
+            _note("flushing edge batch")
+            self._flush_edge_batch()
+            self._placeholder_id_cache = None
         return written

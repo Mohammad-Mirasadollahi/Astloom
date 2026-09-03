@@ -132,6 +132,15 @@ WHERE r.tenant_id = $tenant_id
 DELETE r
 """
 
+DELETE_EDGES = f"""
+UNWIND $ids AS edge_id
+MATCH ()-[r:{REL} {{id: edge_id}}]->()
+WHERE r.tenant_id = $tenant_id
+  AND r.workspace_id = $workspace_id
+  AND r.project_id = $project_id
+DELETE r
+"""
+
 PUT_EDGE = f"""
 MATCH (source:CodeSymbol {{id: $source_id}})
 MATCH (target:CodeSymbol {{id: $target_id}})

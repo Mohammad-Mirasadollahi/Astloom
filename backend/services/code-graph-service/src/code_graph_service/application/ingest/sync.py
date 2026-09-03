@@ -363,10 +363,16 @@ class SyncMixin:
         workers = min(sync_max_file_workers(), max(1, total_files))
         if total_files:
             run_parallel_file_jobs(workers=workers, items=pending_paths, fn=_process_one)
+            _emit(total_files, status="finalizing", file="cross-file resolution")
         try:
             finals = self.finalize_cross_file_resolution(
                 scope,
                 package_aliases=package_aliases,
+                on_progress=lambda ev: _emit(
+                    total_files,
+                    file=str(ev.get("file") or "cross-file resolution"),
+                    status=str(ev.get("status") or "finalizing"),
+                ),
             )
             with state_lock:
                 totals["edges_written"] += int(finals or 0)

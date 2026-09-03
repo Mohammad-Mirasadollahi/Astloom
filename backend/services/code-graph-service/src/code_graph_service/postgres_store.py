@@ -352,6 +352,20 @@ class PostgresStore:
                 (edge_id, scope.tenant_id, scope.workspace_id, scope.project_id),
             )
 
+    def delete_edges(self, scope: Scope, edge_ids: list[str]) -> None:
+        ids = [str(edge_id) for edge_id in edge_ids if str(edge_id or "").strip()]
+        if not ids:
+            return
+        with self._connection.cursor() as cur:
+            cur.execute(
+                """
+                DELETE FROM code_graph.edges
+                WHERE tenant_id = %s AND workspace_id = %s AND project_id = %s
+                  AND id = ANY(%s)
+                """,
+                (scope.tenant_id, scope.workspace_id, scope.project_id, ids),
+            )
+
     def put_edge(self, edge: GraphEdge) -> None:
         scope = edge.scope
         with self._connection.cursor() as cur:

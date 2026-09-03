@@ -123,6 +123,15 @@ class InMemoryStore:
 
         self._with_lock(_run)
 
+    def delete_edges(self, scope: Scope, edge_ids: list[str]) -> None:
+        def _run() -> None:
+            for edge_id in edge_ids:
+                edge = self._edges.get(edge_id)
+                if edge is not None and self._same_project(edge.scope, scope):
+                    del self._edges[edge_id]
+
+        self._with_lock(_run)
+
     def put_edge(self, edge: GraphEdge) -> None:
         self._with_lock(lambda: self._edges.__setitem__(edge.id, deepcopy(edge)))
 

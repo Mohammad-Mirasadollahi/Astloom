@@ -83,7 +83,16 @@ class PushedIngestMixin:
         package_aliases: dict[str, Any] = dict(payload.get("package_aliases") or {})
         if callable(on_progress):
             try:
-                on_progress({"phase": "ingest", "done": 0, "total": 0, "status": "started"})
+                on_progress(
+                    {
+                        "phase": "ingest",
+                        "done": 0,
+                        "total": 0,
+                        "status": "preparing",
+                        "file": "loading graph snapshots",
+                        "file_workers": sync_max_file_workers(),
+                    }
+                )
             except Exception:  # noqa: BLE001
                 pass
 
@@ -132,7 +141,7 @@ class PushedIngestMixin:
                 continue
             items.append((rel, source, language))
 
-        workers = sync_max_file_workers()
+        workers = min(sync_max_file_workers(), max(1, len(items) or 1))
         state_lock = threading.Lock()
         progress_done = 0
         progress_total = len(items)
@@ -343,25 +352,43 @@ class PushedIngestMixin:
             )
             if _cancelled():
                 raise ClientDisconnected()
-            try:
-                finals = self.finalize_cross_file_resolution(
-                    scope,
-                    package_aliases=package_aliases,
+            # Multi-batch content-push: only the last batch should finalize the
+            # whole project graph (intermediate finalize was N× Neo4j relink cost).
+            do_finalize = bool(payload.get("finalize_cross_file", True))
+            if do_finalize:
+                _emit(
+                    progress_total if items else 0,
+                    status="finalizing",
+                    file="cross-file resolution",
                 )
-                with state_lock:
-                    totals["edges_written"] += int(finals or 0)
-            except Exception:  # noqa: BLE001
-                pass
+                try:
+                    finals = self.finalize_cross_file_resolution(
+                        scope,
+                        package_aliases=package_aliases,
+                        on_progress=lambda ev: _emit(
+                            progress_total if items else 0,
+                            file=str(ev.get("file") or "cross-file resolution"),
+                            status=str(ev.get("status") or "finalizing"),
+                        ),
+                    )
+                    with state_lock:
+                        totals["edges_written"] += int(finals or 0)
+                except Exception:  # noqa: BLE001
+                    pass
 
         if _cancelled():
             raise ClientDisconnected()
 
-        embedding_refresh = self.refresh_embeddings_after_ingest(
-            scope,
-            file_paths=[rel for rel, _, _ in items],
-            mode=str(payload.get("embedding_refresh_mode") or "touched"),
-            on_progress=on_progress if callable(on_progress) else None,
-        ).public()
+        refresh_mode = str(payload.get("embedding_refresh_mode") or "touched").strip().lower()
+        if refresh_mode in {"", "none", "off", "skip"}:
+            embedding_refresh = {"mode": "skipped", "refreshed": 0}
+        else:
+            embedding_refresh = self.refresh_embeddings_after_ingest(
+                scope,
+                file_paths=[rel for rel, _, _ in items],
+                mode=refresh_mode,
+                on_progress=on_progress if callable(on_progress) else None,
+            ).public()
 
         return RepoIngestResult(
             root_path="",

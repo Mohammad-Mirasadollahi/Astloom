@@ -131,7 +131,10 @@ class GraphServiceSupport:
             doc = "external call (outside repository)"
         else:
             return
-        if self._maybe_get(symbol_id, scope) is not None:
+        known = getattr(self, "_placeholder_id_cache", None)
+        if isinstance(known, set) and symbol_id in known:
+            return
+        if not isinstance(known, set) and self._maybe_get(symbol_id, scope) is not None:
             return
         name = unresolved_call_name(symbol_id) or symbol_id
         stamp = now_iso()
@@ -147,17 +150,14 @@ class GraphServiceSupport:
                 body="",
                 hash_value=digest(symbol_id),
                 ai_documentation=doc,
-                doc_status=DocStatus.MISSING,
+                doc_status=DocStatus.UNCHANGED,
                 embedding=[],
-                visibility="public",
                 created_at=stamp,
                 updated_at=stamp,
             )
         )
-
-    def _ensure_unresolved_symbol(self, scope: Scope, symbol_id: str) -> None:
-        """Backward-compatible alias for placeholder materialization."""
-        self._ensure_placeholder_symbol(scope, symbol_id)
+        if isinstance(known, set):
+            known.add(symbol_id)
 
     def _put_edge(
         self,
@@ -195,22 +195,62 @@ class GraphServiceSupport:
             self.store.put_edge(edge)
         return 1
 
+    def _queue_delete_edge(self, scope: Scope, edge_id: str) -> None:
+        deletes = getattr(self._edge_batches, "deletes", None)
+        if isinstance(deletes, list):
+            deletes.append(edge_id)
+            return
+        self.store.delete_edge(scope, edge_id)
+
     def _begin_edge_batch(self) -> None:
         self._edge_batches.edges = []
+        self._edge_batches.deletes = []
 
     def _flush_edge_batch(self) -> None:
+        deletes = list(getattr(self._edge_batches, "deletes", []) or [])
         edges = list(getattr(self._edge_batches, "edges", []) or [])
         try:
-            if not edges:
-                return
-            bulk_put = getattr(self.store, "put_edges", None)
-            if callable(bulk_put):
-                bulk_put(edges)
-            else:
-                for edge in edges:
-                    self.store.put_edge(edge)
+            if deletes:
+                # Scope for deletes is taken from the first pending edge's scope when
+                # available; callers always flush inside one project finalize/ingest.
+                scope = getattr(self._edge_batches, "scope", None)
+                if scope is None and edges:
+                    scope = edges[0].scope
+                if scope is None:
+                    raise RuntimeError(
+                        "edge batch delete requires scope; call "
+                        "_begin_edge_batch_for_scope before queueing deletes"
+                    )
+                bulk_del = getattr(self.store, "delete_edges", None)
+                if callable(bulk_del):
+                    # Chunk to keep Neo4j params bounded.
+                    chunk = 500
+                    for start in range(0, len(deletes), chunk):
+                        bulk_del(scope, deletes[start : start + chunk])
+                else:
+                    for edge_id in deletes:
+                        self.store.delete_edge(scope, edge_id)
+            if edges:
+                bulk_put = getattr(self.store, "put_edges", None)
+                if callable(bulk_put):
+                    chunk = 500
+                    for start in range(0, len(edges), chunk):
+                        bulk_put(edges[start : start + chunk])
+                else:
+                    for edge in edges:
+                        self.store.put_edge(edge)
         finally:
             self._edge_batches.edges = None
+            self._edge_batches.deletes = None
+            self._edge_batches.scope = None
+
+    def _begin_edge_batch_for_scope(self, scope: Scope) -> None:
+        self._begin_edge_batch()
+        self._edge_batches.scope = scope
+
+    def _ensure_unresolved_symbol(self, scope: Scope, symbol_id: str) -> None:
+        """Backward-compatible alias for placeholder materialization."""
+        self._ensure_placeholder_symbol(scope, symbol_id)
 
     def _maybe_get(self, symbol_id: str, scope: Scope) -> GraphSymbol | None:
         try:

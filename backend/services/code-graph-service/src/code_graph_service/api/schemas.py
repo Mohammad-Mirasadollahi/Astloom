@@ -55,6 +55,8 @@ class IngestPushRequest(BaseModel):
     inventory_complete: bool = False
     docs: list[IngestPushDoc] | None = Field(default=None, max_length=2000)
     include_outcomes: bool = True
+    # Multi-batch content-push: intermediate batches set false; last batch true.
+    finalize_cross_file: bool = True
     embedding_refresh_mode: str = Field(default="touched", max_length=32)
     max_files: int = Field(default=2000, ge=1, le=20000)
     max_file_bytes: int = Field(default=1_500_000, ge=1024, le=20_000_000)

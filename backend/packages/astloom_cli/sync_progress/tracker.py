@@ -228,6 +228,7 @@ class SyncProgressTracker:
             "preparing",
             "discovering",
             "loading",
+            "finalizing",
         }
         force = (milestone and status != previous_status) or (
             pct >= 100.0 and self._last_pct_printed < 100.0

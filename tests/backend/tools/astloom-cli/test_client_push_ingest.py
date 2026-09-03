@@ -49,6 +49,87 @@ def test_ingest_pushed_sources_progress_includes_file_workers():
     assert all(int(e.get("file_workers") or 0) >= 1 for e in ingest_events)
 
 
+def test_ingest_pushed_sources_emits_finalizing_progress():
+    """Client content-push must surface finalize steps (same hang UX as local sync)."""
+    service = CodeGraphService(InMemoryStore())
+    scope = Scope("t", "w", "push-finalize")
+    events: list[dict] = []
+    service.ingest_pushed_sources(
+        scope,
+        "tester",
+        "corr-finalize",
+        "push-key-finalize",
+        {
+            "files": [
+                {
+                    "file_path": "src/a.py",
+                    "source": "def alpha():\n    return 1\n\ndef beta():\n    return alpha()\n",
+                    "language": "python",
+                },
+                {
+                    "file_path": "src/b.py",
+                    "source": "def gamma():\n    return 2\n",
+                    "language": "python",
+                },
+            ],
+            "present_paths": ["src/a.py", "src/b.py"],
+            "include_outcomes": True,
+            "on_progress": events.append,
+        },
+    )
+    finalizing = [e for e in events if e.get("status") == "finalizing"]
+    assert finalizing
+    assert any("cross-file" in str(e.get("file") or "") or "relink" in str(e.get("file") or "") for e in finalizing)
+
+
+class _BatchDocs:
+    def __init__(self) -> None:
+        self.generate_calls = 0
+        self.batch_calls = 0
+        self.batch_sizes: list[int] = []
+
+    def generate(self, symbol, neighbors):  # noqa: ANN001
+        self.generate_calls += 1
+        return f"doc-{symbol.name}"
+
+    def generate_many(self, items):  # noqa: ANN001
+        self.batch_calls += 1
+        self.batch_sizes.append(len(items))
+        return [self.generate(symbol, neighbors) for symbol, neighbors in items]
+
+
+def test_ingest_pushed_sources_batches_llm_docs(monkeypatch):
+    """Content-push path must use generate_many (one call per file, not per symbol)."""
+    monkeypatch.setenv("ASTLOOM_LITELLM_DOCS_ENABLED", "true")
+    docs = _BatchDocs()
+    service = CodeGraphService(InMemoryStore(), docs=docs)
+    scope = Scope("t", "w", "push-batch-docs")
+    service.ingest_pushed_sources(
+        scope,
+        "tester",
+        "corr-batch-docs",
+        "push-key-batch-docs",
+        {
+            "files": [
+                {
+                    "file_path": "src/multi.py",
+                    "source": (
+                        "def one():\n    return 1\n\n"
+                        "def two():\n    return 2\n\n"
+                        "def three():\n    return 3\n"
+                    ),
+                    "language": "python",
+                }
+            ],
+            "present_paths": ["src/multi.py"],
+            "include_outcomes": True,
+        },
+    )
+    assert docs.batch_calls == 1
+    assert docs.batch_sizes == [3]
+    assert docs.generate_calls == 3
+
+
 def test_ingest_pushed_sources_indexes_without_disk_root():
     service = CodeGraphService(InMemoryStore())
     scope = Scope("t", "w", "push")
@@ -608,6 +689,54 @@ def test_build_push_files_prune_ok_false_when_max_files_truncates(tmp_path: Path
     assert prune_ok is False
 
 
+def test_batches_defers_finalize_until_last(monkeypatch):
+    from astloom_cli.connect_flow import client_push as cp
+
+    monkeypatch.setattr(cp, "_MAX_BATCH_FILES", 1)
+    files = [
+        {"file_path": "a.py", "source": "x=1\n", "language": "python"},
+        {"file_path": "b.py", "source": "y=2\n", "language": "python"},
+        {"file_path": "c.py", "source": "z=3\n", "language": "python"},
+    ]
+    batches = cp._batches(files, ["a.py", "b.py", "c.py"], include_present_paths=True)
+    assert len(batches) == 3
+    assert batches[0]["finalize_cross_file"] is False
+    assert batches[1]["finalize_cross_file"] is False
+    assert batches[2]["finalize_cross_file"] is True
+    assert batches[2]["inventory_complete"] is True
+
+
+def test_ingest_pushed_sources_can_skip_finalize(monkeypatch):
+    service = CodeGraphService(InMemoryStore())
+    calls = {"n": 0}
+
+    def boom(*_a, **_k):
+        calls["n"] += 1
+        raise AssertionError("finalize should be skipped")
+
+    monkeypatch.setattr(service, "finalize_cross_file_resolution", boom)
+    scope = Scope("t", "w", "push-skip-finalize")
+    service.ingest_pushed_sources(
+        scope,
+        "tester",
+        "corr-skip-fin",
+        "push-key-skip-fin",
+        {
+            "files": [
+                {
+                    "file_path": "src/a.py",
+                    "source": "def alpha():\n    return 1\n",
+                    "language": "python",
+                }
+            ],
+            "finalize_cross_file": False,
+            "embedding_refresh_mode": "skip",
+            "include_outcomes": True,
+        },
+    )
+    assert calls["n"] == 0
+
+
 def test_batches_omits_present_paths_when_not_authoritative():
     from astloom_cli.connect_flow.client_push import _batches
 
@@ -633,6 +762,7 @@ def test_batches_sets_inventory_complete_when_authoritative():
     assert batches[0]["present_paths"] == ["a.py"]
     assert batches[0]["inventory_complete"] is True
     assert batches[0]["max_files"] == HARD_SYNC_MAX_FILES
+    assert batches[0]["finalize_cross_file"] is True
 
 
 def test_resolve_discovery_max_files_auto_vs_explicit():

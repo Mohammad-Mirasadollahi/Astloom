@@ -182,12 +182,17 @@ def _batches(
     docs: list[dict[str, Any]] | None = None,
     include_present_paths: bool = True,
 ) -> list[dict[str, Any]]:
-    """Split files into JSON-size-capped batches; last batch may carry present_paths (+ docs)."""
+    """Split files into JSON-size-capped batches; last batch may carry present_paths (+ docs).
+
+    Intermediate batches set ``finalize_cross_file=false`` so the server does not
+    re-relink the whole project graph after every HTTP chunk (major sync cost).
+    """
     if not files:
         batch: dict[str, Any] = {
             "files": [],
             "include_outcomes": True,
             "max_files": HARD_SYNC_MAX_FILES,
+            "finalize_cross_file": True,
         }
         if include_present_paths:
             batch["present_paths"] = present
@@ -209,6 +214,7 @@ def _batches(
                     "files": current,
                     "include_outcomes": True,
                     "max_files": HARD_SYNC_MAX_FILES,
+                    "finalize_cross_file": False,
                 }
             )
             current = []
@@ -219,6 +225,7 @@ def _batches(
         "files": current,
         "include_outcomes": True,
         "max_files": HARD_SYNC_MAX_FILES,
+        "finalize_cross_file": True,
     }
     if include_present_paths:
         last["present_paths"] = present

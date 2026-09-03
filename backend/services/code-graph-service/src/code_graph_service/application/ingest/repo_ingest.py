@@ -479,11 +479,16 @@ class RepoIngestMixin:
         _emit(0, status="started")
         if total_files:
             run_parallel_file_jobs(workers=workers, items=discovered, fn=_process_one)
-            _emit(progress_total, status="finalizing")
+            _emit(progress_total, status="finalizing", file="cross-file resolution")
             try:
                 finals = self.finalize_cross_file_resolution(
                     scope,
                     package_aliases=package_aliases,
+                    on_progress=lambda ev: _emit(
+                        progress_total,
+                        file=str(ev.get("file") or "cross-file resolution"),
+                        status=str(ev.get("status") or "finalizing"),
+                    ),
                 )
                 with state_lock:
                     totals["edges_written"] += int(finals or 0)

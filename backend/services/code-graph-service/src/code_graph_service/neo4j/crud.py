@@ -231,6 +231,19 @@ class Neo4jCrudMixin:
                 project_id=scope.project_id,
             )
 
+    def delete_edges(self, scope: Scope, edge_ids: list[str]) -> None:
+        ids = [str(edge_id) for edge_id in edge_ids if str(edge_id or "").strip()]
+        if not ids:
+            return
+        with self._driver.session(database=self._database) as session:
+            session.run(
+                cypher.DELETE_EDGES,
+                ids=ids,
+                tenant_id=scope.tenant_id,
+                workspace_id=scope.workspace_id,
+                project_id=scope.project_id,
+            )
+
     def put_edge(self, edge: GraphEdge) -> None:
         scope = edge.scope
         metadata = dict(edge.metadata or {})

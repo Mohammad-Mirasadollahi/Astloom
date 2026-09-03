@@ -37,6 +37,7 @@ _STORE_MUTATIONS = frozenset(
         "delete_symbols",
         "delete_file_edges",
         "delete_edge",
+        "delete_edges",
         "put_edge",
         "put_edges",
         "begin_idempotency",
