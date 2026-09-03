@@ -485,6 +485,50 @@ def test_mcp_status_reachable_without_pid_is_operational(tmp_path: Path, monkeyp
     ) == "all running"
 
 
+def test_https_apis_stop_reclaims_orphan_checkout_listener(tmp_path: Path, monkeypatch):
+    """Missing pidfile + same-checkout uvicorn on the profile port must stop cleanly."""
+    from astloom_cli.service_runtime import https_apis as https_mod
+
+    root = tmp_path
+    (root / ".astloom" / "run").mkdir(parents=True)
+    spec = https_mod._SERVICES[0]
+    calls: list[int] = []
+
+    monkeypatch.setattr(https_mod, "_read_pid", lambda _path: None)
+    monkeypatch.setattr(https_mod, "tcp_ok", lambda *_a, **_k: True)
+    monkeypatch.setattr(
+        https_mod,
+        "_discover_managed_https_pid",
+        lambda _root, _spec, _port: 4242,
+    )
+    monkeypatch.setattr(https_mod, "_terminate_pid", lambda pid: calls.append(pid))
+    monkeypatch.setattr(https_mod, "progress", lambda *_a, **_k: None)
+
+    result = https_mod._stop_one(root, spec)
+    assert result["ok"] is True
+    assert result["action"] == "stopped"
+    assert result["pid"] == 4242
+    assert calls == [4242]
+
+
+def test_https_apis_status_discovers_orphan_pid(tmp_path: Path, monkeypatch):
+    from astloom_cli.service_runtime import https_apis as https_mod
+
+    monkeypatch.setattr(https_mod, "_read_pid", lambda _path: None)
+    monkeypatch.setattr(https_mod, "tcp_ok", lambda *_a, **_k: True)
+    monkeypatch.setattr(
+        https_mod,
+        "_discover_managed_https_pid",
+        lambda _root, _spec, _port: 5151,
+    )
+    monkeypatch.setattr(https_mod, "format_process_started_at", lambda _pid: None)
+
+    status = https_mod._one_status(tmp_path, https_mod._SERVICES[0])
+    assert status["managed"] is True
+    assert status["pid"] == 5151
+    assert status["ok"] is True
+
+
 def test_format_docker_started_at_to_local_seconds():
     stamp = runtime._format_docker_started_at("2026-07-22T05:40:15.123456789Z")
     assert len(stamp) == 19

@@ -78,6 +78,42 @@ def _read_pid(path: Path) -> int | None:
     return pid
 
 
+def _discover_managed_https_pid(root: Path, spec: dict[str, Any], port: int) -> int | None:
+    """Recover a missing pid file for an HTTPS API process rooted in this checkout.
+
+    Manual / crash-restarted uvicorn listeners on the profile port otherwise
+    survive ``service stop`` (no pidfile) and then block ``service start``.
+    """
+    try:
+        from port_profile import find_port_owner
+
+        owner = find_port_owner(port)
+    except Exception:  # noqa: BLE001 — owner detection is best-effort
+        return None
+    pid = int((owner or {}).get("pid") or 0)
+    if not _pid_alive(pid):
+        return None
+    proc = Path("/proc") / str(pid)
+    try:
+        command = (proc / "cmdline").read_bytes().replace(b"\0", b" ").decode(
+            "utf-8",
+            errors="replace",
+        )
+        cwd = (proc / "cwd").resolve()
+    except OSError:
+        return None
+    module = str(spec.get("module") or "")
+    if not module or module not in command:
+        return None
+    if cwd != root.resolve():
+        return None
+    pid_path = spec["pid_path"](root)
+    pid_path.parent.mkdir(parents=True, exist_ok=True)
+    pid_path.write_text(f"{pid}\n", encoding="utf-8")
+    pid_path.chmod(0o600)
+    return pid
+
+
 def read_code_graph_pid(root: Path) -> int | None:
     return _read_pid(code_graph_pid_path(root))
 
@@ -108,6 +144,8 @@ def _one_status(root: Path, spec: dict[str, Any]) -> dict[str, Any]:
     port = _port_for(spec)
     pid = _read_pid(spec["pid_path"](root))
     reachable = tcp_ok(host, port)
+    if pid is None and reachable:
+        pid = _discover_managed_https_pid(root, spec, port)
     out: dict[str, Any] = {
         "running": pid is not None or reachable,
         "managed": pid is not None,
@@ -224,6 +262,10 @@ def _stop_one(root: Path, spec: dict[str, Any]) -> dict[str, Any]:
     pid = _read_pid(pid_path)
     host = _host()
     port = _port_for(spec)
+    if pid is None and tcp_ok(host, port):
+        pid = _discover_managed_https_pid(root, spec, port)
+        if pid is not None:
+            progress(f"{label}: recovered orphan listener (pid {pid})")
     if pid is None:
         if tcp_ok(host, port):
             progress(f"{label}: reachable listener is not managed by this checkout")
@@ -264,13 +306,22 @@ def _start_one(root: Path, spec: dict[str, Any]) -> dict[str, Any]:
         pid_path.unlink(missing_ok=True)
 
     if tcp_ok(host, port, timeout=0.25):
-        _raise_start_error(
-            spec,
-            root,
-            f"{label} port {port} is still in use",
-            host=host,
-            port=port,
-        )
+        orphan = _discover_managed_https_pid(root, spec, port)
+        if orphan is not None:
+            progress(f"{label}: reclaiming orphan listener on port {port} (pid {orphan})")
+            _terminate_pid(orphan)
+            pid_path.unlink(missing_ok=True)
+            deadline = time.monotonic() + 15.0
+            while time.monotonic() < deadline and tcp_ok(host, port, timeout=0.25):
+                time.sleep(0.2)
+        if tcp_ok(host, port, timeout=0.25):
+            _raise_start_error(
+                spec,
+                root,
+                f"{label} port {port} is still in use",
+                host=host,
+                port=port,
+            )
 
     progress(f"{label}: starting on {host}:{port}")
     try:

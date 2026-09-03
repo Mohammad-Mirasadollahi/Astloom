@@ -186,6 +186,10 @@ class PostgresEmbeddingIndex:
     def ensure_schema(self) -> None:
         migrations_dir = Path(__file__).resolve().parents[2] / "migrations"
         with self._connection.cursor() as cur:
+            # Embedding migrations (0003+) assume the Neo4j/postgres store path
+            # already ran 0001_code_graph.sql. Neo4j-primary installs only build
+            # PostgresEmbeddingIndex here — create the schema first.
+            cur.execute("CREATE SCHEMA IF NOT EXISTS code_graph")
             for name in pg_sql.EMBEDDING_MIGRATION_FILES:
                 path = migrations_dir / name
                 if path.is_file():
