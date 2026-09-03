@@ -37,7 +37,7 @@ def test_sync_max_file_workers_llm_hot_reserves_rpm_headroom(monkeypatch):
     monkeypatch.delenv("ASTLOOM_SYNC_MAX_FILE_WORKERS", raising=False)
     monkeypatch.delenv("ASTLOOM_SYNC_CPU_PERCENT", raising=False)
     monkeypatch.setattr("code_graph_service.locked_store.os.cpu_count", lambda: 48)
-    # Docs+cloud embeds: workers = rpm // 6 (not min(cpu, rpm)).
+    # Docs+cloud embeds: workers = rpm // 2 (not min(cpu, rpm)).
     plan = resolve_sync_cpu_plan(
         {
             "ASTLOOM_LITELLM_RPM": "30",
@@ -47,13 +47,13 @@ def test_sync_max_file_workers_llm_hot_reserves_rpm_headroom(monkeypatch):
         }
     )
     assert plan.mode == "auto"
-    assert plan.workers == 5  # 30 // 6
+    assert plan.workers == 15  # 30 // 2
 
 
 def test_sync_cpu_percent_caps_at_llm_budget_when_hot(monkeypatch):
     monkeypatch.delenv("ASTLOOM_SYNC_MAX_FILE_WORKERS", raising=False)
     monkeypatch.setattr("code_graph_service.locked_store.os.cpu_count", lambda: 48)
-    # 60% of 48 = 29, but LLM-hot cap is 30//6 = 5.
+    # 60% of 48 = 29, but LLM-hot cap is 30//2 = 15.
     plan = resolve_sync_cpu_plan(
         {
             "ASTLOOM_SYNC_CPU_PERCENT": "60",
@@ -64,7 +64,7 @@ def test_sync_cpu_percent_caps_at_llm_budget_when_hot(monkeypatch):
         }
     )
     assert plan.mode == "percent"
-    assert plan.workers == 5
+    assert plan.workers == 15
 
 
 def test_sync_max_file_workers_explicit_override(monkeypatch):

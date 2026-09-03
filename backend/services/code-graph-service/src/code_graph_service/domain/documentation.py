@@ -17,3 +17,6 @@ class HeuristicDocGenerator:
             f"Related symbols: {neighbor_text}\n"
             f"Summary: Owns behavior for `{symbol.name}` in project graph context."
         )
+
+    def generate_many(self, items: list[tuple[GraphSymbol, list[str]]]) -> list[str]:
+        return [self.generate(symbol, neighbors) for symbol, neighbors in items]

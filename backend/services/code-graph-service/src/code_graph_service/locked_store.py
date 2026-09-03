@@ -23,10 +23,10 @@ from typing import Any
 
 _DEFAULT_AUTO_EMBED_CAP = 4
 # Typical cloud cost per changed file when docs + embeds share one RPM gate:
-# ~1 complete/symbol + ~1 embed/symbol (+ file embed). Oversizing workers to
-# min(cpu, rpm) exhausts the start budget immediately and serializes on the gate
-# while the UI still shows "N active / W workers".
-_LLM_HOT_CALLS_PER_FILE = 6
+# ~1 batched docs complete/file + ~1 embed batch/file (+ file embed). Oversizing
+# workers to min(cpu, rpm) exhausts the start budget immediately and serializes
+# on the gate while the UI still shows "N active / W workers".
+_LLM_HOT_CALLS_PER_FILE = 2
 
 # Names treated as mutations when ``lock_reads`` is False (slot-budgeted, not
 # exclusive). Postgres and Neo4j both use slots under production bootstrap.
@@ -150,7 +150,7 @@ def resolve_sync_cpu_plan(
     1. Explicit ``ASTLOOM_SYNC_MAX_FILE_WORKERS`` integer (advanced override)
     2. ``ASTLOOM_SYNC_CPU_PERCENT`` 1..100 — workers from that share of CPUs,
        then capped by the LLM-aware RPM budget when docs/cloud embeds are on
-    3. Auto — ``min(cpu_count, RPM)`` when LLM-cold; ``min(cpu, RPM // 6)`` when hot
+    3. Auto — ``min(cpu_count, RPM)`` when LLM-cold; ``min(cpu, RPM // 2)`` when hot
 
     Local-embed slots are always capped at ``_DEFAULT_AUTO_EMBED_CAP`` (4) so
     BGE encode does not fan out with file workers. Torch/OMP intra-op threads

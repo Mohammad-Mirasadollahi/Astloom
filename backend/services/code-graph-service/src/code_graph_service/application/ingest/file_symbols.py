@@ -145,6 +145,8 @@ class FileSymbolsMixin:
         generated_embedding_ids: set[str] = set()
         language_fixes: list[GraphSymbol] = []
         file_id = f"file:{scope.project_id}:{file_path}"
+        # One LLM complete per file (batched), not per symbol — root sync RPM cost.
+        pending_docs: list[tuple[GraphSymbol, list[str], Any, GraphSymbol | None]] = []
 
         def _progress(*, symbols_done: int, status: str = "symbol") -> None:
             if not callable(on_progress):
@@ -162,85 +164,19 @@ class FileSymbolsMixin:
             except Exception:  # noqa: BLE001 — progress must never break ingest
                 return
 
-        for item in parsed.symbols:
-            symbol_id = f"sym:{scope.project_id}:{item.qualified_name}"
-            symbol_ids.append(symbol_id)
-            hashed = content_hash(item.body, language)
-            hash_value = hashed["hash"]
-            hash_version = hashed["hash_version"]
-            parser_ver = hashed["parser_version"]
-            previous = self._maybe_get(symbol_id, scope)
-            changed = previous is None or previous.hash_value != hash_value
-            neighbors = item.calls + item.bases + item.imports
-            doc = previous.ai_documentation if previous and not changed else ""
-            status = DocStatus.UNCHANGED
-            doc_symbol: GraphSymbol | None = None
-            if changed:
-                changed_ids.append(symbol_id)
-                draft = GraphSymbol(
-                    id=symbol_id,
-                    scope=scope,
-                    kind=item.kind,
-                    file_path=file_path,
-                    name=item.name,
-                    qualified_name=item.qualified_name,
-                    signature=item.signature,
-                    body=item.body,
-                    hash_value=hash_value,
-                    ai_documentation="",
-                    doc_status=DocStatus.MISSING,
-                    embedding=[],
-                    visibility=item.visibility,
-                    version=(previous.version + 1) if previous else 1,
-                    created_at=previous.created_at if previous else stamp,
-                    updated_at=stamp,
-                    language=language,
-                    hash_version=hash_version,
-                    parser_version=parser_ver,
-                    metadata={
-                        "hash_version": hash_version,
-                        "parser_version": parser_ver,
-                    },
-                )
-                # Prefer heuristic only when living LLM docs are disabled (caller).
-                # When LLM docs are on, each changed symbol hits the docs route (RPM).
-                if heuristic is not None:
-                    doc = heuristic.generate(draft, neighbors)
-                else:
-                    doc = self.docs.generate(draft, neighbors)
-                status = DocStatus.GENERATED
-                documented += 1
-                doc_id = f"doc:{scope.project_id}:{item.qualified_name}"
-                doc_symbol = GraphSymbol(
-                    id=doc_id,
-                    scope=scope,
-                    kind=SymbolKind.DOCUMENTATION,
-                    file_path=file_path,
-                    name=f"{item.name}.md",
-                    qualified_name=f"{item.qualified_name}::__doc__",
-                    signature=item.signature,
-                    body=doc,
-                    hash_value=digest(doc),
-                    ai_documentation=doc,
-                    doc_status=DocStatus.GENERATED,
-                    embedding=[],
-                    created_at=stamp,
-                    updated_at=stamp,
-                    language=language,
-                    metadata={"doc_origin": doc_origin},
-                )
-                embedding_requests.append((doc_symbol, doc))
-                documented_pairs.append((symbol_id, doc_id))
-                _progress(symbols_done=len(changed_ids), status="documented")
-            elif previous and previous.ai_documentation:
-                doc_id = f"doc:{scope.project_id}:{item.qualified_name}"
-                doc_prev = self._maybe_get(doc_id, scope)
-                if doc_prev is not None:
-                    documented_pairs.append((symbol_id, doc_id))
-                    if not str(doc_prev.language or "").strip():
-                        doc_prev.language = language
-                        doc_prev.updated_at = stamp
-                        language_fixes.append(doc_prev)
+        def _queue_symbol(
+            *,
+            item: Any,
+            symbol_id: str,
+            previous: GraphSymbol | None,
+            changed: bool,
+            doc: str,
+            status: DocStatus,
+            doc_symbol: GraphSymbol | None,
+            hash_value: str,
+            hash_version: str,
+            parser_ver: str,
+        ) -> None:
             reuse_embedding = bool(
                 reuse_unchanged_embeddings
                 and not changed
@@ -292,6 +228,123 @@ class FileSymbolsMixin:
             if not reuse_embedding:
                 embedding_requests.append((symbol, f"{item.qualified_name}\n{doc}"))
             pending.append((symbol, item.kind.value, doc_symbol))
+
+        for item in parsed.symbols:
+            symbol_id = f"sym:{scope.project_id}:{item.qualified_name}"
+            symbol_ids.append(symbol_id)
+            hashed = content_hash(item.body, language)
+            hash_value = hashed["hash"]
+            hash_version = hashed["hash_version"]
+            parser_ver = hashed["parser_version"]
+            previous = self._maybe_get(symbol_id, scope)
+            changed = previous is None or previous.hash_value != hash_value
+            neighbors = item.calls + item.bases + item.imports
+            if changed:
+                changed_ids.append(symbol_id)
+                draft = GraphSymbol(
+                    id=symbol_id,
+                    scope=scope,
+                    kind=item.kind,
+                    file_path=file_path,
+                    name=item.name,
+                    qualified_name=item.qualified_name,
+                    signature=item.signature,
+                    body=item.body,
+                    hash_value=hash_value,
+                    ai_documentation="",
+                    doc_status=DocStatus.MISSING,
+                    embedding=[],
+                    visibility=item.visibility,
+                    version=(previous.version + 1) if previous else 1,
+                    created_at=previous.created_at if previous else stamp,
+                    updated_at=stamp,
+                    language=language,
+                    hash_version=hash_version,
+                    parser_version=parser_ver,
+                    metadata={
+                        "hash_version": hash_version,
+                        "parser_version": parser_ver,
+                    },
+                )
+                pending_docs.append((draft, neighbors, item, previous))
+                continue
+            doc = previous.ai_documentation if previous else ""
+            if previous and previous.ai_documentation:
+                doc_id = f"doc:{scope.project_id}:{item.qualified_name}"
+                doc_prev = self._maybe_get(doc_id, scope)
+                if doc_prev is not None:
+                    documented_pairs.append((symbol_id, doc_id))
+                    if not str(doc_prev.language or "").strip():
+                        doc_prev.language = language
+                        doc_prev.updated_at = stamp
+                        language_fixes.append(doc_prev)
+            _queue_symbol(
+                item=item,
+                symbol_id=symbol_id,
+                previous=previous,
+                changed=False,
+                doc=doc,
+                status=DocStatus.UNCHANGED,
+                doc_symbol=None,
+                hash_value=hash_value,
+                hash_version=hash_version,
+                parser_ver=parser_ver,
+            )
+
+        if pending_docs:
+            batch_items = [(draft, neighbors) for draft, neighbors, _, _ in pending_docs]
+            if heuristic is not None:
+                docs_out = heuristic.generate_many(batch_items)
+            else:
+                many = getattr(self.docs, "generate_many", None)
+                docs_out = (
+                    list(many(batch_items))
+                    if callable(many)
+                    else [self.docs.generate(d, n) for d, n in batch_items]
+                )
+            if len(docs_out) != len(pending_docs):
+                raise RuntimeError(
+                    "docs batch returned "
+                    f"{len(docs_out)} results for {len(pending_docs)} symbols"
+                )
+            for (draft, _neighbors, item, previous), doc in zip(
+                pending_docs, docs_out, strict=True
+            ):
+                documented += 1
+                doc_id = f"doc:{scope.project_id}:{item.qualified_name}"
+                doc_symbol = GraphSymbol(
+                    id=doc_id,
+                    scope=scope,
+                    kind=SymbolKind.DOCUMENTATION,
+                    file_path=file_path,
+                    name=f"{item.name}.md",
+                    qualified_name=f"{item.qualified_name}::__doc__",
+                    signature=item.signature,
+                    body=doc,
+                    hash_value=digest(doc),
+                    ai_documentation=doc,
+                    doc_status=DocStatus.GENERATED,
+                    embedding=[],
+                    created_at=stamp,
+                    updated_at=stamp,
+                    language=language,
+                    metadata={"doc_origin": doc_origin},
+                )
+                embedding_requests.append((doc_symbol, doc))
+                documented_pairs.append((draft.id, doc_id))
+                _queue_symbol(
+                    item=item,
+                    symbol_id=draft.id,
+                    previous=previous,
+                    changed=True,
+                    doc=doc,
+                    status=DocStatus.GENERATED,
+                    doc_symbol=doc_symbol,
+                    hash_value=draft.hash_value,
+                    hash_version=draft.hash_version or "",
+                    parser_ver=draft.parser_version or "",
+                )
+            _progress(symbols_done=len(changed_ids), status="documented")
 
         texts = [text for _, text in embedding_requests]
         batch = getattr(self.embeddings, "embed_many", None)

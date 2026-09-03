@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import json
+import re
 from typing import Any, Protocol
 
 from llm_gateway import ChatMessage, CompletionRequest, LlmGatewaySettings
@@ -18,6 +20,8 @@ from .domain.models import EmbeddingResult, GraphSymbol
 
 class _DocGenerator(Protocol):
     def generate(self, symbol: GraphSymbol, neighbors: list[str]) -> str: ...
+
+    def generate_many(self, items: list[tuple[GraphSymbol, list[str]]]) -> list[str]: ...
 
 
 class _Embedder(Protocol):
@@ -128,7 +132,13 @@ def _mean_pool_vectors(vectors: list[list[float]]) -> list[float]:
 
 
 class LlmBackedDocGenerator:
-    """Generate symbol docs via LiteLLM; fall back to heuristic on failure/stub."""
+    """Generate symbol docs via LiteLLM; fall back to heuristic on failure/stub.
+
+    Prefer ``generate_many`` for ingest: one completion documents every changed
+    symbol in a file (root cause of sync RPM cost was one complete per symbol).
+    """
+
+    _BATCH_CHUNK = 16
 
     def __init__(
         self,
@@ -142,28 +152,48 @@ class LlmBackedDocGenerator:
         self.settings = settings or getattr(gateway, "settings", None) or LlmGatewaySettings.from_environment()
 
     def generate(self, symbol: GraphSymbol, neighbors: list[str]) -> str:
-        if not docs_generation_enabled() or not getattr(self.settings, "enabled", False):
-            return self.fallback.generate(symbol, neighbors)
+        return self.generate_many([(symbol, neighbors)])[0]
 
+    def generate_many(self, items: list[tuple[GraphSymbol, list[str]]]) -> list[str]:
+        if not items:
+            return []
+        if not docs_generation_enabled() or not getattr(self.settings, "enabled", False):
+            return [self.fallback.generate(symbol, neighbors) for symbol, neighbors in items]
+
+        out: list[str] = []
+        for start in range(0, len(items), self._BATCH_CHUNK):
+            chunk = items[start : start + self._BATCH_CHUNK]
+            out.extend(self._generate_many_chunk(chunk))
+        return out
+
+    def _generate_many_chunk(self, items: list[tuple[GraphSymbol, list[str]]]) -> list[str]:
         route = resolve_route(
             "docs.generate",
             default_model=getattr(self.settings, "default_model", "") or "",
         )
         models = route.models_in_order()
         if not models:
-            return self.fallback.generate(symbol, neighbors)
+            return [self.fallback.generate(symbol, neighbors) for symbol, neighbors in items]
 
-        neighbor_text = ", ".join(neighbors[:12]) if neighbors else "none"
+        entries: list[str] = []
+        for index, (symbol, neighbors) in enumerate(items):
+            neighbor_text = ", ".join(neighbors[:8]) if neighbors else "none"
+            body = (symbol.body or "")[:1200]
+            entries.append(
+                f"[{index}] kind={symbol.kind.value}\n"
+                f"qualified_name={symbol.qualified_name}\n"
+                f"signature={symbol.signature or symbol.name}\n"
+                f"file_path={symbol.file_path}\n"
+                f"related={neighbor_text}\n"
+                f"body:\n{body}\n"
+            )
         prompt = (
-            "Write concise developer documentation for a code symbol. "
-            "Use plain text with short lines. Do not invent APIs.\n\n"
-            f"kind: {symbol.kind.value}\n"
-            f"qualified_name: {symbol.qualified_name}\n"
-            f"signature: {symbol.signature or symbol.name}\n"
-            f"file_path: {symbol.file_path}\n"
-            f"related: {neighbor_text}\n"
-            f"body:\n{(symbol.body or '')[:4000]}\n"
+            "Document each code symbol below for a knowledge graph. "
+            "Return ONLY a JSON object mapping each qualified_name string to a "
+            "short plain-text doc string. Do not invent APIs. Keep each value concise.\n\n"
+            + "\n---\n".join(entries)
         )
+        max_tokens = max(int(route.max_tokens or 512), min(4096, 180 * len(items)))
         last_error: Exception | None = None
         for model in models:
             try:
@@ -172,25 +202,82 @@ class LlmBackedDocGenerator:
                         messages=(
                             ChatMessage(
                                 role="system",
-                                content="You document code symbols for a knowledge graph.",
+                                content=(
+                                    "You document code symbols for a knowledge graph. "
+                                    "Respond with JSON only: "
+                                    '{"docs": {"qualified.name": "doc text", ...}}'
+                                ),
                             ),
                             ChatMessage(role="user", content=prompt),
                         ),
                         model=model,
                         temperature=0.0,
-                        max_tokens=route.max_tokens,
+                        max_tokens=max_tokens,
+                        response_format_json=True,
                     )
                 )
-                text = (result.content or "").strip()
-                if text:
-                    return text
-            except Exception as exc:  # noqa: BLE001 — fall back / try next model
+                parsed = _parse_docs_batch_json(result.content or "", items)
+                if parsed is not None:
+                    return [
+                        text or self.fallback.generate(symbol, neighbors)
+                        for text, (symbol, neighbors) in zip(parsed, items, strict=True)
+                    ]
+            except Exception as exc:  # noqa: BLE001 — try next model / fallback
                 last_error = exc
                 continue
 
         if route.allow_stub or last_error is not None:
-            return self.fallback.generate(symbol, neighbors)
-        raise RuntimeError(f"LiteLLM docs generation failed: {last_error}")
+            return [self.fallback.generate(symbol, neighbors) for symbol, neighbors in items]
+        raise RuntimeError(f"LiteLLM batch docs generation failed: {last_error}")
+
+
+def _parse_docs_batch_json(
+    content: str,
+    items: list[tuple[GraphSymbol, list[str]]],
+) -> list[str] | None:
+    """Map model JSON onto items; None means unusable payload (caller falls back).
+
+    Missing keys become empty strings so the caller can heuristic-fill per symbol.
+    """
+    text = (content or "").strip()
+    if not text:
+        return None
+    if text.startswith("```"):
+        text = re.sub(r"^```(?:json)?\s*", "", text)
+        text = re.sub(r"\s*```$", "", text)
+    try:
+        payload = json.loads(text)
+    except json.JSONDecodeError:
+        match = re.search(r"\{.*\}", text, flags=re.DOTALL)
+        if not match:
+            return None
+        try:
+            payload = json.loads(match.group(0))
+        except json.JSONDecodeError:
+            return None
+    docs_map: dict[str, str] = {}
+    if isinstance(payload, dict):
+        raw = payload.get("docs", payload)
+        if isinstance(raw, dict):
+            docs_map = {str(k): str(v).strip() for k, v in raw.items() if str(v).strip()}
+        elif isinstance(raw, list):
+            for row in raw:
+                if not isinstance(row, dict):
+                    continue
+                key = str(row.get("qualified_name") or row.get("name") or "").strip()
+                val = str(row.get("doc") or row.get("documentation") or row.get("text") or "").strip()
+                if key and val:
+                    docs_map[key] = val
+    if not docs_map:
+        return None
+    out: list[str] = []
+    matched = 0
+    for symbol, _neighbors in items:
+        doc = docs_map.get(symbol.qualified_name) or docs_map.get(symbol.name) or ""
+        if doc:
+            matched += 1
+        out.append(doc)
+    return out if matched else None
 
 
 class HybridEmbeddings:
