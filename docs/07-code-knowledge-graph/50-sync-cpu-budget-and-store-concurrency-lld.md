@@ -41,7 +41,7 @@ related_docs:
 - as.doc.ckg.ingestion-and-living-documentation-workflow
 - as.doc.ckg.postgres-connection-pool-and-capacity-lld
 - docs/13-technology-stack-and-platform-decisions/12-litellm-environment-configuration.md
-doc_version: 1.2.1
+doc_version: 1.3.0
 audience:
 - engineer
 - operator
@@ -55,6 +55,8 @@ relations_declared:
   target: as.doc.ckg.rpm-session-parallel-sync-lld
 - type: complements
   target: as.doc.ckg.postgres-connection-pool-and-capacity-lld
+- type: complements
+  target: as.doc.ckg.sync-finalizing-and-provider-cost-runbook
 - type: constrains
   target: backend/services/code-graph-service/src/code_graph_service/locked_store.py
 chunk_hints:
@@ -63,7 +65,7 @@ chunk_hints:
   overlap_tokens: 48
 language: en
 security_classification: internal
-updated_at: 2026-08-10
+updated_at: '2026-09-03'
 ---
 # 50 - Sync CPU Budget And Store Concurrency Low-Level Design
 
@@ -119,18 +121,26 @@ Precedence (see `resolve_sync_cpu_plan`):
 
 1. Explicit positive int `ASTLOOM_SYNC_MAX_FILE_WORKERS`
 2. `ASTLOOM_SYNC_CPU_PERCENT` in `1..100` (CLI `--cpu-percent` overrides env)
-3. Auto: `workers = min(cpu_count, ASTLOOM_LITELLM_RPM)`; embed concurrency capped at 4
+3. Auto / percent result, then LLM-aware RPM cap:
+   - **LLM-cold** (docs off and embeds not on LiteLLM/OpenRouter): `min(cpu, RPM)`
+   - **LLM-hot** (living docs and/or cloud embeds): `min(cpu, RPM // 2)`
 
-When percent mode is active:
+`_LLM_HOT_CALLS_PER_FILE` is **2** after batched living docs (≈1 docs
+`complete` + 1 embed batch per file). It was **6** when docs called the
+Provider once per symbol. See
+[`82`](82-sync-finalizing-and-provider-cost-runbook.md).
+
+When percent mode is active (before the LLM-hot floor):
 
 | Field | Formula |
 | --- | --- |
-| `workers` | `max(1, round(cpu_count * percent / 100))` |
-| `embed_concurrency` | same as `workers` |
+| `workers` | `max(1, round(cpu_count * percent / 100))`, then LLM-aware RPM cap |
+| `embed_concurrency` | same as `workers` (local embed path still capped at 4 in auto) |
 | `torch_threads` | always `1` |
 | `store_concurrency` | `max(2, min(8, workers))` |
 
-Example: 48 CPUs at 60% → `workers=29`, `store_concurrency=8`.
+Example: 48 CPUs at 60% with docs+cloud embeds and `RPM=30` → CPU share 29,
+LLM-hot cap `30 // 2 = 15` → `workers=15`.
 
 ## LockedStore semantics
 
@@ -170,11 +180,15 @@ During the worker pool (`defer_cross_file_pass=True`):
 
 - Shared resolution indexes are built once up front.
 - Per-file full-graph relink / test_links / dynamic_dispatch are deferred.
-- Living docs prefer the heuristic generator so workers are not RPM-bound.
-- Cross-file finalize runs once after the pool.
+- When living LLM docs are **enabled**, each changed file uses
+  `generate_many` (one Provider `complete` per file, chunked) — not one call
+  per symbol. When docs are **disabled**, the heuristic generator is used.
+- Cross-file finalize runs once after the pool (local sync) or once on the
+  **last** content-push HTTP batch (`finalize_cross_file`). Relink mutations
+  are Neo4j-batched (`delete_edges` / `put_edges`).
 
 File-level upsert prepares docs and embeddings first, then writes, so workers
-spend wall time on CPU before contending for store slots.
+spend wall time on CPU/network before contending for store slots.
 
 ## Operator knobs
 
@@ -215,4 +229,5 @@ Env field reference:
 - [`40` risks and acceptance](40-rpm-session-parallel-sync-risks-challenges-and-acceptance.md)
 - [`03` ingestion workflow](03-ingestion-and-living-documentation-workflow.md)
 - [`79` Postgres connection pool and capacity LLD](79-postgres-connection-pool-and-capacity-lld.md)
+- [`82` sync finalizing and Provider cost runbook](82-sync-finalizing-and-provider-cost-runbook.md)
 - LiteLLM env configuration (sync CPU knobs)

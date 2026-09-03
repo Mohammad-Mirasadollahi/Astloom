@@ -31,8 +31,8 @@ related_docs:
 - as.doc.ckg.postgres-connection-pool-and-capacity-lld
 - as.doc.stack.turbovec-ann-acceleration
 - as.doc.stack.turbovec-for-rag
-doc_version: 1.3.1
-updated_at: 2026-08-10
+doc_version: 1.4.0
+updated_at: '2026-09-03'
 ---
 
 # 12 - LiteLLM Environment Configuration
@@ -343,8 +343,13 @@ exhaustion. Details: [`50` sync CPU budget LLD](../07-code-knowledge-graph/50-sy
 ASTLOOM_LITELLM_RPM=10
 ## After 10 starts in ~60s, the next acquire blocks until the oldest start ages out
 ## or an in-flight session ends (whichever frees capacity first).
-## Sync file workers auto-cap at min(cpu_count, 10) unless CPU percent / workers override.
+## LLM-cold auto workers: min(cpu_count, 10).
+## LLM-hot (docs and/or cloud embeds): min(cpu_count, 10 // 2) unless CPU percent / workers override.
 ```
+
+Living docs use **one** `complete` per changed file (`generate_many`), not per
+symbol. Stuck at 100% with idle RPM is usually cross-file finalize — see
+[`82`](../07-code-knowledge-graph/82-sync-finalizing-and-provider-cost-runbook.md).
 
 ### `ASTLOOM_SYNC_CPU_PERCENT`
 
@@ -352,8 +357,8 @@ ASTLOOM_LITELLM_RPM=10
 | --- | --- |
 | **Purpose** | Operator CPU budget for `astloom sync` / `ingest_repo`. |
 | **Default** | **auto** |
-| **If `auto` / unset** | Workers = `min(cpu_count, ASTLOOM_LITELLM_RPM)`; local-embed concurrency capped at 4. |
-| **If `1`–`100`** | Workers and local-embed concurrency ≈ that percent of `cpu_count`; Torch/OMP = 1; Neo4j `store_concurrency` = `max(2, min(8, workers))`. |
+| **If `auto` / unset** | LLM-cold: `min(cpu_count, ASTLOOM_LITELLM_RPM)`; LLM-hot: `min(cpu_count, ASTLOOM_LITELLM_RPM // 2)`; local-embed concurrency capped at 4. |
+| **If `1`–`100`** | Workers and local-embed concurrency ≈ that percent of `cpu_count`, then the same LLM-aware RPM cap; Torch/OMP = 1; Neo4j `store_concurrency` = `max(2, min(8, workers))`. |
 | **CLI** | `astloom sync --cpu-percent 25` overrides env for one run. |
 | **Design** | [`50` sync CPU budget LLD](../07-code-knowledge-graph/50-sync-cpu-budget-and-store-concurrency-lld.md). |
 

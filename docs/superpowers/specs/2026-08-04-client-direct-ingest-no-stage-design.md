@@ -21,13 +21,15 @@ audience_lane:
 - agents
 authority: normative
 visibility: internal
-doc_version: 1.5.1
-updated_at: 2026-08-10
+doc_version: 1.6.0
+updated_at: '2026-09-03'
 linked_symbols:
 - backend/packages/astloom_cli/commands/sync/client_remote.py::cmd_sync_client_remote
 - backend/packages/astloom_cli/connect_flow/client_push.py::client_push_sync
 - backend/packages/astloom_cli/connect_flow/client_push.py::build_push_docs
 - backend/packages/astloom_cli/connect_flow/client_push.py::build_push_files
+- backend/packages/astloom_cli/connect_flow/client_push.py::_batches
+- backend/services/code-graph-service/src/code_graph_service/application/ingest/pushed.py::ingest_pushed_sources
 - backend/packages/astloom_cli/connect_flow/ingest.py::remote_ingest
 - backend/packages/astloom_cli/commands/ingest_push.py::cmd_ingest_push
 - backend/packages/astloom_cli/parser/_core.py::resolve_discovery_max_files
@@ -110,9 +112,9 @@ flowchart TD
 | 1 | CLI client | Resolve connect.yaml scope + cwd | No `source.server_path` required |
 | 2 | CLI client | Discover sources (+ docs); default auto up to 20 000 | Candidate relative paths |
 | 3 | CLI client | Optional: fetch FILE hash map (HTTP) | Skip unchanged bodies |
-| 4 | CLI client | POST size-capped batches of `{file_path, source}` | Wire payload |
-| 5 | CLI client | Last batch: optional `docs[]`; `present_paths` + `inventory_complete=true` only when discovery is full | Docs upsert; prune only when inventory is authoritative |
-| 6 | Server | `ingest_pushed_sources` (+ docs); prune iff `inventory_complete` | Graph updated without partial-inventory deletes |
+| 4 | CLI client | POST size-capped batches of `{file_path, source}` with `finalize_cross_file=false` on intermediate batches | Wire payload; skip whole-graph finalize |
+| 5 | CLI client | Last batch: `finalize_cross_file=true`; optional `docs[]`; `present_paths` + `inventory_complete=true` only when discovery is full | One finalize + docs upsert; prune only when inventory is authoritative |
+| 6 | Server | `ingest_pushed_sources` (+ docs); finalize iff requested; prune iff `inventory_complete` | Graph updated without partial-inventory deletes or per-batch finalize storms |
 
 ## Service / CLI
 
@@ -140,8 +142,9 @@ flowchart TD
 | Docs push | `build_push_docs` → last-batch `docs[]` → server `upsert_human_documentation` |
 | Connect content-push | `remote_ingest` / `should_ingest` use content-push when HTTPS is ready |
 | Auto discovery | Default `max_files=0` discovers up to `HARD_SYNC_MAX_FILES` (20 000); see auto-discovery design |
-| HTTP batching | Split push by ~4 MiB / 1500 files per request; batch size ≠ discovery cap |
+| HTTP batching | Split push by ~4 MiB / 1500 files per request; batch size ≠ discovery cap; intermediate batches set `finalize_cross_file=false`, last batch `true` |
 | Inventory prune | `present_paths` + `inventory_complete=true` only when `prune_ok` |
+| Embedding skip | Optional `embedding_refresh_mode=skip|none|off` on push schema for structural-only speed paths |
 
 ## Security / sovereignty
 
@@ -172,3 +175,4 @@ flowchart TD
 - [Client sync auto discovery and inventory-complete prune](./2026-08-10-client-sync-auto-discovery-inventory-design.md)
 - [Client content-push sync progress stream](./2026-08-05-client-push-progress-stream-design.md)
 - [Server CLI tracking for live client sync jobs](./2026-08-10-server-client-sync-jobs-cli-design.md)
+- [Sync finalizing and Provider cost runbook](../../07-code-knowledge-graph/82-sync-finalizing-and-provider-cost-runbook.md)

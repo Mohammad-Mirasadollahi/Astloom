@@ -33,7 +33,7 @@ related_docs:
 - as.doc.ckg.rpm-session-parallel-sync-feature-spec
 - as.doc.ckg.rpm-session-parallel-sync-lld
 - as.doc.stack.litellm-llm-gateway
-doc_version: 1.1.3
+doc_version: 1.2.0
 audience:
 - engineer
 - architect
@@ -44,13 +44,15 @@ primary_entities:
 relations_declared:
 - type: depends_on
   target: as.doc.ckg.rpm-session-parallel-sync-feature-spec
+- type: complements
+  target: as.doc.ckg.sync-finalizing-and-provider-cost-runbook
 chunk_hints:
   strategy: heading_h2
   max_tokens: 600
   overlap_tokens: 40
 language: en
 security_classification: internal
-updated_at: 2026-08-10
+updated_at: '2026-09-03'
 ---
 
 # 40 - RPM Session Parallel Sync Risks Challenges And Acceptance
@@ -81,15 +83,15 @@ Last verified: 2026-07-25
 | C-08 | Local BGE vs LiteLLM embed | BGE must not consume RPM slots or serialize all files | Only `gateway.embed` acquires; model construction is process-serialized and inference is bounded to four concurrent calls process-wide across cached models |
 | C-09 | Hung sessions | Provider hang beyond operator patience | Timeout = `ASTLOOM_LITELLM_TIMEOUT_SECONDS`; forced end |
 | C-10 | Multi-process CLI | Two `astloom sync` processes do not share registry | Document known limit; no Redis in v1 |
-| C-11 | File monopoly | One huge file’s network-backed symbol work can starve others | Bulk sync uses heuristic living docs; an explicit round-robin network DocWork scheduler is not implemented and remains outside the accepted path |
+| C-11 | File monopoly | One huge file’s network-backed symbol work can starve others | Living docs are one `complete` per file (`generate_many`); RPM gate still serializes Provider starts; an explicit round-robin DocWork scheduler is not implemented |
 | C-12 | Progress races | Unsynchronized counters mislead ETA | Lock/queue in `SyncProgressTracker` |
 | C-13 | Observability secrets | Status API could leak prompts/keys | Snapshot fields allowlist only |
 | C-14 | Test flakiness | Real 60s sleeps | Fake clock / injected time; never sleep a full minute in unit CI |
-| C-15 | Serial finalization masks worker gains | Whole-scope reads or quadratic dispatch run after progress reaches 100% | Shared symbol snapshot, relation-filtered edges, indexed dispatch, explicit `finalizing` status |
+| C-15 | Serial finalization masks worker gains | Whole-scope reads or per-edge Neo4j RTT after progress reaches 100% | Shared symbol snapshot, batched `delete_edges`/`put_edges`, indexed dispatch, explicit `finalizing` status + progress steps; content-push finalizes only on last HTTP batch — [`82`](82-sync-finalizing-and-provider-cost-runbook.md) |
 | C-16 | Restart depends on plugin network | Official GDS installer fetches on every container start | APOC-only offline-safe default; GDS is explicit `ASTLOOM_NEO4J_PLUGINS` opt-in |
 | C-17 | Stable root idempotency suppresses later edits | A prior file key short-circuits before hash comparison | Derive the file key from root key + path + content hash |
-| C-15 | CLI/service config drift | In-process sync silently falls back when model env is absent | Graph CLI loads repo-root `.env` (single source of truth); process env retains precedence |
-| C-16 | Silent cloud code egress | A configured provider may receive symbol bodies without per-run consent | Non-private/uncertain routes fail closed before ingest; interactive TTY consent (tenant/workspace/project/paths shown) or `--allow-cloud-llm` |
+| C-18 | CLI/service config drift | In-process sync silently falls back when model env is absent | Graph CLI loads repo-root `.env` (single source of truth); process env retains precedence |
+| C-19 | Silent cloud code egress | A configured provider may receive symbol bodies without per-run consent | Non-private/uncertain routes fail closed before ingest; interactive TTY consent (tenant/workspace/project/paths shown) or `--allow-cloud-llm` |
 
 ## Risks
 
@@ -110,9 +112,11 @@ Last verified: 2026-07-25
   docs-sync and code-graph Postgres adapters use **per-thread** connections so
   Phase-1/2 writers share the ``LockedStore`` slot budget (not exclusive
   ``lock_reads`` serialization).
-- Bulk repository ingest has no round-robin network DocWork queue. It generates
-  living docs heuristically; explicit network calls are bounded by
-  `RpmSessionGate`, but cross-file fairness is not claimed.
+- Bulk repository ingest has no round-robin network DocWork queue. When living
+  LLM docs are enabled, each changed file uses one batched Provider `complete`
+  (`generate_many`); when disabled, the heuristic generator is used. Explicit
+  network calls are bounded by `RpmSessionGate`, but cross-file fairness is not
+  claimed.
 - No distributed limiter across hosts.
 
 ## Acceptance gates
@@ -203,7 +207,7 @@ Uncheck → check only when proven in code + tests.
 | Gap | Notes |
 | --- | --- |
 | Shared ``psycopg_pool`` | Optional; per-thread connections already allow parallel Phase-2 writers |
-| Round-robin network DocWork fairness | Not part of heuristic bulk ingest; add only with a network living-doc refresh workflow |
+| Round-robin network DocWork fairness | Living docs are already file-batched; fairness across files still RPM-FIFO only |
 | Shared limiter across processes | Redis/file lock — only if multi-sync becomes common |
 | Attempt-level session nesting | If ops need per-retry visibility |
 
@@ -212,4 +216,6 @@ Uncheck → check only when proven in code + tests.
 - Feature: [`37`](37-rpm-session-parallel-sync-feature-specification.md)
 - HLD: [`38`](38-rpm-session-parallel-sync-high-level-design.md)
 - LLD: [`39`](39-rpm-session-parallel-sync-low-level-design.md)
+- CPU budget: [`50`](50-sync-cpu-budget-and-store-concurrency-lld.md)
+- Finalizing / Provider cost: [`82`](82-sync-finalizing-and-provider-cost-runbook.md)
 - LiteLLM ADR: [`09`](../13-technology-stack-and-platform-decisions/09-litellm-llm-gateway.md)

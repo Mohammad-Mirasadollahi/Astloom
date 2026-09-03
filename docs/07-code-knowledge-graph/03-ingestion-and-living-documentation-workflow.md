@@ -25,8 +25,8 @@ linked_symbols:
 - backend/services/code-graph-service/src/code_graph_service/application/ingest/human_docs.py::HumanDocIngestMixin
 - backend/services/code-graph-service/src/code_graph_service/domain/symbol_resolve.py::resolve_linked_symbol
 - backend/services/code-graph-service/src/code_graph_service/domain/doc_discovery.py::discover_documentation_files
-doc_version: 1.0.1
-updated_at: 2026-08-10
+doc_version: 1.1.0
+updated_at: '2026-09-03'
 ---
 
 # Ingestion and Living Documentation Workflow
@@ -99,7 +99,12 @@ Only changed or new symbols are sent to the AI documentation pipeline. Unchanged
 
 ### 6. AI Documentation Generation
 
-Changed symbols are sent to a low-cost model or local model first. The model generates documentation that includes:
+When living LLM docs are enabled (`ASTLOOM_LITELLM_DOCS_ENABLED`), each changed
+**file** sends one batched Provider `complete` (`generate_many`) covering the
+changed symbols in that file (JSON map, chunks of 16). This is not one call per
+symbol. When docs are disabled, the heuristic generator fills stubs without RPM.
+
+Generated documentation includes:
 
 - purpose,
 - parameters,
@@ -109,6 +114,11 @@ Changed symbols are sent to a low-cost model or local model first. The model gen
 - error behavior,
 - usage notes,
 - risk notes when relevant.
+
+After the file worker pool, one cross-file finalize pass relinks unresolved
+`CALLS` (batched Neo4j deletes/puts). Content-push runs that pass only on the
+last HTTP batch. Operator detail:
+[`82`](82-sync-finalizing-and-provider-cost-runbook.md).
 
 ### 7. Embedding Generation
 
@@ -231,15 +241,20 @@ Loads a user record by ID, validates that the record exists, and returns a norma
 
 `astloom sync` / `ingest_repo` uses bounded file workers from
 `ASTLOOM_SYNC_CPU_PERCENT` (preferred) or `ASTLOOM_SYNC_MAX_FILE_WORKERS`
-(exact override; default **auto** =
-`min(cpu_count, ASTLOOM_LITELLM_RPM)`). LiteLLM `complete`/`embed` calls
-are gated by tracked RPM sessions (start + end) under `ASTLOOM_LITELLM_RPM`.
-Graph store access goes through `LockedStore`: Postgres stays fully serialized;
-Neo4j uses a small concurrent Bolt budget (`store_concurrency`). Observe
-sessions via `GET /api/v1/llm/sessions` or `astloom llm sessions`.
+(exact override). Default **auto**:
+
+- LLM-cold (docs off and embeds not cloud): `min(cpu_count, ASTLOOM_LITELLM_RPM)`
+- LLM-hot (living docs and/or cloud embeds): `min(cpu_count, ASTLOOM_LITELLM_RPM // 2)`
+
+LiteLLM `complete`/`embed` calls are gated by tracked RPM sessions (start + end)
+under `ASTLOOM_LITELLM_RPM`. Graph store access goes through `LockedStore`:
+Postgres stays fully serialized; Neo4j uses a small concurrent Bolt budget
+(`store_concurrency`). Observe sessions via `GET /api/v1/llm/sessions` or
+`astloom llm sessions`.
 
 Design pack: [`37`](37-rpm-session-parallel-sync-feature-specification.md) →
 [`38`](38-rpm-session-parallel-sync-high-level-design.md) →
 [`39`](39-rpm-session-parallel-sync-low-level-design.md) →
 [`40`](40-rpm-session-parallel-sync-risks-challenges-and-acceptance.md) →
-[`50`](50-sync-cpu-budget-and-store-concurrency-lld.md) (CPU percent + store concurrency).
+[`50`](50-sync-cpu-budget-and-store-concurrency-lld.md) (CPU percent + store concurrency) →
+[`82`](82-sync-finalizing-and-provider-cost-runbook.md) (finalizing hang / Provider cost).

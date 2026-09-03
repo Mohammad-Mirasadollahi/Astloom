@@ -1,0 +1,165 @@
+---
+doc_id: as.doc.ckg.sync-finalizing-and-provider-cost-runbook
+title: 82 - Sync Finalizing And Provider Cost Runbook
+doc_type: runbook
+status: active
+schema_version: '1.0'
+owner: code-graph-service
+summary: Diagnose and remediate sync stuck at 100% (status=finalizing), per-edge Neo4j
+  relink cost, living-docs Provider RPM amplification, and multi-batch content-push
+  finalize duplication for local astloom sync and astloom-client content-push.
+tags:
+- sync
+- finalize
+- content-push
+- openrouter
+- rpm
+- neo4j
+- living-docs
+- runbook
+- ops
+- ckg
+phase: 07-code-knowledge-graph
+canonical_path: docs/07-code-knowledge-graph/82-sync-finalizing-and-provider-cost-runbook.md
+lifecycle_lane: current
+concern_lane: ops
+audience_lane:
+- operators
+- platform-engineering
+- agents
+authority: normative
+visibility: internal
+doc_version: 1.0.0
+updated_at: '2026-09-03'
+linked_symbols:
+- backend/services/code-graph-service/src/code_graph_service/application/ingest/file_relink.py::finalize_cross_file_resolution
+- backend/services/code-graph-service/src/code_graph_service/application/support.py::_flush_edge_batch
+- backend/services/code-graph-service/src/code_graph_service/llm_wiring.py::LlmBackedDocGenerator.generate_many
+- backend/services/code-graph-service/src/code_graph_service/application/ingest/file_symbols.py::_upsert_parsed_symbols
+- backend/services/code-graph-service/src/code_graph_service/locked_store.py::_LLM_HOT_CALLS_PER_FILE
+- backend/packages/astloom_cli/connect_flow/client_push.py::_batches
+- backend/services/code-graph-service/src/code_graph_service/application/ingest/pushed.py::ingest_pushed_sources
+- tests/live/code-graph-service/test_client_content_push_speed_live.py
+related_docs:
+- docs/07-code-knowledge-graph/50-sync-cpu-budget-and-store-concurrency-lld.md
+- docs/07-code-knowledge-graph/03-ingestion-and-living-documentation-workflow.md
+- docs/07-code-knowledge-graph/40-rpm-session-parallel-sync-risks-challenges-and-acceptance.md
+- docs/07-code-knowledge-graph/81-neo4j-memory-and-content-push-oom-runbook.md
+- docs/13-technology-stack-and-platform-decisions/12-litellm-environment-configuration.md
+- docs/superpowers/specs/2026-08-04-client-direct-ingest-no-stage-design.md
+language: en
+security_classification: internal
+---
+
+# 82 - Sync Finalizing And Provider Cost Runbook
+
+## Purpose
+
+Operators and agents **must** use this runbook when:
+
+1. Progress shows **code 100%** with `parallel 0 active`, RPM idle, and elapsed keeps rising (`status=finalizing`), or
+2. Sync / content-push is Provider-bound (many LiteLLM `complete` calls) despite healthy Neo4j, or
+3. `astloom-client` multi-batch push appears to re-hang after each HTTP batch.
+
+This is **not** the Neo4j heap OOM path — see [`81`](81-neo4j-memory-and-content-push-oom-runbook.md) for Bolt handshake / OOM.
+
+## Symptoms
+
+| Surface | Signal |
+| --- | --- |
+| Local `astloom sync` | Bar at `code N/N` 100%; `status=finalizing` in `.astloom/sync-progress.json`; py-spy in `delete_edge` / `_relink_unresolved_calls` |
+| Client content-push | Stream idle between batches or long silence after last files; UI looks stuck at 100% |
+| Provider | High `complete` count ≈ changed **symbols** (legacy) rather than changed **files** |
+
+## Root causes (shipped fixes)
+
+| Cause | Fix (code) |
+| --- | --- |
+| One Neo4j `delete_edge` + `put_edge` per unresolved CALL during finalize | Batched `delete_edges` / `put_edges` in `finalize_cross_file_resolution` |
+| One LiteLLM `complete` per changed symbol for living docs | `LlmBackedDocGenerator.generate_many` — one JSON completion per file (chunks of 16) |
+| LLM-hot worker cap `RPM // 6` undersized after batching | `_LLM_HOT_CALLS_PER_FILE = 2` → `RPM // 2` when docs/cloud embeds are on |
+| Content-push ran full-project finalize after **every** HTTP batch | `finalize_cross_file=false` on intermediate batches; `true` on last only |
+| Progress silent during finalize | `status=finalizing` + step `file=` for local sync, content-push, and CLI render |
+
+## Diagnosis
+
+1. Read progress snapshot:
+
+```bash
+python3 -c "import json; print(json.load(open('.astloom/sync-progress.json'))['status'],
+  json.load(open('.astloom/sync-progress.json')).get('file'))"
+```
+
+2. If `finalizing` and process CPU/IO high for > a few minutes on a mid-size graph, sample stacks:
+
+```bash
+.venv/bin/py-spy dump --pid "$(jq -r .pid .astloom/sync-progress.json)"
+```
+
+Expect modern builds to spend time in bulk Cypher / snapshot load, **not** thousands of single `delete_edge` calls.
+
+3. Count unresolved CALLS (Neo4j):
+
+```cypher
+MATCH ()-[r:CODE_REL {project_id:$project, rel_type:'CALLS'}]->(t)
+WHERE t.id STARTS WITH 'unresolved:'
+RETURN count(r) AS unresolved
+```
+
+4. Distinguish Provider vs finalize:
+
+| Observation | Likely layer |
+| --- | --- |
+| `rpm_inflight` / `starts_in_window` saturated while `files_in_flight` > 0 | Provider / living docs + embeds |
+| `rpm_*` = 0, `files_in_flight` = 0, `status=finalizing` | Cross-file finalize / Neo4j |
+| Bolt handshake / Neo4j dead | Heap OOM → doc [`81`](81-neo4j-memory-and-content-push-oom-runbook.md) |
+
+## Flow (agent-readable)
+
+```mermaid
+flowchart TD
+  files[File_workers_done] --> finalizeFlag{finalize_cross_file?}
+  finalizeFlag -->|false_intermediate_batch| nextBatch[Next_HTTP_batch]
+  finalizeFlag -->|true_or_local_sync| snap[Load_symbols_and_edges]
+  snap --> batchRelink[Batch_delete_edges_and_put_edges]
+  batchRelink --> dispatch[Dynamic_dispatch_wave]
+  dispatch --> embed[Embedding_refresh_touched]
+  nextBatch --> files
+```
+
+| Step | Actor | Action | Outcome |
+| --- | --- | --- | --- |
+| 1 | File pool | Ingest with `defer_cross_file_pass` | Symbols + unresolved placeholders |
+| 2 | Living docs | `generate_many` per changed file | One Provider `complete` per file (chunked) |
+| 3 | Client batches | Intermediate: `finalize_cross_file=false` | Skip whole-graph relink |
+| 4 | Finalize | Batched Neo4j deletes/puts + progress steps | Relink without per-edge RTT storm |
+| 5 | Embeds | Touched refresh (or skip when mode=`skip`) | Vectors for searchable symbols |
+
+## Remediation
+
+1. Confirm code includes batch finalize + batch docs (commits covering `file_relink.py`, `llm_wiring.py`, `client_push.py::_batches`).
+2. Restart code-graph HTTPS so content-push hits the new process:
+
+```bash
+astloom service restart
+```
+
+3. Re-run sync / `astloom-client sync`. Expect a distinct **finalizing** progress block with steps such as `relinking unresolved calls`, then finish — not an indefinite 100% bar with zero RPM.
+4. For Provider-bound wall time (not a hang): raise `ASTLOOM_LITELLM_RPM` carefully; prefer faster docs model via `ASTLOOM_LITELLM_MODEL_DOCS`; keep embeds on OpenRouter/local per operator policy. Do **not** disable living docs unless the operator explicitly wants a structural-only sync (`ASTLOOM_LITELLM_DOCS_ENABLED=false`).
+
+## Verification
+
+| Check | Expectation |
+| --- | --- |
+| Unit | `test_finalize_batches_edge_rewrites.py`, `test_llm_batch_docs.py`, client `_batches` finalize flags |
+| Live local | Finalize wall time seconds–tens of seconds on ~5k unresolved CALLS after batching (not tens of minutes of single deletes) |
+| Live client | `tests/live/code-graph-service/test_client_content_push_speed_live.py` — finalize events only on last batch; push completes |
+
+## Related Documents
+
+- [`50` sync CPU budget LLD](50-sync-cpu-budget-and-store-concurrency-lld.md) — LLM-hot worker cap `RPM // 2`
+- [`03` ingestion and living documentation](03-ingestion-and-living-documentation-workflow.md)
+- [`40` RPM parallel sync risks](40-rpm-session-parallel-sync-risks-challenges-and-acceptance.md) — C-15 finalization
+- [`81` Neo4j memory / content-push OOM](81-neo4j-memory-and-content-push-oom-runbook.md)
+- LiteLLM env: [`12-litellm-environment-configuration.md`](../13-technology-stack-and-platform-decisions/12-litellm-environment-configuration.md)
+- Client content-push design: [`2026-08-04-client-direct-ingest-no-stage-design.md`](../superpowers/specs/2026-08-04-client-direct-ingest-no-stage-design.md)

@@ -22,8 +22,8 @@ authority: informative
 visibility: internal
 linked_symbols:
 - backend/services/code-graph-service/src/code_graph_service/application/service.py::CodeGraphService
-doc_version: 1.1.14
-updated_at: 2026-08-15
+doc_version: 1.1.15
+updated_at: '2026-09-03'
 ---
 
 # 07 - Code-Knowledge Graph Index
@@ -49,6 +49,7 @@ This design extends the existing Docs-as-Code and Technical Logic sections. It f
 - `11-neo4j-migration-plan.md` defines Postgres → Neo4j cutover steps without regressing Python.
 - `12-neo4j-runtime-plugins.md` defines required APOC and Graph Data Science plugins for Neo4j (and Compose JVM heap / pagecache env defaults).
 - `81-neo4j-memory-and-content-push-oom-runbook.md` diagnoses Bolt handshake failures from Neo4j heap OOM during long content-push / `ingest-push` syncs.
+- `82-sync-finalizing-and-provider-cost-runbook.md` diagnoses sync stuck at 100% (`status=finalizing`), batched CALL relink, living-docs file-batch Provider cost, and deferred finalize on multi-batch content-push.
 - `13-codesymbol-projection-adr.md` accepts `CodeSymbol` + `CODE_REL` as the canonical Neo4j runtime projection.
 - `14-repository-code-wiki-feature-specification.md` defines Repository Code Wiki (holistic repo-level wiki generation; CodeWiki / Google Code Wiki–inspired).
 - `15-call-graph-confidence-and-runtime-traces.md` defines CALL evidence classes, confidence caps/boosts, impact eligibility, and runtime-trace reconciliation (GAP-T02).
@@ -106,7 +107,7 @@ Code evidence anchor: `backend/services/code-graph-service/src/code_graph_servic
 - `47-codebase-memory-neo4j-hybrid-risks-and-acceptance.md` risks, honesty vs paper metrics, acceptance gates.
 - `48-ast-and-lsp-hybrid-parsing-adr.md` accepts AST / tree-sitter as the durable knowledge↔code SoR and reserves LSP for optional edit-session enrichment (not a second graph SoR).
 - `49-lsp-edit-session-feature-specification.md` ships IDE-semantic find-refs / definition / rename via local LSP + reconcile.
-- `50-sync-cpu-budget-and-store-concurrency-lld.md` CPU percent → workers/embeds/Torch pins; Neo4j bounded store slots; list_symbols without embeddings.
+- `50-sync-cpu-budget-and-store-concurrency-lld.md` CPU percent → workers/embeds/Torch pins; LLM-hot auto workers `RPM // 2`; Neo4j bounded store slots; list_symbols without embeddings.
 - `79-postgres-connection-pool-and-capacity-lld.md` checkout/checkin Postgres pools, auto capacity sizing, and `DatabaseCapacityError` soft failure for sync/HTTP.
 - `51-client-standards-gate-and-watcher-policy.md` Astloom Client mutable Skip vs Ingest preference for nonconforming docs/code; watcher/flush precedence (`lifecycle_lane: future` until Client UI ships).
 - `52-codebase-memory-language-breadth-and-indexing-speed.md` Codebase-Memory prior art: language breadth (~158 via vendored tree-sitter + Hybrid LSP) and indexing/query speed stack; Astloom adopt/adapt/avoid.
@@ -132,6 +133,7 @@ Code evidence anchor: `backend/services/code-graph-service/src/code_graph_servic
 
 ## History
 
+- 2026-09-03: Added `82-sync-finalizing-and-provider-cost-runbook.md`; updated `03`/`40`/`50` for batched living docs, LLM-hot `RPM // 2`, batched finalize, and content-push `finalize_cross_file`.
 - 2026-08-15: Added `81-neo4j-memory-and-content-push-oom-runbook.md` (Compose heap defaults 4G / pagecache 1G; content-push Bolt OOM remediation).
 - 2026-08-02: Extended `77` with MCP/pgvector URL fallback and operator failure signals (`embedding_index_unavailable`, hybrid `semantic_error`).
 - 2026-08-01: Added `77-sync-embedding-heal-operator-runbook.md` (scoped sync vs `sync heal`, stats/inventory/preflight guidance).
