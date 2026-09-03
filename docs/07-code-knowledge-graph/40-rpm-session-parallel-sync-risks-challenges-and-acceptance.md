@@ -33,7 +33,7 @@ related_docs:
 - as.doc.ckg.rpm-session-parallel-sync-feature-spec
 - as.doc.ckg.rpm-session-parallel-sync-lld
 - as.doc.stack.litellm-llm-gateway
-doc_version: 1.2.0
+doc_version: 1.2.1
 audience:
 - engineer
 - architect
@@ -87,7 +87,7 @@ Last verified: 2026-07-25
 | C-12 | Progress races | Unsynchronized counters mislead ETA | Lock/queue in `SyncProgressTracker` |
 | C-13 | Observability secrets | Status API could leak prompts/keys | Snapshot fields allowlist only |
 | C-14 | Test flakiness | Real 60s sleeps | Fake clock / injected time; never sleep a full minute in unit CI |
-| C-15 | Serial finalization masks worker gains | Whole-scope reads or per-edge Neo4j RTT after progress reaches 100% | Shared symbol snapshot, batched `delete_edges`/`put_edges`, indexed dispatch, explicit `finalizing` status + progress steps; content-push finalizes only on last HTTP batch — [`82`](82-sync-finalizing-and-provider-cost-runbook.md) |
+| C-15 | Serial finalization masks worker gains | Whole-scope body dumps or per-edge Neo4j RTT after progress reaches 100% | `list_symbols_index` + pending `target_id_prefixes`, batched `delete_edges`/`put_edges`, indexed dispatch, explicit `finalizing` status; content-push finalizes only on last HTTP batch — [`82`](82-sync-finalizing-and-provider-cost-runbook.md) |
 | C-16 | Restart depends on plugin network | Official GDS installer fetches on every container start | APOC-only offline-safe default; GDS is explicit `ASTLOOM_NEO4J_PLUGINS` opt-in |
 | C-17 | Stable root idempotency suppresses later edits | A prior file key short-circuits before hash comparison | Derive the file key from root key + path + content hash |
 | C-18 | CLI/service config drift | In-process sync silently falls back when model env is absent | Graph CLI loads repo-root `.env` (single source of truth); process env retains precedence |

@@ -25,7 +25,7 @@ linked_symbols:
 - backend/services/code-graph-service/src/code_graph_service/application/ingest/human_docs.py::HumanDocIngestMixin
 - backend/services/code-graph-service/src/code_graph_service/domain/symbol_resolve.py::resolve_linked_symbol
 - backend/services/code-graph-service/src/code_graph_service/domain/doc_discovery.py::discover_documentation_files
-doc_version: 1.1.0
+doc_version: 1.1.1
 updated_at: '2026-09-03'
 ---
 
@@ -116,9 +116,10 @@ Generated documentation includes:
 - risk notes when relevant.
 
 After the file worker pool, one cross-file finalize pass relinks unresolved
-`CALLS` (batched Neo4j deletes/puts). Content-push runs that pass only on the
-last HTTP batch. Operator detail:
-[`82`](82-sync-finalizing-and-provider-cost-runbook.md).
+`CALLS` (batched Neo4j deletes/puts; pending-target edge filter). Content-push
+runs that pass only on the last HTTP batch. Client hash-skip uses compact
+`content_hash_maps` / `file-hashes` (not a full symbol body dump). Operator
+detail: [`82`](82-sync-finalizing-and-provider-cost-runbook.md).
 
 ### 7. Embedding Generation
 

@@ -41,7 +41,7 @@ related_docs:
 - as.doc.ckg.ingestion-and-living-documentation-workflow
 - as.doc.ckg.postgres-connection-pool-and-capacity-lld
 - docs/13-technology-stack-and-platform-decisions/12-litellm-environment-configuration.md
-doc_version: 1.3.0
+doc_version: 1.4.0
 audience:
 - engineer
 - operator
@@ -50,6 +50,7 @@ primary_entities:
 - SyncCpuPlan
 - LockedStore
 - ListSymbolsLite
+- ListSymbolsIndex
 relations_declared:
 - type: complements
   target: as.doc.ckg.rpm-session-parallel-sync-lld
@@ -161,18 +162,25 @@ without serializing all workers.
 Nested store calls on the same thread re-enter the semaphore via thread-local
 depth (avoids BoundedSemaphore deadlock).
 
-## list_symbols without embeddings
+## list_symbols without embeddings (and index / hash listings)
 
 Neo4j `LIST_SYMBOLS` returns a map projection with `embedding: []`. Embeddings
 live in the vector index (Qdrant / remote); resolution indexes only need id,
 names, kind, and paths.
 
-Pulling ~11k symbols × 1024 floats over Bolt cost ~14–16s per call and ran
-multiple times before the file pool. Omitting vectors drops that to ~1.5–5s on
-the same host.
+Pulling ~11k–40k symbols × bodies / living-doc text over Bolt dominated small
+content-push prep. Sync paths now prefer:
+
+| API | Use |
+| --- | --- |
+| `list_symbols_index` | Resolution + finalize symbol snapshot (no body/docs on the wire) |
+| `content_hash_maps` | Client `file-hashes` skip map (compact kind/path/hash rows) |
+| `list_edges(..., target_id_prefixes=…)` | Finalize relink of pending `unresolved:` / `ext:` targets |
+| `list_symbols` / lean | Full or doc-stripped scans when a feature truly needs bodies |
 
 `list_symbols_for_file` and single-symbol get paths may still return stored
-properties as needed for prune / lookup.
+properties as needed for prune / lookup. Partial content-push **does not** dump
+the full symbol table solely for prune when `inventory_complete` is false.
 
 ## Parallel ingest notes (companion to pack 37–40)
 
@@ -185,7 +193,8 @@ During the worker pool (`defer_cross_file_pass=True`):
   per symbol. When docs are **disabled**, the heuristic generator is used.
 - Cross-file finalize runs once after the pool (local sync) or once on the
   **last** content-push HTTP batch (`finalize_cross_file`). Relink mutations
-  are Neo4j-batched (`delete_edges` / `put_edges`).
+  are Neo4j-batched (`delete_edges` / `put_edges`). Relink edge reads prefer
+  pending targets (`target_id_prefixes`); see [`82`](82-sync-finalizing-and-provider-cost-runbook.md).
 
 File-level upsert prepares docs and embeddings first, then writes, so workers
 spend wall time on CPU/network before contending for store slots.

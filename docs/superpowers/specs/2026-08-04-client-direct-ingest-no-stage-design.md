@@ -21,7 +21,7 @@ audience_lane:
 - agents
 authority: normative
 visibility: internal
-doc_version: 1.6.0
+doc_version: 1.6.1
 updated_at: '2026-09-03'
 linked_symbols:
 - backend/packages/astloom_cli/commands/sync/client_remote.py::cmd_sync_client_remote
@@ -111,10 +111,10 @@ flowchart TD
 | --- | --- | --- | --- |
 | 1 | CLI client | Resolve connect.yaml scope + cwd | No `source.server_path` required |
 | 2 | CLI client | Discover sources (+ docs); default auto up to 20 000 | Candidate relative paths |
-| 3 | CLI client | Optional: fetch FILE hash map (HTTP) | Skip unchanged bodies |
+| 3 | CLI client | Optional: fetch FILE hash map (HTTP compact `content_hash_maps`) | Skip unchanged bodies |
 | 4 | CLI client | POST size-capped batches of `{file_path, source}` with `finalize_cross_file=false` on intermediate batches | Wire payload; skip whole-graph finalize |
 | 5 | CLI client | Last batch: `finalize_cross_file=true`; optional `docs[]`; `present_paths` + `inventory_complete=true` only when discovery is full | One finalize + docs upsert; prune only when inventory is authoritative |
-| 6 | Server | `ingest_pushed_sources` (+ docs); finalize iff requested; prune iff `inventory_complete` | Graph updated without partial-inventory deletes or per-batch finalize storms |
+| 6 | Server | `ingest_pushed_sources` (+ docs); index snapshot + pending-edge finalize iff requested; prune iff `inventory_complete` | Graph updated without partial-inventory deletes or per-batch finalize storms |
 
 ## Service / CLI
 
