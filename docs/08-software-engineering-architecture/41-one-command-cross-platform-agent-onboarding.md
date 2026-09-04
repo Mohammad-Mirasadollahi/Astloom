@@ -68,10 +68,11 @@ This document is the **operator guide** (examples included) and the **normative 
 Historical SSH wiring (removed): [40-remote-dev-client-mcp-wiring.md](./40-remote-dev-client-mcp-wiring.md).  
 CLI reference: [36-astloom-cli.md](./36-astloom-cli.md).  
 Server install: [39-local-install-runbook.md](./39-local-install-runbook.md).  
-Client TLS verify / CA trust (including **Cursor MCP `fetch failed` on private auto-TLS**):
-[52-client-tls-trust-and-verify.md](./52-client-tls-trust-and-verify.md) — after connect,
-expect `.cursor/mcp.json` to use `npx mcp-remote` + `NODE_EXTRA_CA_CERTS` when `ca.pem` exists;
-then Reload Cursor / reconnect Remote SSH.
+Client TLS verify / CA trust (including **Cursor MCP on private auto-TLS**):
+[52-client-tls-trust-and-verify.md](./52-client-tls-trust-and-verify.md) — default
+`auth.tls_verify: false` writes `.cursor/mcp.json` as `npx mcp-remote` +
+`NODE_TLS_REJECT_UNAUTHORIZED=0` (no CA hassle). With `tls_verify: true`, expect
+`NODE_EXTRA_CA_CERTS`. Then Reload Cursor / reconnect Remote SSH.
 
 ## Two hosts (topology)
 

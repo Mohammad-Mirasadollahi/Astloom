@@ -6,9 +6,9 @@ status: active
 schema_version: '1.0'
 owner: platform-product
 summary: >-
-  Operator guide for Astloom client HTTPS trust — CLI tls_verify, private CA PEM,
-  and Cursor/IDE MCP TLS (mcp-remote + NODE_EXTRA_CA_CERTS) when the server uses
-  auto-TLS.
+  Operator guide for Astloom client HTTPS trust — auth.tls_verify drives both CLI
+  and Cursor MCP (lab: NODE_TLS_REJECT_UNAUTHORIZED=0; verify-on: NODE_EXTRA_CA_CERTS),
+  private CA PEM placement, and fetch-failed repair.
 tags:
 - tls
 - https
@@ -211,7 +211,8 @@ Client app repo                         Astloom server
                                           server.pem  ← leaf (served by profile/graph/MCP)
                                           server.key  ← server only
 .cursor/mcp.json
-  command: npx mcp-remote + NODE_EXTRA_CA_CERTS   ← IDE path (private CA)
+  lab:     npx mcp-remote + NODE_TLS_REJECT_UNAUTHORIZED=0
+  verify:  npx mcp-remote + NODE_EXTRA_CA_CERTS=<ca.pem>
 ```
 
 Fresh server install / `astloom service start` auto-creates those certs under the
@@ -231,7 +232,7 @@ server:
   mcp_http_url: https://192.168.1.150:32500
 auth:
   token_env: ASTLOOM_TOKEN
-  tls_verify: false          # default if omitted
+  tls_verify: false          # default if omitted — CLI + Cursor MCP skip cert validation
 scope:
   tenant: mir
   workspace: dev
@@ -240,7 +241,8 @@ usage_profile: programming-cursor-mcp
 ```
 
 Use this for private LAN / auto-TLS labs. Traffic is still HTTPS; MITM protection
-from cert validation is off.
+from cert validation is off. After `astloom-client connect`, Cursor gets
+`NODE_TLS_REJECT_UNAUTHORIZED=0` in `.cursor/mcp.json` (see operator checklist above).
 
 ### Recommended for shared / production-like — verify with CA
 
@@ -392,9 +394,12 @@ error: auth.tls_verify is true but no CA trust file was found.
 
 ## Security notes
 
+- `tls_verify: false` is intentional for private auto-TLS labs (CLI **and** Cursor
+  MCP skip cert validation); turn verify **on** when clients leave a trusted LAN
+  or when policy requires cert validation.
+- `NODE_TLS_REJECT_UNAUTHORIZED=0` weakens TLS authenticity for the MCP child
+  process only — prefer `tls_verify: true` + CA outside trusted labs.
 - Never copy `ca.key` or `server.key` to clients.
-- `tls_verify: false` is intentional for private auto-TLS labs; turn verify **on**
-  when clients leave a trusted LAN or when policy requires cert validation.
 - Rotating the server CA requires distributing the new `ca.pem` to every client
   that uses `tls_verify: true`.
 
