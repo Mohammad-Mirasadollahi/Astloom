@@ -274,11 +274,11 @@ cd /opt/MyApp
 astloom connect
 ```
 
-Expected: prints `transport: streamable_http (https://astloom.example.internal:32500/mcp)`
-and, when the client has `ca.pem`, notes that Cursor MCP uses **stdio `mcp-remote`**
-(see [52](./52-client-tls-trust-and-verify.md)).
+Expected: prints `transport: streamable_http (https://astloom.example.internal:32500/mcp)`.
+With default `auth.tls_verify: false`, Cursor MCP uses **stdio `mcp-remote`** and
+`NODE_TLS_REJECT_UNAUTHORIZED=0` (see [52](./52-client-tls-trust-and-verify.md)).
 
-What lands in MCP config (shape) — **with private CA** (normal auto-TLS lab):
+What lands in MCP config (lab default — skip cert validation):
 
 ```json
 {
@@ -296,36 +296,20 @@ What lands in MCP config (shape) — **with private CA** (normal auto-TLS lab):
         "--header", "X-Usage-Profile: programming-cursor-mcp"
       ],
       "env": {
-        "NODE_EXTRA_CA_CERTS": "/opt/MyApp/.astloom/certs/ca.pem"
+        "NODE_TLS_REJECT_UNAUTHORIZED": "0"
       }
     }
   }
 }
 ```
 
-Bare HTTPS `url` + `headers` (legacy / public CA only):
-
-```json
-{
-  "mcpServers": {
-    "Astloom-Programming": {
-      "url": "https://astloom.example.internal:32500/mcp",
-      "headers": {
-        "Authorization": "Bearer as1....",
-        "X-Tenant-Id": "acme",
-        "X-Workspace-Id": "eng",
-        "X-Project-Id": "MyApp",
-        "X-Usage-Profile": "programming-cursor-mcp"
-      }
-    }
-  }
-}
-```
+When `auth.tls_verify: true` + `ca_file`, env is `NODE_EXTRA_CA_CERTS` instead (no
+`REJECT_UNAUTHORIZED`).
 
 Do **not** commit files that contain live bearer tokens. Prefer gitignoring generated MCP JSON or redacting before commit.
 
 After connect: **Reload Window** (or reconnect Cursor Remote). If MCP shows
-`fetch failed`, follow the repair steps in [52](./52-client-tls-trust-and-verify.md).
+`fetch failed`, re-run connect per [52](./52-client-tls-trust-and-verify.md).
 
 ---
 

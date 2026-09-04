@@ -327,8 +327,9 @@ auth:
   token_env: ASTLOOM_TOKEN
   # access token is long-lived (30 days); re-run `astloom connect` to re-bootstrap
   # once it expires — there is no refresh flow.
-  # tls_verify: false          # default — encrypt, do not validate server cert (lab)
-  # tls_verify: true           # require auth.ca_file (Astloom CA PEM) before connect/sync
+  # tls_verify: false          # default — CLI + Cursor MCP skip cert validation (lab)
+  #                            # Cursor gets npx mcp-remote + NODE_TLS_REJECT_UNAUTHORIZED=0
+  # tls_verify: true           # require auth.ca_file; Cursor uses NODE_EXTRA_CA_CERTS
   # ca_file: .astloom/certs/ca.pem
 
 scope:

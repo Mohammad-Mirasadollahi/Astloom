@@ -50,24 +50,27 @@ def test_materialize_http_mcp_fragment_uses_mcp_remote_when_ca(tmp_path: Path):
         url="https://192.168.1.150:32500/mcp",
         headers={"Authorization": "Bearer t", "X-Tenant-Id": "mir"},
         ca_file=str(ca),
+        tls_verify=True,
     )
     entry = frag["mcpServers"]["Astloom-Programming"]
     assert entry["command"] == "npx"
     assert "mcp-remote" in entry["args"]
     assert entry["env"]["NODE_EXTRA_CA_CERTS"] == str(ca.resolve())
+    assert "NODE_TLS_REJECT_UNAUTHORIZED" not in entry["env"]
     assert any(a.startswith("Authorization:") for a in entry["args"])
 
 
-def test_materialize_http_mcp_fragment_url_without_ca():
+def test_materialize_http_mcp_fragment_insecure_without_ca():
     from astloom_cli.mcp_client_targets import materialize_http_mcp_fragment
 
     frag = materialize_http_mcp_fragment(
         url="https://example.test/mcp",
         headers={"Authorization": "Bearer t"},
+        tls_verify=False,
     )
     entry = frag["mcpServers"]["Astloom-Programming"]
-    assert entry["url"] == "https://example.test/mcp"
-    assert entry["headers"]["Authorization"] == "Bearer t"
+    assert entry["command"] == "npx"
+    assert entry["env"]["NODE_TLS_REJECT_UNAUTHORIZED"] == "0"
 
 
 def test_list_mcp_clients_command(capsys):

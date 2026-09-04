@@ -166,11 +166,10 @@ The same `astloom service start` **must** also start **code-graph HTTPS** on
 false “Astloom is up” for content-push (`Connection refused` on ingest-push).
 
 Client certificate validation is separate: see
-[52 - Client TLS Trust And Certificate Verify](./52-client-tls-trust-and-verify.md)
-(`auth.tls_verify` defaults to **false** for the CLI; set `true` + `auth.ca_file` to pin
-the server CA). **Cursor MCP** is different: private auto-TLS needs
-`astloom-client connect` to write `npx mcp-remote` + `NODE_EXTRA_CA_CERTS` — a bare
-HTTPS `url` in `.cursor/mcp.json` yields `fetch failed`. Operator checklist is in doc 52.
+[52 - Client TLS Trust And Certificate Verify](./52-client-tls-trust-and-verify.md).
+Default `auth.tls_verify: false` skips cert validation for **both** the CLI and
+Cursor MCP (`NODE_TLS_REJECT_UNAUTHORIZED=0` via `mcp-remote`). Set
+`tls_verify: true` + `auth.ca_file` when you want pinned CA trust.
 
 ```bash
 # Non-interactive: create JWT+bootstrap only (no API key)

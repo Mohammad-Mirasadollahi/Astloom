@@ -219,27 +219,52 @@ def materialize_http_mcp_fragment(
     headers: dict[str, str],
     server_name: str = DEFAULT_SERVER_NAME,
     ca_file: str | None = None,
+    tls_verify: bool = False,
 ) -> dict[str, Any]:
     """Build mcpServers entry for Streamable HTTP / URL-based MCP clients.
 
-    When ``ca_file`` is set, Cursor's native HTTPS ``url`` transport cannot take
-    a trust store — it always verifies and fails on Astloom's private CA
-    (``fetch failed``). Prefer stdio ``mcp-remote`` with ``NODE_EXTRA_CA_CERTS``.
+    Cursor's native HTTPS ``url`` transport always verifies certificates and
+    cannot take a custom CA — private Astloom auto-TLS then fails with
+    ``fetch failed``. Prefer stdio ``npx mcp-remote``:
+
+    - ``tls_verify=False`` (lab default): ``NODE_TLS_REJECT_UNAUTHORIZED=0``
+      so the IDE path ignores cert validation (same intent as CLI httpx).
+    - ``tls_verify=True``: require ``ca_file`` and set ``NODE_EXTRA_CA_CERTS``.
     """
+    verify = bool(tls_verify)
     ca = str(ca_file or "").strip()
-    if ca and Path(ca).is_file():
+    ca_path = Path(ca).expanduser() if ca else None
+    ca_ok = bool(ca_path and ca_path.is_file())
+
+    if verify and not ca_ok:
+        raise SystemExit(
+            "error: auth.tls_verify is true but no CA file for IDE MCP.\n"
+            "  Set auth.ca_file to the Astloom ca.pem, or set auth.tls_verify: false "
+            "to skip certificate verification for Cursor (lab)."
+        )
+
+    # Private auto-TLS labs always need mcp-remote (bare url cannot skip verify).
+    # Also use mcp-remote when verifying with a CA path.
+    if (not verify) or ca_ok:
         args: list[str] = ["-y", "mcp-remote", url]
         for key, value in headers.items():
             args.extend(["--header", f"{key}: {value}"])
+        env: dict[str, str] = {}
+        if verify and ca_ok and ca_path is not None:
+            env["NODE_EXTRA_CA_CERTS"] = str(ca_path.resolve())
+        else:
+            # Lab / operator explicitly disabled verify — do not validate certs.
+            env["NODE_TLS_REJECT_UNAUTHORIZED"] = "0"
         return {
             "mcpServers": {
                 server_name: {
                     "command": "npx",
                     "args": args,
-                    "env": {"NODE_EXTRA_CA_CERTS": str(Path(ca).resolve())},
+                    "env": env,
                 }
             }
         }
+
     entry: dict[str, Any] = {"url": url}
     if headers:
         entry["headers"] = dict(headers)

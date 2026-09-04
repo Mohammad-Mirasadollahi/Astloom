@@ -114,9 +114,10 @@ Each MCP tool entry:
 ## Cursor onboarding (operator steps)
 
 Preferred path today: from the application checkout run **`astloom-client connect`**
-(HTTPS + Usage Profile). That materializes project `.cursor/mcp.json`. On private
-auto-TLS servers, expect **stdio `npx mcp-remote`** with `NODE_EXTRA_CA_CERTS` — not a
-bare HTTPS `url`. Full operator checklist and `fetch failed` repair:
+(HTTPS + Usage Profile). That materializes project `.cursor/mcp.json`. Default
+`auth.tls_verify: false` → stdio `npx mcp-remote` with
+`NODE_TLS_REJECT_UNAUTHORIZED=0` (no CA hassle). With `tls_verify: true`, connect
+requires `ca.pem` and sets `NODE_EXTRA_CA_CERTS`. Details:
 [52 - Client TLS Trust And Certificate Verify](./52-client-tls-trust-and-verify.md).
 
 Manual / export path (legacy checklist):

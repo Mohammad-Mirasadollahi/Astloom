@@ -151,23 +151,28 @@ def run_connect(
             auto_ca = work / ".astloom" / "certs" / "ca.pem"
             if auto_ca.is_file():
                 ca_for_ide = str(auto_ca)
+        ide_verify = bool(settings.tls_verify)
         fragment = materialize_http_mcp_fragment(
             url=http_url,
             headers=http_headers,
             ca_file=ca_for_ide or None,
+            tls_verify=ide_verify,
         )
         if dry_run:
             print(json.dumps(fragment, indent=2, sort_keys=True))
             return 0
         written = write_clients(work, fragment, settings)
         notes = [f"Transport is Streamable HTTP ({http_url})"]
-        if ca_for_ide:
+        if not ide_verify:
+            notes.append(
+                "Cursor MCP uses stdio mcp-remote with TLS verify disabled "
+                "(auth.tls_verify: false → NODE_TLS_REJECT_UNAUTHORIZED=0)"
+            )
+        elif ca_for_ide:
             notes.append(
                 "Cursor MCP uses stdio mcp-remote + NODE_EXTRA_CA_CERTS "
-                "(native HTTPS url transport cannot trust Astloom private CA)"
+                "(auth.tls_verify: true)"
             )
-        # Cursor/IDE HTTP MCP verifies TLS even when CLI tls_verify is false.
-        if http_url.lower().startswith("https://") and ca_for_ide:
             from astloom_cli.connect_http import ensure_ide_os_trusts_ca
 
             trust = ensure_ide_os_trusts_ca(ca_for_ide)
@@ -187,11 +192,6 @@ def run_connect(
                     f"({trust.get('detail') or trust.get('action')})",
                     file=sys.stderr,
                 )
-        elif http_url.lower().startswith("https://"):
-            notes.append(
-                "No ca.pem on client — Cursor HTTPS MCP may fail TLS verify "
-                "(re-run connect after bootstrap writes .astloom/certs/ca.pem)"
-            )
         notes.extend(guidance_connect_notes(materialize_mcp_first_guidance(work)))
         if settings.smoke_test and not mcp_http_smoke(
             http_url, http_headers, verify=httpx_verify(settings)
