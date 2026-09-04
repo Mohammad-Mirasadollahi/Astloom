@@ -171,6 +171,51 @@ ASTLOOM_MCP_HTTP_PUBLIC_URL=https://192.168.1.150:32500
 
 Then restart MCP: `astloom service restart`.
 
+## Cursor / IDE Streamable HTTP vs CLI ``tls_verify``
+
+`auth.tls_verify: false` only affects the **Astloom CLI** (httpx). Cursor's
+native Streamable HTTP `url` entry **always verifies** TLS and cannot take a
+custom CA path — private Astloom CA then surfaces as:
+
+```text
+MCP HTTP exchange failed
+Transient error connecting to streamableHttp server: fetch failed
+```
+
+Node often reports `UNABLE_TO_VERIFY_LEAF_SIGNATURE` (and may require
+`NODE_EXTRA_CA_CERTS` even after `update-ca-certificates`).
+
+**Fix (automatic on connect):** when `.astloom/certs/ca.pem` exists, connect
+writes Cursor MCP as **stdio `npx mcp-remote`** with
+`NODE_EXTRA_CA_CERTS=<ca>` (plus OS trust + `/etc/environment` on Linux). That
+spawns a child Node that trusts the private CA; bare `url` transport does not.
+
+**Manual lab repair (already connected host):**
+
+```bash
+# 1) OS trust + Node env (root)
+sudo cp /path/to/YourApp/.astloom/certs/ca.pem \
+  /usr/local/share/ca-certificates/astloom-private-ca.crt
+sudo update-ca-certificates
+echo 'NODE_EXTRA_CA_CERTS="/usr/local/share/ca-certificates/astloom-private-ca.crt"' \
+  | sudo tee -a /etc/environment
+
+# 2) Re-run connect so .cursor/mcp.json becomes mcp-remote + NODE_EXTRA_CA_CERTS
+cd /path/to/YourApp
+astloom-client connect
+
+# 3) Fully reconnect Cursor Remote / Reload Window (kill stale cursor-server if needed)
+```
+
+Confirm Node trusts the gateway:
+
+```bash
+export NODE_EXTRA_CA_CERTS=/usr/local/share/ca-certificates/astloom-private-ca.crt
+node -e "require('https').get('https://<astloom-host>:32500/health',r=>console.log(r.statusCode)).on('error',e=>console.error(e))"
+```
+
+Expect `200`.
+
 ## Commands that honor `tls_verify`
 
 All client HTTPS calls that go through `httpx_verify` (connect, status, sync

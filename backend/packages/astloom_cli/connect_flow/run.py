@@ -144,12 +144,54 @@ def run_connect(
         return 0
 
     if settings.prefer_http and http_url and http_headers:
-        fragment = materialize_http_mcp_fragment(url=http_url, headers=http_headers)
+        from astloom_cli.connect_http import resolve_ca_file
+
+        ca_for_ide = resolve_ca_file(settings)
+        if not ca_for_ide:
+            auto_ca = work / ".astloom" / "certs" / "ca.pem"
+            if auto_ca.is_file():
+                ca_for_ide = str(auto_ca)
+        fragment = materialize_http_mcp_fragment(
+            url=http_url,
+            headers=http_headers,
+            ca_file=ca_for_ide or None,
+        )
         if dry_run:
             print(json.dumps(fragment, indent=2, sort_keys=True))
             return 0
         written = write_clients(work, fragment, settings)
         notes = [f"Transport is Streamable HTTP ({http_url})"]
+        if ca_for_ide:
+            notes.append(
+                "Cursor MCP uses stdio mcp-remote + NODE_EXTRA_CA_CERTS "
+                "(native HTTPS url transport cannot trust Astloom private CA)"
+            )
+        # Cursor/IDE HTTP MCP verifies TLS even when CLI tls_verify is false.
+        if http_url.lower().startswith("https://") and ca_for_ide:
+            from astloom_cli.connect_http import ensure_ide_os_trusts_ca
+
+            trust = ensure_ide_os_trusts_ca(ca_for_ide)
+            if trust.get("ok"):
+                notes.append(
+                    "Installed Astloom CA into OS trust store "
+                    f"({trust.get('action')}) + NODE_EXTRA_CA_CERTS for Cursor Remote"
+                )
+            else:
+                notes.append(
+                    "IDE TLS trust incomplete: "
+                    f"{trust.get('action')}: {trust.get('detail') or 'see docs/52'}"
+                )
+                print(
+                    f"   {ui.warn('!')} Cursor may show MCP fetch failed until the "
+                    "Astloom CA is in the OS trust store "
+                    f"({trust.get('detail') or trust.get('action')})",
+                    file=sys.stderr,
+                )
+        elif http_url.lower().startswith("https://"):
+            notes.append(
+                "No ca.pem on client — Cursor HTTPS MCP may fail TLS verify "
+                "(re-run connect after bootstrap writes .astloom/certs/ca.pem)"
+            )
         notes.extend(guidance_connect_notes(materialize_mcp_first_guidance(work)))
         if settings.smoke_test and not mcp_http_smoke(
             http_url, http_headers, verify=httpx_verify(settings)

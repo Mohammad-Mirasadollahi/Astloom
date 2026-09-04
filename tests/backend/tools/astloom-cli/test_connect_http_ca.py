@@ -120,3 +120,38 @@ def test_persist_ca_pem_auto_loaded(tmp_path, monkeypatch):
     assert httpx_verify(settings) is False
     settings.tls_verify = True
     assert httpx_verify(settings) == str(ca_path)
+
+
+def test_ensure_ide_os_trusts_ca_missing_file(tmp_path):
+    from astloom_cli.connect_http import ensure_ide_os_trusts_ca
+
+    out = ensure_ide_os_trusts_ca(tmp_path / "nope.pem")
+    assert out["ok"] is False
+    assert out["action"] == "noop"
+    assert "missing" in out["detail"]
+
+
+def test_ensure_ide_os_trusts_ca_linux_install(tmp_path, monkeypatch):
+    from astloom_cli import connect_http as ch
+
+    ca = tmp_path / "ca.pem"
+    ca.write_text("-----BEGIN CERTIFICATE-----\nMIIB\n-----END CERTIFICATE-----\n")
+    trust_dir = tmp_path / "ca-certificates"
+    trust_dir.mkdir()
+    update_sh = tmp_path / "update-ca-certificates"
+    update_sh.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
+    update_sh.chmod(0o755)
+    monkeypatch.setattr(ch, "_LINUX_CA_TRUST_DIR", trust_dir)
+    monkeypatch.setattr(ch.sys, "platform", "linux")
+    monkeypatch.setattr(ch.shutil, "which", lambda _name: str(update_sh))
+    monkeypatch.setattr(ch, "_ensure_node_extra_ca_certs", lambda _dest: "node_env_ok")
+    out = ch.ensure_ide_os_trusts_ca(ca)
+    assert out["ok"] is True
+    assert out["action"] == "installed"
+    dest = trust_dir / "astloom-private-ca.crt"
+    assert dest.is_file()
+    assert "BEGIN CERTIFICATE" in dest.read_text(encoding="utf-8")
+
+    out2 = ch.ensure_ide_os_trusts_ca(ca)
+    assert out2["ok"] is True
+    assert out2["action"] == "refresh"

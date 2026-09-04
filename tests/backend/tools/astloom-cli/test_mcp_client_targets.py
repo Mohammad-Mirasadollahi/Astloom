@@ -41,6 +41,35 @@ def test_write_fragment_to_clients_all_project_targets(tmp_path: Path):
     assert "Astloom-Programming" in cursor["mcpServers"]
 
 
+def test_materialize_http_mcp_fragment_uses_mcp_remote_when_ca(tmp_path: Path):
+    from astloom_cli.mcp_client_targets import materialize_http_mcp_fragment
+
+    ca = tmp_path / "ca.pem"
+    ca.write_text("-----BEGIN CERTIFICATE-----\nx\n-----END CERTIFICATE-----\n")
+    frag = materialize_http_mcp_fragment(
+        url="https://192.168.1.150:32500/mcp",
+        headers={"Authorization": "Bearer t", "X-Tenant-Id": "mir"},
+        ca_file=str(ca),
+    )
+    entry = frag["mcpServers"]["Astloom-Programming"]
+    assert entry["command"] == "npx"
+    assert "mcp-remote" in entry["args"]
+    assert entry["env"]["NODE_EXTRA_CA_CERTS"] == str(ca.resolve())
+    assert any(a.startswith("Authorization:") for a in entry["args"])
+
+
+def test_materialize_http_mcp_fragment_url_without_ca():
+    from astloom_cli.mcp_client_targets import materialize_http_mcp_fragment
+
+    frag = materialize_http_mcp_fragment(
+        url="https://example.test/mcp",
+        headers={"Authorization": "Bearer t"},
+    )
+    entry = frag["mcpServers"]["Astloom-Programming"]
+    assert entry["url"] == "https://example.test/mcp"
+    assert entry["headers"]["Authorization"] == "Bearer t"
+
+
 def test_list_mcp_clients_command(capsys):
     assert main(["client", "list-mcp-clients"]) == 0
     payload = json.loads(capsys.readouterr().out)

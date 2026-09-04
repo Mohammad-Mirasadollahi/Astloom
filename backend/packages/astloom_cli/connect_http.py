@@ -3,14 +3,20 @@
 from __future__ import annotations
 
 import os
+import shutil
+import subprocess
+import sys
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from astloom_cli.connect_config import ConnectSettings
 
 ACCESS_TOKEN_FILENAME = "access_token"
 CA_PEM_REL = Path("certs") / "ca.pem"
+# Debian/Ubuntu update-ca-certificates requires a .crt under this dir.
+_LINUX_CA_TRUST_NAME = "astloom-private-ca.crt"
+_LINUX_CA_TRUST_DIR = Path("/usr/local/share/ca-certificates")
 
 _VERIFY_TRUE = frozenset({"1", "true", "yes", "on"})
 _VERIFY_FALSE = frozenset({"0", "false", "no", "off"})
@@ -38,8 +44,16 @@ def parse_tls_verify(raw: object, *, default: bool = False) -> bool:
 def resolve_ca_file(settings: "ConnectSettings") -> str:
     """Return an existing CA PEM path, or empty string."""
     ca = str(getattr(settings, "ca_file", "") or "").strip()
-    if ca and Path(ca).is_file():
-        return ca
+    if ca:
+        path = Path(ca).expanduser()
+        if not path.is_file():
+            cfg = getattr(settings, "config_path", None)
+            if cfg is not None and not path.is_absolute():
+                candidate = (Path(cfg).expanduser().resolve().parent / path).resolve()
+                if candidate.is_file():
+                    path = candidate
+        if path.is_file():
+            return str(path)
     env_ca = os.environ.get("ASTLOOM_CONNECT_CA_FILE", "").strip()
     if env_ca and Path(env_ca).is_file():
         return env_ca
@@ -138,3 +152,122 @@ def persist_ca_pem(config_path: Path | None, ca_pem: str) -> Path | None:
         if tmp.exists():
             tmp.unlink(missing_ok=True)
     return path
+
+
+def ensure_ide_os_trusts_ca(ca_path: str | Path) -> dict[str, Any]:
+    """Install the Astloom private CA into the OS trust store for IDE HTTP MCP.
+
+    Cursor (and similar) Streamable HTTP clients use the runtime TLS stack and
+    **always verify** certificates. ``auth.tls_verify: false`` only affects the
+    Astloom CLI (httpx), not IDE ``mcp.json`` URL transports — without OS trust,
+    Cursor logs ``fetch failed`` / ``UNABLE_TO_VERIFY_LEAF_SIGNATURE``.
+
+    Node 20+ (Cursor Remote ``cursor-server``) also needs ``NODE_EXTRA_CA_CERTS``
+    (or ``node --use-system-ca``); OS trust alone is not enough for default Node.
+    """
+    src = Path(str(ca_path)).expanduser()
+    result: dict[str, Any] = {
+        "ok": False,
+        "action": "noop",
+        "ca_path": str(src),
+        "detail": "",
+    }
+    if not src.is_file():
+        result["detail"] = "ca file missing"
+        return result
+    text = src.read_text(encoding="utf-8", errors="replace")
+    if "BEGIN CERTIFICATE" not in text:
+        result["detail"] = "ca file is not a PEM certificate"
+        return result
+    if sys.platform != "linux":
+        result["detail"] = (
+            f"OS auto-trust not implemented for {sys.platform}; "
+            "install the Astloom ca.pem into the system trust store and set "
+            "NODE_EXTRA_CA_CERTS to that path for Cursor Remote"
+        )
+        return result
+    update_bin = shutil.which("update-ca-certificates")
+    if update_bin is None:
+        result["detail"] = "update-ca-certificates not found (unsupported distro)"
+        return result
+    dest = _LINUX_CA_TRUST_DIR / _LINUX_CA_TRUST_NAME
+    try:
+        _LINUX_CA_TRUST_DIR.mkdir(parents=True, exist_ok=True)
+        body = text if text.endswith("\n") else text + "\n"
+        changed = True
+        if dest.is_file() and dest.read_text(encoding="utf-8", errors="replace") == body:
+            changed = False
+        else:
+            dest.write_text(body, encoding="utf-8")
+            os.chmod(dest, 0o644)
+        proc = subprocess.run(
+            [update_bin],
+            check=False,
+            capture_output=True,
+            text=True,
+            timeout=120,
+        )
+        env_note = _ensure_node_extra_ca_certs(dest)
+        result["ok"] = proc.returncode == 0
+        result["action"] = "installed" if changed else "refresh"
+        if not result["ok"]:
+            result["action"] = "install_failed"
+        result["detail"] = (proc.stderr or proc.stdout or "").strip()[-400:]
+        if env_note:
+            result["detail"] = (result["detail"] + " | " + env_note).strip(" |")
+        result["dest"] = str(dest)
+        result["node_extra_ca_certs"] = str(dest)
+        return result
+    except PermissionError:
+        result["action"] = "need_root"
+        result["detail"] = (
+            f"cannot write {dest}; re-run connect as root or copy ca.pem there, "
+            f"run update-ca-certificates, and set NODE_EXTRA_CA_CERTS={dest}"
+        )
+        return result
+    except OSError as exc:
+        result["action"] = "error"
+        result["detail"] = str(exc)
+        return result
+
+
+def _ensure_node_extra_ca_certs(ca_dest: Path) -> str:
+    """Persist NODE_EXTRA_CA_CERTS so Cursor Remote's Node trusts the private CA."""
+    abs_ca = str(ca_dest.resolve())
+    line = f'NODE_EXTRA_CA_CERTS="{abs_ca}"'
+    notes: list[str] = []
+    # /etc/environment (PAM / many remote sessions)
+    env_file = Path("/etc/environment")
+    try:
+        existing = env_file.read_text(encoding="utf-8") if env_file.is_file() else ""
+        if "NODE_EXTRA_CA_CERTS=" not in existing:
+            with env_file.open("a", encoding="utf-8") as fh:
+                if existing and not existing.endswith("\n"):
+                    fh.write("\n")
+                fh.write(line + "\n")
+            notes.append("wrote /etc/environment")
+        elif abs_ca not in existing:
+            lines = [
+                ln
+                for ln in existing.splitlines()
+                if not ln.strip().startswith("NODE_EXTRA_CA_CERTS=")
+            ]
+            lines.append(line)
+            env_file.write_text("\n".join(lines) + "\n", encoding="utf-8")
+            notes.append("updated /etc/environment")
+    except OSError as exc:
+        notes.append(f"/etc/environment skipped ({exc})")
+    # Login shells / interactive
+    profile = Path("/etc/profile.d/astloom-ca.sh")
+    profile_body = (
+        "# Managed by astloom-client connect — Cursor Remote TLS for Astloom MCP\n"
+        f'export NODE_EXTRA_CA_CERTS="{abs_ca}"\n'
+    )
+    try:
+        if not profile.is_file() or profile.read_text(encoding="utf-8") != profile_body:
+            profile.write_text(profile_body, encoding="utf-8")
+            os.chmod(profile, 0o644)
+            notes.append("wrote /etc/profile.d/astloom-ca.sh")
+    except OSError as exc:
+        notes.append(f"profile.d skipped ({exc})")
+    return "; ".join(notes)

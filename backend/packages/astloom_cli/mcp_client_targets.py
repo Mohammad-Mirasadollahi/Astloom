@@ -218,8 +218,28 @@ def materialize_http_mcp_fragment(
     url: str,
     headers: dict[str, str],
     server_name: str = DEFAULT_SERVER_NAME,
+    ca_file: str | None = None,
 ) -> dict[str, Any]:
-    """Build mcpServers entry for Streamable HTTP / URL-based MCP clients."""
+    """Build mcpServers entry for Streamable HTTP / URL-based MCP clients.
+
+    When ``ca_file`` is set, Cursor's native HTTPS ``url`` transport cannot take
+    a trust store — it always verifies and fails on Astloom's private CA
+    (``fetch failed``). Prefer stdio ``mcp-remote`` with ``NODE_EXTRA_CA_CERTS``.
+    """
+    ca = str(ca_file or "").strip()
+    if ca and Path(ca).is_file():
+        args: list[str] = ["-y", "mcp-remote", url]
+        for key, value in headers.items():
+            args.extend(["--header", f"{key}: {value}"])
+        return {
+            "mcpServers": {
+                server_name: {
+                    "command": "npx",
+                    "args": args,
+                    "env": {"NODE_EXTRA_CA_CERTS": str(Path(ca).resolve())},
+                }
+            }
+        }
     entry: dict[str, Any] = {"url": url}
     if headers:
         entry["headers"] = dict(headers)
