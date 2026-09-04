@@ -18,6 +18,29 @@ from .domain.embeddings import LocalEmbeddingStub
 from .domain.models import EmbeddingResult, GraphSymbol
 
 
+def _embed_timeout_seconds() -> float:
+    import os
+
+    raw = str(os.environ.get("ASTLOOM_EMBED_TIMEOUT_SECONDS", "10")).strip()
+    try:
+        value = float(raw)
+    except ValueError:
+        value = 10.0
+    return max(1.0, min(value, 120.0))
+
+
+def _run_with_timeout(fn, *args, **kwargs):
+    import concurrent.futures
+
+    timeout = _embed_timeout_seconds()
+    with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
+        fut = pool.submit(fn, *args, **kwargs)
+        try:
+            return fut.result(timeout=timeout)
+        except concurrent.futures.TimeoutError as exc:
+            raise RuntimeError(f"embedding call timed out after {timeout}s") from exc
+
+
 class _DocGenerator(Protocol):
     def generate(self, symbol: GraphSymbol, neighbors: list[str]) -> str: ...
 
@@ -522,7 +545,7 @@ class HybridEmbeddings:
                 last_error: Exception | None = None
                 for model in models:
                     try:
-                        raw = list(gw_batch(chunks, model=model))
+                        raw = list(_run_with_timeout(gw_batch, chunks, model=model))
                         out = [
                             EmbeddingResult(
                                 reduce_dims(list(item.vector), self.dims),
@@ -548,7 +571,7 @@ class HybridEmbeddings:
                 try:
                     out = []
                     for chunk in chunks:
-                        result = self.gateway.embed(chunk, model=model)
+                        result = _run_with_timeout(self.gateway.embed, chunk, model=model)
                         out.append(
                             EmbeddingResult(
                                 reduce_dims(list(result.vector), self.dims),

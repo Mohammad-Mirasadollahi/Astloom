@@ -212,7 +212,10 @@ def _audit_docs(root: Path) -> list[dict[str, Any]]:
     return findings
 
 
-def _audit_code(args: Any | None) -> tuple[list[dict[str, Any]], dict[str, Any]]:
+def _audit_code(
+    args: Any | None,
+    roots: list[Path] | None = None,
+) -> tuple[list[dict[str, Any]], dict[str, Any]]:
     """Best-effort code inventory findings; empty if roots/filters unavailable."""
     meta: dict[str, Any] = {"available": False, "error": ""}
     findings: list[dict[str, Any]] = []
@@ -226,8 +229,11 @@ def _audit_code(args: Any | None) -> tuple[list[dict[str, Any]], dict[str, Any]]
 
     try:
         ns = args if args is not None else argparse.Namespace()
-        report = build_inventory_report(ns)
-    except Exception as exc:  # noqa: BLE001
+        if roots is None:
+            report = build_inventory_report(ns)
+        else:
+            report = build_inventory_report(ns, roots=roots)
+    except (Exception, SystemExit) as exc:  # noqa: BLE001 — inventory/sync-config
         meta["error"] = str(exc)
         return findings, meta
 
@@ -341,10 +347,21 @@ def _item_path(item: Any) -> str:
     return ""
 
 
-def build_quality_audit_report(args: Any | None = None) -> dict[str, Any]:
-    root = repo_root().resolve()
-    docs_findings = _audit_docs(root)
-    code_findings, code_meta = _audit_code(args)
+def build_quality_audit_report(
+    args: Any | None = None,
+    *,
+    repos: list[Path] | None = None,
+) -> dict[str, Any]:
+    if repos:
+        roots = [Path(p).expanduser().resolve() for p in repos]
+    else:
+        roots = [repo_root().resolve()]
+    if not roots:
+        roots = [repo_root().resolve()]
+    docs_findings: list[dict[str, Any]] = []
+    for root in roots:
+        docs_findings.extend(_audit_docs(root))
+    code_findings, code_meta = _audit_code(args, roots=roots)
     findings = docs_findings + code_findings
     by_category: dict[str, list[dict[str, Any]]] = defaultdict(list)
     for row in findings:
@@ -377,7 +394,8 @@ def build_quality_audit_report(args: Any | None = None) -> dict[str, Any]:
     return {
         "ok": True,
         "generated_at": now_iso(),
-        "repo": str(root),
+        "repo": str(roots[0]) if len(roots) == 1 else str(roots[0]),
+        "repos": [str(r) for r in roots],
         "summary": {
             "findings_total": len(findings),
             "docs_findings": len(docs_findings),

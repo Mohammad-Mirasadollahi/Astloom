@@ -67,6 +67,50 @@ class Neo4jRetrievalMixin:
             for row in rows
         ]
 
+    def symbol_name_search(
+        self,
+        scope: Scope,
+        query: str,
+        *,
+        top_k: int = 20,
+    ) -> list[dict[str, Any]]:
+        """Substring match on name/qualified_name/path without loading symbol bodies."""
+        top_k = max(1, min(int(top_k), 100))
+        q = (query or "").strip().lower()
+        if not q:
+            return []
+        term = q.split()[0][:80]
+        if not term:
+            return []
+        with self._driver.session(database=self._database) as session:
+            try:
+                rows = list(
+                    session.run(
+                        """
+                        MATCH (n:CodeSymbol)
+                        WHERE n.tenant_id = $tenant_id
+                          AND n.workspace_id = $workspace_id
+                          AND n.project_id = $project_id
+                          AND n.kind IN ['function', 'method', 'class', 'route', 'documentation']
+                          AND (
+                            toLower(coalesce(n.name, '')) CONTAINS $term
+                            OR toLower(coalesce(n.qualified_name, '')) CONTAINS $term
+                            OR toLower(coalesce(n.file_path, '')) CONTAINS $term
+                          )
+                        RETURN n.id AS symbol_id
+                        LIMIT $top_k
+                        """,
+                        tenant_id=scope.tenant_id,
+                        workspace_id=scope.workspace_id,
+                        project_id=scope.project_id,
+                        term=term,
+                        top_k=top_k,
+                    )
+                )
+            except Exception:
+                return []
+        return [{"symbol_id": row["symbol_id"], "score": 1.0, "method": "cypher.name"} for row in rows]
+
     def _fulltext_index_name(self) -> str:
         with self._driver.session(database=self._database) as session:
             try:

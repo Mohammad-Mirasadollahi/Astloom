@@ -17,6 +17,7 @@ services:
       - ../../services/core-data-service/migrations/0002_outbox_published.sql:/docker-entrypoint-initdb.d/0011_core_data_outbox.sql:ro
       - ../../services/memory-service/migrations/0001_memory.sql:/docker-entrypoint-initdb.d/0020_memory.sql:ro
       - ../../services/memory-service/migrations/0002_outbox_published.sql:/docker-entrypoint-initdb.d/0021_memory_outbox.sql:ro
+      - ../../services/memory-service/migrations/0005_memory_retention.sql:/docker-entrypoint-initdb.d/0022_memory_retention.sql:ro
       - ../../services/docs-sync-service/migrations/0001_docs_sync.sql:/docker-entrypoint-initdb.d/0030_docs_sync.sql:ro
       - ../../services/docs-sync-service/migrations/0002_outbox_published.sql:/docker-entrypoint-initdb.d/0031_docs_sync_outbox.sql:ro
       - ../../services/docs-sync-service/migrations/0003_document_scope_primary_key.sql:/docker-entrypoint-initdb.d/0032_docs_sync_document_scope.sql:ro

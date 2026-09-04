@@ -90,6 +90,30 @@ def peek_software_paths() -> list[str]:
     return []
 
 
+def software_paths_for_project(
+    tenant_id: str,
+    workspace_id: str,
+    project_id: str,
+    *,
+    must_exist: bool = False,
+) -> list[str]:
+    """Pinned roots for an MCP/project scope (project JSON only — not CLI identity)."""
+    tenant = str(tenant_id or "").strip()
+    workspace = str(workspace_id or "").strip()
+    project = str(project_id or "").strip()
+    if not tenant or not workspace or not project:
+        return []
+    proj = state.load_project(
+        state.default_state_root(repo_root()),
+        tenant,
+        workspace,
+        project,
+    )
+    if not proj or not isinstance(proj.get("paths"), list) or not proj["paths"]:
+        return []
+    return normalize_software_paths([str(p) for p in proj["paths"]], must_exist=must_exist)
+
+
 def require_software_paths(*, cli_paths: list[str] | None = None) -> list[str]:
     """CLI ``--path`` overrides pins; otherwise require at least one pinned root."""
     if cli_paths:

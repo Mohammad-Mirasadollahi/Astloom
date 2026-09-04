@@ -136,7 +136,7 @@ def dispatch_capability(
     if maps_to == "docs_sync.authoring_standards":
         return docs.docs_authoring_standards(base=base)
     if maps_to == "docs_sync.catalog":
-        return docs.docs_catalog(arguments, base=base)
+        return docs.docs_catalog(arguments, base=base, scope=scope)
 
     if maps_to == "quality.audit":
         return quality.quality_audit(
@@ -163,7 +163,7 @@ def dispatch_capability(
         )
 
     if maps_to == "backup.status":
-        return backup.backup_status(base=base)
+        return backup.backup_status(base=base, scope=scope)
 
     if maps_to == "backup.dry_run":
         return backup.backup_dry_run(arguments, base=base)

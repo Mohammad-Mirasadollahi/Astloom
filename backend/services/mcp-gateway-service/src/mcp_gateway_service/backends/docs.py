@@ -70,11 +70,13 @@ def docs_catalog(
     arguments: dict[str, Any],
     *,
     base: dict[str, Any],
+    scope: dict[str, str] | None = None,
 ) -> dict[str, Any]:
     """Cached docs frontmatter catalog (tags/lanes) for retrieval narrowing."""
     from pathlib import Path
 
     from astloom_cli.docs_catalog import filter_docs_catalog, get_docs_catalog
+    from astloom_cli.software_paths import software_paths_for_project
     from astloom_cli.util import repo_root
 
     refresh = bool(arguments.get("refresh") or False)
@@ -88,8 +90,18 @@ def docs_catalog(
         roots = [str(x).strip() for x in roots_raw if str(x).strip()]
     elif isinstance(roots_raw, str) and roots_raw.strip():
         roots = [p.strip() for p in roots_raw.split(",") if p.strip()]
+    catalog_root = Path(repo_root()).resolve()
+    if scope:
+        pinned = software_paths_for_project(
+            str(scope.get("tenant_id") or ""),
+            str(scope.get("workspace_id") or ""),
+            str(scope.get("project_id") or ""),
+            must_exist=False,
+        )
+        if pinned:
+            catalog_root = Path(pinned[0]).expanduser().resolve()
     catalog = get_docs_catalog(
-        Path(repo_root()).resolve(),
+        catalog_root,
         refresh=refresh or bool(roots),
         roots=roots,
     )

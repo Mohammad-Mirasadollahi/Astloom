@@ -9,6 +9,25 @@ from code_graph_service.domain.errors import CodeGraphError, NotFoundError
 
 from ..platform import PlatformBackends
 
+
+def _resolve_root_path(arguments: dict[str, Any], scope: dict[str, str]) -> str:
+    root_path = str(arguments.get("root_path") or "").strip()
+    if root_path:
+        return root_path
+    from astloom_cli.software_paths import software_paths_for_project
+
+    pinned = software_paths_for_project(
+        str(scope.get("tenant_id") or ""),
+        str(scope.get("workspace_id") or ""),
+        str(scope.get("project_id") or ""),
+        must_exist=False,
+    )
+    if len(pinned) == 1:
+        return pinned[0]
+    if pinned:
+        raise ValueError("root_path is required when multiple software paths are pinned")
+    raise ValueError("root_path is required")
+
 def ingest_file(
     backends: PlatformBackends,
     arguments: dict[str, Any],
@@ -65,9 +84,7 @@ def ingest_repo(
     correlation_id: str,
     base: dict[str, Any],
 ) -> dict[str, Any]:
-    root_path = str(arguments.get("root_path") or "").strip()
-    if not root_path:
-        raise ValueError("root_path is required")
+    root_path = _resolve_root_path(arguments, scope)
     payload: dict[str, Any] = {"root_path": root_path}
     if arguments.get("include_extensions") is not None:
         payload["include_extensions"] = arguments.get("include_extensions")
@@ -113,9 +130,7 @@ def sync_repo(
 ) -> dict[str, Any]:
     from pathlib import Path
 
-    root_path = str(arguments.get("root_path") or "").strip()
-    if not root_path:
-        raise ValueError("root_path is required")
+    root_path = _resolve_root_path(arguments, scope)
     payload: dict[str, Any] = {"root_path": root_path, "include_outcomes": True}
     if arguments.get("max_files") is not None:
         payload["max_files"] = int(arguments["max_files"])
@@ -178,8 +193,8 @@ def purge_scope(
     return {**base, "graph_mode": backends.graph_mode, "purge": result}
 
 
-def _position_args(arguments: dict[str, Any]) -> tuple[str, str, int, int, str]:
-    root_path = str(arguments.get("root_path") or "").strip()
+def _position_args(arguments: dict[str, Any], scope: dict[str, str]) -> tuple[str, str, int, int, str]:
+    root_path = _resolve_root_path(arguments, scope)
     file_path = str(arguments.get("file_path") or "").strip()
     if not root_path or not file_path:
         raise ValueError("root_path and file_path are required")
@@ -199,8 +214,7 @@ def ide_references(
     base: dict[str, Any],
 ) -> dict[str, Any]:
     """IDE-semantic find-references (LSP). Not durable graph neighbors."""
-    _ = scope
-    root_path, file_path, line, character, language = _position_args(arguments)
+    root_path, file_path, line, character, language = _position_args(arguments, scope)
     try:
         payload = backends.graph.ide_references(
             root_path=root_path,
@@ -222,8 +236,7 @@ def ide_definition(
     base: dict[str, Any],
 ) -> dict[str, Any]:
     """IDE-semantic go-to-definition (LSP). Not durable graph edges."""
-    _ = scope
-    root_path, file_path, line, character, language = _position_args(arguments)
+    root_path, file_path, line, character, language = _position_args(arguments, scope)
     try:
         payload = backends.graph.ide_definition(
             root_path=root_path,
@@ -246,7 +259,7 @@ def ide_rename(
     base: dict[str, Any],
 ) -> dict[str, Any]:
     """IDE-semantic rename (LSP) then AST reconcile_after_edit. Never dual-writes CODE_REL."""
-    root_path, file_path, line, character, language = _position_args(arguments)
+    root_path, file_path, line, character, language = _position_args(arguments, scope)
     new_name = str(arguments.get("new_name") or "").strip()
     if not new_name:
         raise ValueError("new_name is required")

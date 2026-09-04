@@ -12,6 +12,7 @@ from astloom_cli.software_paths import (
     peek_software_paths,
     persist_software_paths,
     require_software_paths,
+    software_paths_for_project,
 )
 from astloom_cli.commands.paths_cmd import cmd_paths_remove
 
@@ -94,3 +95,19 @@ def test_parser_sync_path_optional_override():
     assert args.path is None
     args2 = parser.parse_args(["sync", "--path", "/tmp", "--path", "/opt"])
     assert args2.path == ["/tmp", "/opt"]
+
+
+def test_software_paths_for_project_ignores_cli_identity(tmp_path: Path, monkeypatch):
+    monkeypatch.setattr("astloom_cli.software_paths.repo_root", lambda: tmp_path)
+    monkeypatch.setattr("astloom_cli.util.repo_root", lambda: tmp_path)
+    monkeypatch.setattr("astloom_cli.identity.Path.home", lambda: tmp_path)
+    app = tmp_path / "client-app"
+    app.mkdir()
+    persist_software_paths(
+        [str(app)],
+        tenant="mir",
+        workspace="dev",
+        project="ThinkingSOC",
+    )
+    assert software_paths_for_project("mir", "dev", "ThinkingSOC") == [str(app.resolve())]
+    assert software_paths_for_project("other", "dev", "ThinkingSOC") == []

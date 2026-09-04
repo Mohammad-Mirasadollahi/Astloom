@@ -24,6 +24,7 @@ from ..domain.freshness import FreshnessState
 from ..domain.hybrid_search import lexical_rank, searchable_text
 from ..domain.models import Scope
 from ..domain.parsing_authority import DURABLE_EDGE_REFERENCE_KIND
+from ..domain.ports import list_symbols_compact
 from ..domain.risk import RiskFactors, compute_risk_score, risk_level
 from ..domain.test_links import is_test_path
 from .support import GraphServiceSupport
@@ -170,7 +171,7 @@ class IntelligenceUseCases(GraphServiceSupport):
     def _community_map(self, scope: Scope) -> dict[str, int]:
         symbols = [
             s
-            for s in self.store.list_symbols(scope)
+            for s in list_symbols_compact(self.store, scope)
             if s.kind in {SymbolKind.FUNCTION, SymbolKind.METHOD, SymbolKind.CLASS}
         ]
         edges = [
@@ -201,7 +202,7 @@ class IntelligenceUseCases(GraphServiceSupport):
         member_limit = max(1, min(int(member_limit), 200))
         symbols = [
             s
-            for s in self.store.list_symbols(scope)
+            for s in list_symbols_compact(self.store, scope)
             if s.kind in {SymbolKind.FUNCTION, SymbolKind.METHOD, SymbolKind.CLASS, SymbolKind.ROUTE}
         ]
         by_id = {s.id: s for s in symbols}
@@ -221,7 +222,7 @@ class IntelligenceUseCases(GraphServiceSupport):
         community = community_map.get(symbol.id)
         if community is None:
             # Seed may be file/import — try any symbol id in full map
-            all_ids = [s.id for s in self.store.list_symbols(scope)]
+            all_ids = [s.id for s in list_symbols_compact(self.store, scope)]
             all_edges = [
                 (e.source_id, e.target_id, e.rel_type)
                 for e in self.store.list_edges(scope)
@@ -232,11 +233,11 @@ class IntelligenceUseCases(GraphServiceSupport):
                     confidence=e.confidence,
                 )
             ]
-            all_labels = {s.id: s.name for s in self.store.list_symbols(scope)}
+            all_labels = {s.id: s.name for s in list_symbols_compact(self.store, scope)}
             communities = detect_communities(all_ids, all_edges, labels_by_id=all_labels)
             community_map = {mid: c for c in communities for mid in c.member_ids}
             community = community_map.get(symbol.id)
-            by_id = {s.id: s for s in self.store.list_symbols(scope)}
+            by_id = {s.id: s for s in list_symbols_compact(self.store, scope)}
         if community is None:
             payload = {
                 "symbol": self._symbol_view(symbol),
@@ -294,31 +295,13 @@ class IntelligenceUseCases(GraphServiceSupport):
 
         hybrid = self.hybrid_search(scope, query, top_k=max(5, top_k // 2))
         terms = extract_query_terms(query)
-        symbols = [
-            s
-            for s in self.store.list_symbols(scope)
-            if s.kind
-            in {SymbolKind.FUNCTION, SymbolKind.METHOD, SymbolKind.CLASS, SymbolKind.ROUTE}
-        ]
-        by_id = {s.id: s for s in symbols}
         scored: dict[str, float] = {}
         for hit in hybrid.get("hits") or []:
             sid = str(hit.get("symbol_id") or "")
             if sid:
                 scored[sid] = max(scored.get(sid, 0.0), float(hit.get("score") or 0.5) + 1.0)
-        term_l = [t.lower() for t in terms]
-        for sym in symbols:
-            blob = f"{sym.name} {sym.qualified_name} {sym.file_path}".lower()
-            boost = sum(0.35 for t in term_l if t in blob)
-            if boost:
-                scored[sym.id] = scored.get(sym.id, 0.0) + boost
-
         seed_ids = sorted(scored, key=lambda i: scored[i], reverse=True)[: max(3, top_k // 2)]
-        if not seed_ids and symbols:
-            seed_ids = [symbols[0].id]
 
-        calls_out: dict[str, list[str]] = defaultdict(list)
-        calls_in: dict[str, list[str]] = defaultdict(list)
         structural_rels = {
             RelType.CALLS.value,
             "CALLS",
@@ -327,7 +310,31 @@ class IntelligenceUseCases(GraphServiceSupport):
             "HTTP_CALLS",
             "ASYNC_CALLS",
         }
-        for edge in self.store.list_edges(scope):
+        calls_out: dict[str, list[str]] = defaultdict(list)
+        calls_in: dict[str, list[str]] = defaultdict(list)
+        neighborhood: list[Any] = []
+        edge_fetch = getattr(self, "_structural_edges_for_seed", None)
+        for sid in seed_ids:
+            if callable(edge_fetch):
+                neighborhood.extend(
+                    edge_fetch(
+                        scope,
+                        sid,
+                        max_depth=max_depth,
+                        direction="both",
+                        rel_types=["CALLS", "HTTP_CALLS", "ASYNC_CALLS"],
+                    )
+                )
+            else:
+                for edge in self.store.list_edges(scope):
+                    if edge.source_id == sid or edge.target_id == sid:
+                        neighborhood.append(edge)
+        seen_edge: set[str] = set()
+        for edge in neighborhood:
+            eid = getattr(edge, "id", None) or f"{edge.source_id}:{edge.rel_type}:{edge.target_id}"
+            if eid in seen_edge:
+                continue
+            seen_edge.add(str(eid))
             if edge.rel_type not in structural_rels:
                 continue
             if edge.rel_type in {RelType.CALLS.value, "CALLS"} and not is_blast_call_edge(
@@ -336,9 +343,22 @@ class IntelligenceUseCases(GraphServiceSupport):
                 confidence=edge.confidence,
             ):
                 continue
-            # HTTP/ASYNC to unresolved targets still expand for agent awareness
             calls_out[edge.source_id].append(edge.target_id)
             calls_in[edge.target_id].append(edge.source_id)
+
+        candidate_ids = set(seed_ids)
+        for sid in list(seed_ids):
+            for nbr in calls_out.get(sid, []) + calls_in.get(sid, []):
+                candidate_ids.add(nbr)
+            for edge in neighborhood:
+                candidate_ids.add(edge.source_id)
+                candidate_ids.add(edge.target_id)
+
+        by_id = {}
+        for sid in candidate_ids:
+            sym = self._maybe_get(sid, scope)
+            if sym is not None:
+                by_id[sid] = sym
 
         call_path: list[str] = []
         for sid in seed_ids:
@@ -366,19 +386,7 @@ class IntelligenceUseCases(GraphServiceSupport):
                 if nid not in call_path:
                     call_path.append(nid)
 
-        candidate_ids = set(seed_ids) | set(call_path)
-        for sid in list(seed_ids):
-            for nbr in calls_out.get(sid, []) + calls_in.get(sid, []):
-                candidate_ids.add(nbr)
-            # APOC multi-hop expand when Store supports it (production Neo4j path).
-            expand = getattr(self.store, "expand_neighborhood", None)
-            if callable(expand):
-                try:
-                    for edge in expand(scope, sid, max_depth=max_depth, rel_type="CALLS", limit=40):
-                        candidate_ids.add(edge.source_id)
-                        candidate_ids.add(edge.target_id)
-                except Exception:
-                    pass
+        candidate_ids |= set(call_path)
 
         explore_syms: list[ExploreSymbol] = []
         for sid in candidate_ids:
@@ -390,6 +398,10 @@ class IntelligenceUseCases(GraphServiceSupport):
                 SymbolKind.IMPORT,
             }:
                 continue
+            if not (sym.body or "").strip():
+                full = self._maybe_get(sid, scope)
+                if full is not None:
+                    sym = full
             explore_syms.append(
                 ExploreSymbol(
                     id=sym.id,
@@ -409,7 +421,7 @@ class IntelligenceUseCases(GraphServiceSupport):
             query,
             explore_syms,
             call_path_ids=call_path,
-            file_count=len({s.file_path for s in symbols if s.file_path}),
+            file_count=len({s.file_path for s in explore_syms if s.file_path}),
             budget_chars=budget_chars,
         )
         paths = [sec.file_path for sec in pack.sections]
@@ -475,7 +487,7 @@ class IntelligenceUseCases(GraphServiceSupport):
         max_nodes = max(2, min(int(max_nodes), 200))
         symbols = {
             s.id: s
-            for s in self.store.list_symbols(scope)
+            for s in list_symbols_compact(self.store, scope)
             if s.kind
             in {SymbolKind.FUNCTION, SymbolKind.METHOD, SymbolKind.CLASS, SymbolKind.ROUTE}
         }
@@ -557,34 +569,57 @@ class IntelligenceUseCases(GraphServiceSupport):
         if not query.strip():
             raise ValidationError("query is required")
         top_k = max(1, min(int(top_k), 50))
-        symbols = [
-            s
-            for s in self.store.list_symbols(scope)
-            if s.kind
-            in {
-                SymbolKind.FUNCTION,
-                SymbolKind.METHOD,
-                SymbolKind.CLASS,
-                SymbolKind.DOCUMENTATION,
-                SymbolKind.RATIONALE,
-                SymbolKind.ROUTE,
-            }
-        ]
-        corpus = [
-            (
-                s.id,
-                searchable_text(
-                    name=s.name,
-                    qualified_name=s.qualified_name,
-                    signature=s.signature or "",
-                    file_path=s.file_path or "",
-                    ai_documentation=s.ai_documentation or "",
-                    body=s.body or "",
-                ),
-            )
-            for s in symbols
-        ]
-        lexical_ids = lexical_rank(query, corpus, top_k=top_k * 2)
+        fulltext = getattr(self.store, "fulltext_search", None)
+        fts_ids: list[str] = []
+        fts_method = None
+        if callable(fulltext):
+            try:
+                rows = fulltext(scope, query, top_k=top_k * 2)
+                fts_ids = [str(r["symbol_id"]) for r in rows if r.get("symbol_id")]
+                if rows:
+                    fts_method = str(rows[0].get("method") or "store.fulltext")
+            except Exception:
+                fts_ids = []
+
+        lexical_ids: list[str] = []
+        symbols: list[Any] = []
+        if not fts_ids:
+            name_search = getattr(self.store, "symbol_name_search", None)
+            if callable(name_search):
+                try:
+                    rows = name_search(scope, query, top_k=top_k * 2)
+                    lexical_ids = [str(r["symbol_id"]) for r in rows if r.get("symbol_id")]
+                except Exception:
+                    lexical_ids = []
+            if not lexical_ids:
+                symbols = [
+                    s
+                    for s in list_symbols_compact(self.store, scope)
+                    if s.kind
+                    in {
+                        SymbolKind.FUNCTION,
+                        SymbolKind.METHOD,
+                        SymbolKind.CLASS,
+                        SymbolKind.DOCUMENTATION,
+                        SymbolKind.RATIONALE,
+                        SymbolKind.ROUTE,
+                    }
+                ]
+                corpus = [
+                    (
+                        s.id,
+                        searchable_text(
+                            name=s.name,
+                            qualified_name=s.qualified_name,
+                            signature=s.signature or "",
+                            file_path=s.file_path or "",
+                            ai_documentation=s.ai_documentation or "",
+                            body=s.body or "",
+                        ),
+                    )
+                    for s in symbols
+                ]
+                lexical_ids = lexical_rank(query, corpus, top_k=top_k * 2)
 
         semantic_ids: list[str] = []
         embedding_backend = "unknown"
@@ -608,38 +643,27 @@ class IntelligenceUseCases(GraphServiceSupport):
                     ids.append(sid)
             return ids
 
-        try:
-            semantic_ids = _collect_semantic()
-        except Exception as exc:  # noqa: BLE001 — lexical/FTS must still return
-            if is_transient_db_error(exc):
-                reset = getattr(self, "reset_database_connections", None)
-                if callable(reset):
-                    try:
-                        reset()
-                    except Exception:  # noqa: BLE001
-                        pass
-                try:
-                    semantic_ids = _collect_semantic()
-                except Exception as retry_exc:  # noqa: BLE001
-                    semantic_ids = []
-                    semantic_error = f"{type(retry_exc).__name__}:{retry_exc}"[:300]
-                else:
-                    semantic_error = None
-            else:
-                semantic_ids = []
-                semantic_error = f"{type(exc).__name__}:{exc}"[:300]
-
-        fulltext = getattr(self.store, "fulltext_search", None)
-        fts_ids: list[str] = []
-        fts_method = None
-        if callable(fulltext):
+        if not fts_ids:
             try:
-                rows = fulltext(scope, query, top_k=top_k * 2)
-                fts_ids = [str(r["symbol_id"]) for r in rows if r.get("symbol_id")]
-                if rows:
-                    fts_method = str(rows[0].get("method") or "store.fulltext")
-            except Exception:
-                fts_ids = []
+                semantic_ids = _collect_semantic()
+            except Exception as exc:  # noqa: BLE001 — lexical/FTS must still return
+                if is_transient_db_error(exc):
+                    reset = getattr(self, "reset_database_connections", None)
+                    if callable(reset):
+                        try:
+                            reset()
+                        except Exception:  # noqa: BLE001
+                            pass
+                    try:
+                        semantic_ids = _collect_semantic()
+                    except Exception as retry_exc:  # noqa: BLE001
+                        semantic_ids = []
+                        semantic_error = f"{type(retry_exc).__name__}:{retry_exc}"[:300]
+                    else:
+                        semantic_error = None
+                else:
+                    semantic_ids = []
+                    semantic_error = f"{type(exc).__name__}:{exc}"[:300]
 
         from ..domain.hybrid_search import coalesce_rank_lists, rrf_merge
 
@@ -696,7 +720,7 @@ class IntelligenceUseCases(GraphServiceSupport):
         return payload
 
     def architecture_overview(self, scope: Scope, *, top_n: int = 10) -> dict[str, Any]:
-        symbols = list(self.store.list_symbols(scope))
+        symbols = list(list_symbols_compact(self.store, scope))
         edges = [
             edge
             for edge in self.store.list_edges(scope)
@@ -777,7 +801,7 @@ class IntelligenceUseCases(GraphServiceSupport):
         def resolve(token: str) -> str:
             if self._maybe_get(token, scope) is not None:
                 return token
-            for s in self.store.list_symbols(scope):
+            for s in list_symbols_compact(self.store, scope):
                 if s.qualified_name == token or s.name == token:
                     return s.id
             raise ValidationError(f"symbol not found: {token}")
@@ -824,7 +848,7 @@ class IntelligenceUseCases(GraphServiceSupport):
         if not changed_files:
             raise ValidationError("changed_files is required")
         changed_norm = {f.replace("\\", "/") for f in changed_files}
-        symbols = list(self.store.list_symbols(scope))
+        symbols = list(list_symbols_compact(self.store, scope))
         edges = list(self.store.list_edges(scope))
         community_map = self._community_map(scope)
 

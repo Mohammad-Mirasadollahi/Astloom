@@ -139,10 +139,15 @@ class InMemoryStore:
 
     def get_symbol_by_qualified_name(self, scope: Scope, qualified_name: str) -> GraphSymbol | None:
         def _run() -> GraphSymbol | None:
+            name_hit = None
             for item in self._symbols.values():
-                if self._same_project(item.scope, scope) and item.qualified_name == qualified_name:
+                if not self._same_project(item.scope, scope):
+                    continue
+                if item.qualified_name == qualified_name:
                     return deepcopy(item)
-            return None
+                if name_hit is None and item.name == qualified_name:
+                    name_hit = item
+            return deepcopy(name_hit) if name_hit is not None else None
 
         return self._with_lock(_run)
 

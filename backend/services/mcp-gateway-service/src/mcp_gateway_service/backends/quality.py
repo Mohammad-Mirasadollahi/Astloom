@@ -56,7 +56,35 @@ def quality_audit(
             "errors": [f"{type(exc).__name__}: {exc}"],
         }
 
-    report = build_quality_audit_report()
+    from pathlib import Path
+
+    from astloom_cli.software_paths import software_paths_for_project
+
+    pinned = software_paths_for_project(
+        str(scope.get("tenant_id") or ""),
+        str(scope.get("workspace_id") or ""),
+        str(scope.get("project_id") or ""),
+        must_exist=False,
+    )
+    if not pinned:
+        return {
+            **base,
+            "ok": False,
+            "error": (
+                "no software paths pinned for this MCP project; "
+                "run `astloom paths add /path/to/app` (or init --path) on the Astloom host"
+            ),
+            "repo": None,
+            "repos": [],
+            "scope": scope,
+            "findings": [],
+            "findings_total": 0,
+            "docs_registry_hygiene": docs_registry_hygiene,
+            "tasks_created": [],
+            "tasks_created_count": 0,
+        }
+
+    report = build_quality_audit_report(repos=[Path(p) for p in pinned])
     payload = compact_quality_audit_payload(
         report,
         top_n=top_n,

@@ -135,3 +135,38 @@ def test_http_health_remains_responsive_during_blocking_tool(monkeypatch):
             assert health_elapsed < 0.1
 
     asyncio.run(run())
+
+
+def test_http_mcp_returns_timeout_error(monkeypatch):
+    class Backends:
+        def close(self) -> None:
+            pass
+
+    def blocking_handle_message(_gateway, message):
+        time.sleep(0.4)
+        return {"jsonrpc": "2.0", "id": message.get("id"), "result": {}}
+
+    monkeypatch.setenv("ASTLOOM_MCP_TOKEN_SECRET", "unit-test-secret-key-32chars!!")
+    monkeypatch.setenv("ASTLOOM_MCP_TOOL_TIMEOUT_SECONDS", "0.05")
+    monkeypatch.setattr(
+        "mcp_gateway_service.http_app.handle_message",
+        blocking_handle_message,
+    )
+    from mcp_gateway_service.http_app import create_http_app
+
+    token = mint_connect_token(tenant_id="t", workspace_id="w", project_id="p")
+    app = create_http_app(backends=Backends())
+
+    async def run() -> None:
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            ok = await client.post(
+                "/mcp",
+                headers={"Authorization": f"Bearer {token}"},
+                json={"jsonrpc": "2.0", "id": 1, "method": "tools/call", "params": {}},
+            )
+            assert ok.status_code == 200
+            body = ok.json()
+            assert body["error"]["code"] == -32001
+            assert "timed out" in body["error"]["message"]
+
+    asyncio.run(run())

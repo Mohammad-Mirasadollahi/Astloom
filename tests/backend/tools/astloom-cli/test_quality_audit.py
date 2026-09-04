@@ -95,7 +95,7 @@ def test_build_quality_audit_report_categorizes_docs(tmp_path: Path, monkeypatch
     )
     monkeypatch.setattr(
         "astloom_cli.commands.quality_audit.collect._audit_code",
-        lambda _args=None: ([], {"available": False, "error": "skipped in unit test"}),
+        lambda _args=None, roots=None: ([], {"available": False, "error": "skipped in unit test"}),
     )
     report = build_quality_audit_report()
     assert report["summary"]["findings_total"] >= 1
@@ -126,7 +126,7 @@ def test_build_quality_audit_report_revision_categories(tmp_path: Path, monkeypa
     )
     monkeypatch.setattr(
         "astloom_cli.commands.quality_audit.collect._audit_code",
-        lambda _args=None: ([], {"available": False, "error": "skipped in unit test"}),
+        lambda _args=None, roots=None: ([], {"available": False, "error": "skipped in unit test"}),
     )
     report = build_quality_audit_report()
     cats = {c["category"]: c["count"] for c in report["categories"]}

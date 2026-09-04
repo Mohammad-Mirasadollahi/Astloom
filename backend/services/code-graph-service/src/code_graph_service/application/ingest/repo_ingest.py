@@ -26,6 +26,7 @@ from ...domain.models import (
     Scope,
 )
 from ...domain.package_manifests import load_package_aliases
+from ...domain.ports import list_symbols_compact
 from ...domain.structural_integrity import file_needs_contains_repair
 from ...domain.repo_discovery import (
     DEFAULT_MAX_FILE_BYTES,
@@ -101,7 +102,7 @@ class RepoIngestMixin:
             item.relative_path.replace("\\", "/") for item in discovered
         }
         _emit_prep("loading indexed symbols for change detection")
-        stored_symbols = list(self.store.list_symbols(scope))
+        stored_symbols = list_symbols_compact(self.store, scope)
         if discovered_paths and not include_path_prefixes:
             stored_symbols = self._prune_removed_source_symbols(
                 scope,
@@ -630,7 +631,7 @@ class RepoIngestMixin:
             return 0
 
         files_by_parent: dict[str, list[Any]] = {}
-        for symbol in self.store.list_symbols(scope):
+        for symbol in list_symbols_compact(self.store, scope):
             if symbol.kind != SymbolKind.FILE:
                 continue
             parent_dir = str(Path((symbol.file_path or "").replace("\\", "/")).parent)

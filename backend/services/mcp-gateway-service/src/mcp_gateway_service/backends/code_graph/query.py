@@ -23,13 +23,17 @@ def search(
     top_k = int(arguments.get("top_k") or 5)
     backends.ensure_graph_seed(scope)
     hits = backends.graph.semantic_search(backends.graph_scope(scope), query, top_k=top_k)
-    return {
+    payload = {
         **base,
         "query": query,
         "top_k": top_k,
         "graph_mode": backends.graph_mode,
         "symbols": hits,
     }
+    if hits and hits[0].get("semantic_error"):
+        payload["semantic_error"] = hits[0]["semantic_error"]
+        payload["degraded"] = True
+    return payload
 
 
 def get_symbol(

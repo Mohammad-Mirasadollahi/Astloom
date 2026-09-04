@@ -9,6 +9,7 @@ from ..domain.errors import NotFoundError, ValidationError
 from ..domain.impact import directed_impact, escalate_hint, rank_callers
 from ..domain.models import GraphSymbol, Scope
 from ..domain.polyglot_profile import PolyglotProjectProfile, build_polyglot_profile
+from ..domain.ports import list_symbols_compact
 from ..domain.rag import (
     DEFAULT_EXPAND_DEPTH,
     DEFAULT_EXPAND_EDGE_LIMIT,
@@ -22,6 +23,17 @@ from .support import GraphServiceSupport
 class QueryUseCases(GraphServiceSupport):
     def get_symbol(self, scope: Scope, symbol_id: str) -> GraphSymbol:
         return self.store.get_symbol(symbol_id, scope)
+
+    def _symbols_for_ids(self, scope: Scope, symbol_ids: set[str]) -> dict[str, GraphSymbol]:
+        out: dict[str, GraphSymbol] = {}
+        for sid in symbol_ids:
+            if not sid:
+                continue
+            try:
+                out[sid] = self.store.get_symbol(sid, scope)
+            except NotFoundError:
+                continue
+        return out
 
     def unused_candidates(
         self,
@@ -62,12 +74,7 @@ class QueryUseCases(GraphServiceSupport):
         if not repo_root:
             env_root = str(__import__("os").environ.get("ASTLOOM_ROOT") or "").strip()
             repo_root = env_root or None
-        list_symbols = getattr(self.store, "list_symbols_lean", None)
-        symbols = (
-            list_symbols(scope)
-            if callable(list_symbols)
-            else self.store.list_symbols(scope)
-        )
+        symbols = list_symbols_compact(self.store, scope)
         try:
             payload = find_unused_candidates(
                 symbols,
@@ -150,7 +157,9 @@ class QueryUseCases(GraphServiceSupport):
         return payload
 
     def get_polyglot_profile(self, scope: Scope) -> PolyglotProjectProfile:
-        return build_polyglot_profile(self.store.list_symbols(scope), self.store.list_edges(scope))
+        return build_polyglot_profile(
+            list_symbols_compact(self.store, scope), self.store.list_edges(scope)
+        )
 
     def structural_query(
         self,
@@ -161,13 +170,38 @@ class QueryUseCases(GraphServiceSupport):
         max_depth: int = 1,
     ) -> dict[str, Any]:
         symbol = self.store.get_symbol(symbol_id, scope)
-        expand = getattr(self.store, "expand_neighborhood", None)
         caps = getattr(self.store, "capabilities", None)
         cap_map = caps() if callable(caps) else {}
-        if callable(expand) and max_depth > 1:
-            edges = expand(scope, symbol_id, max_depth=max_depth, rel_type=rel_type)
-            expansion = "apoc_expand" if cap_map.get("apoc") else "store_expand"
-        else:
+        fetch = getattr(self.store, "neighborhood_edges", None)
+        edges = None
+        expansion = "one_hop"
+        if callable(fetch):
+            rels = [rel_type.upper()] if rel_type else [
+                "CALLS",
+                "HTTP_CALLS",
+                "ASYNC_CALLS",
+                "ROUTES_TO",
+                "IMPORTS",
+                "INHERITS_FROM",
+                "DOCUMENTED_BY",
+                "TESTED_BY",
+                "CONTAINS",
+            ]
+            try:
+                edges = list(
+                    fetch(
+                        scope,
+                        symbol_id,
+                        max_depth=max_depth,
+                        direction="both",
+                        rel_types=rels,
+                    )
+                    or []
+                )
+                expansion = "cypher_neighborhood"
+            except Exception:
+                edges = None
+        if edges is None:
             edges = [
                 edge
                 for edge in self.store.list_edges(scope)
@@ -215,7 +249,6 @@ class QueryUseCases(GraphServiceSupport):
         rel_types: list[str] | None = None,
     ) -> dict[str, Any]:
         symbol = self.store.get_symbol(symbol_id, scope)
-        symbols = {s.id: s for s in self.store.list_symbols(scope)}
         allowed = frozenset(r.upper() for r in rel_types) if rel_types else None
         edges = self._structural_edges_for_seed(
             scope,
@@ -223,6 +256,10 @@ class QueryUseCases(GraphServiceSupport):
             max_depth=max_depth,
             direction="upstream",
             rel_types=list(allowed) if allowed else None,
+        )
+        symbols = self._symbols_for_ids(
+            scope,
+            {symbol.id, *(e.source_id for e in edges), *(e.target_id for e in edges)},
         )
         payload = rank_callers(
             symbol.id,
@@ -252,7 +289,6 @@ class QueryUseCases(GraphServiceSupport):
         include_legacy_expand: bool = True,
     ) -> dict[str, Any]:
         symbol = self.store.get_symbol(symbol_id, scope)
-        symbols = {s.id: s for s in self.store.list_symbols(scope)}
         allowed = frozenset(r.upper() for r in rel_types) if rel_types else None
         edges = self._structural_edges_for_seed(
             scope,
@@ -260,6 +296,10 @@ class QueryUseCases(GraphServiceSupport):
             max_depth=max_depth,
             direction=direction,
             rel_types=list(allowed) if allowed else None,
+        )
+        symbols = self._symbols_for_ids(
+            scope,
+            {symbol.id, *(e.source_id for e in edges), *(e.target_id for e in edges)},
         )
         payload = directed_impact(
             symbol.id,
@@ -303,15 +343,16 @@ class QueryUseCases(GraphServiceSupport):
         fetch = getattr(self.store, "neighborhood_edges", None)
         if callable(fetch):
             try:
-                edges = fetch(
-                    scope,
-                    seed_id,
-                    max_depth=max_depth,
-                    direction=direction,
-                    rel_types=rel_types,
+                return list(
+                    fetch(
+                        scope,
+                        seed_id,
+                        max_depth=max_depth,
+                        direction=direction,
+                        rel_types=rel_types,
+                    )
+                    or []
                 )
-                if edges:
-                    return list(edges)
             except Exception:
                 pass
         return list(self.store.list_edges(scope))
@@ -328,10 +369,16 @@ class QueryUseCases(GraphServiceSupport):
         """Stage-1 hybrid RAG: kind-filtered pgvector (or in-store) → optional TurboVec Stage-2 → Neo4j expand."""
         if not query.strip():
             raise ValidationError("query is required")
-        vector = self.embeddings.embed(query, is_query=True).vector
         top_k = max(1, top_k)
         expand_seeds = max(0, min(int(expand_seeds), top_k))
         expand_depth = max(1, min(int(expand_depth), 3))
+        try:
+            vector = self.embeddings.embed(query, is_query=True).vector
+        except Exception as exc:  # noqa: BLE001 — lexical must still return
+            hits = self._lexical_search_hits(scope, query, top_k)
+            if hits:
+                hits[0]["semantic_error"] = f"{type(exc).__name__}:{exc}"[:300]
+            return hits
 
         hits: list[dict[str, Any]] = []
         retrieval = "in_store_cosine"
@@ -385,6 +432,99 @@ class QueryUseCases(GraphServiceSupport):
             expand_seeds=expand_seeds,
             expand_depth=expand_depth,
         )
+        return hits[:top_k]
+
+    def _lexical_search_hits(
+        self,
+        scope: Scope,
+        query: str,
+        top_k: int,
+    ) -> list[dict[str, Any]]:
+        from ..domain.hybrid_search import lexical_rank, searchable_text
+
+        fulltext = getattr(self.store, "fulltext_search", None)
+        if callable(fulltext):
+            try:
+                rows = fulltext(scope, query, top_k=top_k)
+            except Exception:
+                rows = []
+            hits: list[dict[str, Any]] = []
+            for row in rows or []:
+                sid = str(row.get("symbol_id") or "")
+                if not sid:
+                    continue
+                try:
+                    symbol = self.store.get_symbol(sid, scope)
+                except NotFoundError:
+                    continue
+                hits.append(
+                    {
+                        "score": float(row.get("score") or 0.0),
+                        "symbol": self._symbol_view(symbol),
+                        "retrieval": "lexical_fallback",
+                    }
+                )
+            if hits:
+                return hits[:top_k]
+
+        name_search = getattr(self.store, "symbol_name_search", None)
+        if callable(name_search):
+            try:
+                rows = name_search(scope, query, top_k=top_k)
+            except Exception:
+                rows = []
+            hits = []
+            for row in rows or []:
+                sid = str(row.get("symbol_id") or "")
+                if not sid:
+                    continue
+                try:
+                    symbol = self.store.get_symbol(sid, scope)
+                except NotFoundError:
+                    continue
+                hits.append(
+                    {
+                        "score": 0.0,
+                        "symbol": self._symbol_view(symbol),
+                        "retrieval": "lexical_fallback",
+                    }
+                )
+            if hits:
+                return hits[:top_k]
+
+        symbols = [
+            s
+            for s in list_symbols_compact(self.store, scope)
+            if s.kind.value in SEARCHABLE_SYMBOL_KINDS
+        ]
+        corpus = [
+            (
+                s.id,
+                searchable_text(
+                    name=s.name,
+                    qualified_name=s.qualified_name,
+                    signature=s.signature or "",
+                    file_path=s.file_path or "",
+                    ai_documentation="",
+                    body="",
+                ),
+            )
+            for s in symbols
+        ]
+        ranked = lexical_rank(query, corpus, top_k=top_k)
+        by_id = {s.id: s for s in symbols}
+        hits: list[dict[str, Any]] = []
+        for sid in ranked:
+            sym = by_id.get(sid)
+            if sym is None:
+                continue
+            hits.append(
+                {
+                    "score": 0.0,
+                    "symbol": self._symbol_view(sym),
+                    "retrieval": "lexical_fallback",
+                }
+            )
         return hits[:top_k]
 
     def _maybe_turbovec_rerank(

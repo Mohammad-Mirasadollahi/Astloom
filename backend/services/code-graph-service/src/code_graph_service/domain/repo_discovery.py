@@ -8,7 +8,7 @@ from collections.abc import Iterable, Iterator
 from dataclasses import dataclass
 from pathlib import Path
 
-from .errors import ValidationError
+from .fs_paths import require_directory
 from .languages import EXTENSION_TO_LANGUAGE, detect_language_from_path
 
 # Operator excludes live in astloom.sync.yaml (not hardcoded here).
@@ -199,11 +199,7 @@ def discover_source_files(
     and undetectable languages. Optional include patterns/prefixes narrow the tree.
     ``reinclude_globs`` force-keeps paths that matched an exclude glob (gitignore ``!``).
     """
-    root = Path(root_path).expanduser().resolve()
-    if not root.exists():
-        raise ValidationError(f"root_path does not exist: {root}")
-    if not root.is_dir():
-        raise ValidationError(f"root_path is not a directory: {root}")
+    root = require_directory(root_path)
 
     file_limit = None if max_files is None else max(1, min(int(max_files), 20_000))
     max_file_bytes = max(1, int(max_file_bytes))

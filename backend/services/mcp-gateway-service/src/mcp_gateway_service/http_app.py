@@ -13,6 +13,38 @@ from .server import McpGateway, McpGatewayError, handle_message
 from .token_auth import extract_bearer, verify_connect_token
 
 
+def _mcp_tool_timeout_seconds() -> float:
+    raw = str(os.environ.get("ASTLOOM_MCP_TOOL_TIMEOUT_SECONDS", "25")).strip()
+    try:
+        value = float(raw)
+    except ValueError:
+        value = 25.0
+    if value <= 0:
+        return 25.0
+    return min(value, 300.0)
+
+
+async def _handle_message_bounded(gateway: Any, message: dict[str, Any]) -> dict[str, Any] | None:
+    timeout = _mcp_tool_timeout_seconds()
+    try:
+        return await asyncio.wait_for(
+            asyncio.to_thread(handle_message, gateway, message),
+            timeout=timeout,
+        )
+    except TimeoutError:
+        return {
+            "jsonrpc": "2.0",
+            "id": message.get("id"),
+            "error": {
+                "code": -32001,
+                "message": (
+                    f"tool timed out after {int(timeout)}s; "
+                    "retry with a smaller budget or check Neo4j/embeddings"
+                ),
+            },
+        }
+
+
 def create_http_app(*, backends: Any | None = None) -> FastAPI:
     """Build FastAPI app. Optional shared *backends* for multi-request reuse."""
     api = FastAPI(title="Astloom MCP HTTP Gateway", version="1.0.0")
@@ -92,7 +124,7 @@ def create_http_app(*, backends: Any | None = None) -> FastAPI:
                 for message in body:
                     if not isinstance(message, dict):
                         continue
-                    resp = await asyncio.to_thread(handle_message, gateway, message)
+                    resp = await _handle_message_bounded(gateway, message)
                     if resp is not None:
                         responses.append(resp)
                 return JSONResponse(responses)
@@ -106,7 +138,7 @@ def create_http_app(*, backends: Any | None = None) -> FastAPI:
                     },
                     status_code=400,
                 )
-            response = await asyncio.to_thread(handle_message, gateway, body)
+            response = await _handle_message_bounded(gateway, body)
             if response is None:
                 return JSONResponse({})
             return JSONResponse(response)

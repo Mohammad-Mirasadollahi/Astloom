@@ -14,6 +14,7 @@ import threading
 from pathlib import Path
 from typing import Any
 
+from ...domain.fs_paths import require_directory
 from ...domain.hashing import content_hash
 from ...domain.package_manifests import load_package_aliases
 from ...domain.errors import ValidationError
@@ -24,6 +25,7 @@ from ...domain.models import (
     Scope,
     SyncRepoResult,
 )
+from ...domain.ports import list_symbols_compact
 from ...locked_store import sync_max_file_workers
 from .parallel_files import run_parallel_file_jobs
 
@@ -47,9 +49,7 @@ class SyncMixin:
         root_path = str(payload.get("root_path") or "").strip()
         if not root_path:
             raise ValidationError("root_path is required")
-        resolved_root = Path(root_path).expanduser().resolve()
-        if not resolved_root.is_dir():
-            raise ValidationError(f"root_path is not a directory: {resolved_root}")
+        resolved_root = require_directory(root_path)
 
         on_progress = payload.get("on_progress")
 
@@ -72,7 +72,7 @@ class SyncMixin:
         # list_symbols / freshness can take minutes on a large Neo4j graph with no
         # file-queue progress yet — emit a heartbeat so the CLI is not silent.
         _emit_prep("loading graph symbols")
-        symbols = list(self.store.list_symbols(scope))
+        symbols = list_symbols_compact(self.store, scope)
         _emit_prep("checking freshness / pending files")
         freshness = (
             self.freshness_status(scope) if hasattr(self, "freshness_status") else {"pending_files": []}

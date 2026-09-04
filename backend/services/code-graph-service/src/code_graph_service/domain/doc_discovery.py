@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Iterable
 
-from .errors import ValidationError
+from .fs_paths import require_directory
 from .repo_discovery import (
     DEFAULT_MAX_FILE_BYTES,
     DEFAULT_MAX_FILES,
@@ -65,11 +65,7 @@ def discover_documentation_files(
     ``**/*.md`` and ``**/*.mdx`` over the whole tree. ``doc_paths`` (legacy) only
     narrows matches to those prefixes when provided and non-empty.
     """
-    root = Path(root_path).expanduser().resolve()
-    if not root.exists():
-        raise ValidationError(f"root_path does not exist: {root}")
-    if not root.is_dir():
-        raise ValidationError(f"root_path is not a directory: {root}")
+    root = require_directory(root_path)
 
     matches = _normalize_globs(match_globs, default=DEFAULT_DOC_MATCH_GLOBS)
     if not matches:

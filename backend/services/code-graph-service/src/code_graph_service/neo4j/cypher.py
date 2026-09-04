@@ -151,8 +151,9 @@ MATCH (n:CodeSymbol)
 WHERE n.tenant_id = $tenant_id
   AND n.workspace_id = $workspace_id
   AND n.project_id = $project_id
-  AND n.qualified_name = $qualified_name
+  AND (n.qualified_name = $qualified_name OR n.name = $qualified_name)
 RETURN n
+ORDER BY CASE WHEN n.qualified_name = $qualified_name THEN 0 ELSE 1 END, n.id
 LIMIT 1
 """
 

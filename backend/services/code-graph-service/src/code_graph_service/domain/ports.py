@@ -32,3 +32,12 @@ class Store(Protocol):
     def wipe_scope(self, scope: Scope) -> dict[str, int]:
         """Delete all graph rows for the project scope. Returns deleted counts."""
         ...
+
+
+def list_symbols_compact(store: Any, scope: Scope) -> list[GraphSymbol]:
+    """Prefer index/lean listings so MCP/sync never dump living-doc bodies."""
+    for name in ("list_symbols_index", "list_symbols_lean", "list_symbols"):
+        fn = getattr(store, name, None)
+        if callable(fn):
+            return list(fn(scope))
+    return []

@@ -6,6 +6,7 @@ from typing import Any
 
 from ..platform import PlatformBackends
 
+
 def resolve_symbol_id(backends: PlatformBackends, scope: dict[str, str], arguments: dict[str, Any]) -> str:
     symbol_id = str(arguments.get("symbol_id") or "").strip()
     if symbol_id:
@@ -14,14 +15,18 @@ def resolve_symbol_id(backends: PlatformBackends, scope: dict[str, str], argumen
     if not qualified:
         raise ValueError("symbol_id or qualified_name is required")
     graph_scope = backends.graph_scope(scope)
+    store = backends.graph.store
+    getter = getattr(store, "get_symbol_by_qualified_name", None)
+    if callable(getter):
+        hit = getter(graph_scope, qualified)
+        if hit is not None:
+            return hit.id
+    from code_graph_service.domain.ports import list_symbols_compact
+
     matches: list[str] = []
-    for symbol in backends.graph.store.list_symbols(graph_scope):
+    for symbol in list_symbols_compact(store, graph_scope):
         if symbol.qualified_name == qualified or symbol.name == qualified:
             matches.append(symbol.id)
     if not matches:
         raise ValueError(f"symbol not found for qualified_name/name={qualified!r}")
-    if len(matches) > 1:
-        # Prefer exact qualified_name match order already collected; return first stable id.
-        return matches[0]
     return matches[0]
-

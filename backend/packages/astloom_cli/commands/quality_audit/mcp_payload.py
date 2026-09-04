@@ -34,6 +34,7 @@ def compact_quality_audit_payload(
     ]
     return {
         "repo": report.get("repo"),
+        "repos": report.get("repos") or ([report.get("repo")] if report.get("repo") else []),
         "generated_at": report.get("generated_at"),
         "summary": report.get("summary") or {},
         "categories": report.get("categories") or [],

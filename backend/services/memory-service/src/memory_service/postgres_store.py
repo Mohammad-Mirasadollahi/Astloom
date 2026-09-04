@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from pathlib import Path
 from typing import Any
 
 from .core import (
@@ -14,6 +15,13 @@ from .core import (
     Scope,
     WorkBatch,
     digest,
+)
+
+# 0003/0004 are owned by PostgresMemoryEmbeddingStore (pgvector).
+MIGRATION_FILES = (
+    "0001_memory.sql",
+    "0002_outbox_published.sql",
+    "0005_memory_retention.sql",
 )
 
 
@@ -36,6 +44,16 @@ class PostgresStore:
         normalized_url = database_url.replace("postgresql+psycopg://", "postgresql://", 1)
         self._connection = psycopg.connect(normalized_url, autocommit=True, row_factory=dict_row)
         self._json = Jsonb
+        self.ensure_schema()
+
+    def ensure_schema(self) -> None:
+        """Apply item-store migrations (includes pinned/expires_at on existing volumes)."""
+        migrations_dir = Path(__file__).resolve().parents[2] / "migrations"
+        with self._connection.cursor() as cursor:
+            for name in MIGRATION_FILES:
+                path = migrations_dir / name
+                if path.is_file():
+                    cursor.execute(path.read_text(encoding="utf-8"))
 
     @staticmethod
     def _scope_key(scope: Scope) -> str:

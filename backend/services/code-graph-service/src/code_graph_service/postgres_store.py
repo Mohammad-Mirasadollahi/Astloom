@@ -333,9 +333,19 @@ class PostgresStore:
             cur.execute(
                 """
                 SELECT * FROM code_graph.symbols
-                WHERE tenant_id = %s AND workspace_id = %s AND project_id = %s AND qualified_name = %s
+                WHERE tenant_id = %s AND workspace_id = %s AND project_id = %s
+                  AND (qualified_name = %s OR name = %s)
+                ORDER BY CASE WHEN qualified_name = %s THEN 0 ELSE 1 END, id
+                LIMIT 1
                 """,
-                (scope.tenant_id, scope.workspace_id, scope.project_id, qualified_name),
+                (
+                    scope.tenant_id,
+                    scope.workspace_id,
+                    scope.project_id,
+                    qualified_name,
+                    qualified_name,
+                    qualified_name,
+                ),
             )
             row = cur.fetchone()
         return None if row is None else self._symbol(row, scope)

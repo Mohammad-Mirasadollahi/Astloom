@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import Any
 
 from ..errors import ValidationError
+from ..fs_paths import require_directory
 from ..languages import detect_language_from_path
 from .jsonrpc import JsonRpcLspClient
 from .models import IdeDefinitionResult, IdeLocation, IdeReferencesResult, IdeRenameResult
@@ -174,9 +175,7 @@ def build_default_edit_session(
     """Create a live LS session when enabled and a local binary exists."""
     if not lsp_edit_session_enabled():
         return None
-    root = Path(root_path).expanduser().resolve()
-    if not root.is_dir():
-        raise ValidationError(f"root_path is not a directory: {root}")
+    root = require_directory(root_path)
     spec = resolve_language_server(language, file_path)
     if spec is None:
         return None

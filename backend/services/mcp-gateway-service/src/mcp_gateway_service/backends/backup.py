@@ -11,9 +11,27 @@ from astloom_backup.scope import Remap
 from astloom_cli.util import repo_root
 
 
-def backup_status(*, base: dict[str, Any]) -> dict[str, Any]:
+def backup_status(*, base: dict[str, Any], scope: dict[str, str] | None = None) -> dict[str, Any]:
     job = read_job(repo_root())
+    if job and scope:
+        job_scope = job.get("scope") if isinstance(job.get("scope"), dict) else {}
+        if not _job_matches_scope(job_scope, scope):
+            return {
+                **base,
+                "ok": True,
+                "job": None,
+                "job_omitted": "last backup job belongs to a different MCP project scope",
+            }
     return {**base, "ok": True, "job": job}
+
+
+def _job_matches_scope(job_scope: dict[str, Any], scope: dict[str, str]) -> bool:
+    for key in ("tenant_id", "workspace_id", "project_id"):
+        left = str(job_scope.get(key) or "").strip()
+        right = str(scope.get(key) or "").strip()
+        if not left or left != right:
+            return False
+    return True
 
 
 def backup_dry_run(

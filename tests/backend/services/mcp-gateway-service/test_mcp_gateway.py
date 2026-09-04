@@ -77,7 +77,13 @@ def test_lazy_search_and_execute():
     assert via_aliases["structuredContent"]["ok"] is True
 
 
-def test_tools_call_wired_backends():
+def test_tools_call_wired_backends(monkeypatch):
+    from astloom_cli.util import repo_root as astloom_root
+
+    monkeypatch.setattr(
+        "astloom_cli.software_paths.software_paths_for_project",
+        lambda *a, **k: [str(astloom_root())],
+    )
     gw = gateway()
     ping = handle_message(
         gw,

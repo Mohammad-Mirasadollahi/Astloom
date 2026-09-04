@@ -7,13 +7,12 @@ from typing import Any
 from urllib.parse import unquote, urlparse
 
 from ..errors import ValidationError
+from ..fs_paths import require_directory
 
 
 def resolve_under_root(root_path: str, file_path: str) -> tuple[str, Path]:
     """Return (relative posix path, absolute Path) if file_path stays under root."""
-    root = Path(root_path).expanduser().resolve()
-    if not root.is_dir():
-        raise ValidationError(f"root_path is not a directory: {root}")
+    root = require_directory(root_path)
     raw = (file_path or "").strip().replace("\\", "/")
     if not raw:
         raise ValidationError("file_path is required")

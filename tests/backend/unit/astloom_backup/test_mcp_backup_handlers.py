@@ -9,6 +9,7 @@ from astloom_backup.bundle import pack_directory
 from astloom_backup.manifest import build_manifest, write_checksums
 from astloom_backup.scope import Scope
 from mcp_gateway_service.backends import backup as backup_backend
+from astloom_backup.job_state import write_job
 
 
 def test_backup_status_and_dry_run(tmp_path: Path, monkeypatch):
@@ -38,3 +39,28 @@ def test_backup_status_and_dry_run(tmp_path: Path, monkeypatch):
     assert report["ok"] is True
     assert report["action"] == "dry_run"
     assert report["would_fail_conflict"] is False
+
+
+def test_backup_status_omits_foreign_scope_job(tmp_path: Path, monkeypatch):
+    monkeypatch.setenv("ASTLOOM_ROOT", str(tmp_path))
+    write_job(
+        tmp_path,
+        {
+            "ok": True,
+            "action": "export",
+            "scope": {"tenant_id": "t", "workspace_id": "w", "project_id": "p"},
+        },
+    )
+    status = backup_backend.backup_status(
+        base={"maps_to": "backup.status"},
+        scope={"tenant_id": "mir", "workspace_id": "dev", "project_id": "ThinkingSOC"},
+    )
+    assert status["ok"] is True
+    assert status["job"] is None
+    assert "different MCP project" in status["job_omitted"]
+
+    matched = backup_backend.backup_status(
+        base={"maps_to": "backup.status"},
+        scope={"tenant_id": "t", "workspace_id": "w", "project_id": "p"},
+    )
+    assert matched["job"]["scope"]["project_id"] == "p"
