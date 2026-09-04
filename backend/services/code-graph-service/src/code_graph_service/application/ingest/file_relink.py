@@ -216,6 +216,7 @@ class FileRelinkMixin:
         ]
         self._placeholder_id_cache = {symbol.id for symbol in symbols}
         self._begin_edge_batch_for_scope(scope)
+        self._edge_batches.on_progress = _note
         written = 0
         try:
             _note("relinking unresolved calls")
@@ -236,8 +237,10 @@ class FileRelinkMixin:
             _note("emitting test links")
             written += self._emit_test_links(scope, symbols=symbols)
             # Flush first wave before re-reading CALLS/INHERITS for dispatch.
+            _note("flushing edge batch")
             self._flush_edge_batch()
             self._begin_edge_batch_for_scope(scope)
+            self._edge_batches.on_progress = _note
             _note("loading dispatch edges")
             dispatch_edges = [
                 *self.store.list_edges(scope, rel_type="CALLS"),

@@ -30,6 +30,13 @@ class Neo4jSchemaMixin:
             "CREATE FULLTEXT INDEX code_symbol_fulltext_v2 IF NOT EXISTS "
             "FOR (n:CodeSymbol) ON EACH "
             "[n.qualified_name, n.name, n.signature, n.file_path, n.ai_documentation]",
+            # Relationship lookups by id (bulk delete/put/MERGE) must not scan
+            # hundreds of thousands of CODE_REL edges per UNWIND row.
+            "CREATE RANGE INDEX code_rel_id IF NOT EXISTS "
+            "FOR ()-[r:CODE_REL]-() ON (r.id)",
+            "CREATE RANGE INDEX code_rel_scope_type IF NOT EXISTS "
+            "FOR ()-[r:CODE_REL]-() ON "
+            "(r.tenant_id, r.workspace_id, r.project_id, r.rel_type)",
         )
         with self._driver.session(database=self._database) as session:
             for statement in statements:

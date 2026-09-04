@@ -209,6 +209,16 @@ class GraphServiceSupport:
     def _flush_edge_batch(self) -> None:
         deletes = list(getattr(self._edge_batches, "deletes", []) or [])
         edges = list(getattr(self._edge_batches, "edges", []) or [])
+        note = getattr(self._edge_batches, "on_progress", None)
+
+        def _chunk_note(kind: str, done: int, total: int) -> None:
+            if not callable(note) or total <= 0:
+                return
+            try:
+                note(f"flushing edge {kind} {done}/{total}")
+            except Exception:  # noqa: BLE001 — progress must never break flush
+                return
+
         try:
             if deletes:
                 # Scope for deletes is taken from the first pending edge's scope when
@@ -225,8 +235,11 @@ class GraphServiceSupport:
                 if callable(bulk_del):
                     # Chunk to keep Neo4j params bounded.
                     chunk = 500
-                    for start in range(0, len(deletes), chunk):
+                    total = len(deletes)
+                    for start in range(0, total, chunk):
+                        _chunk_note("deletes", start, total)
                         bulk_del(scope, deletes[start : start + chunk])
+                    _chunk_note("deletes", total, total)
                 else:
                     for edge_id in deletes:
                         self.store.delete_edge(scope, edge_id)
@@ -234,8 +247,11 @@ class GraphServiceSupport:
                 bulk_put = getattr(self.store, "put_edges", None)
                 if callable(bulk_put):
                     chunk = 500
-                    for start in range(0, len(edges), chunk):
+                    total = len(edges)
+                    for start in range(0, total, chunk):
+                        _chunk_note("puts", start, total)
                         bulk_put(edges[start : start + chunk])
+                    _chunk_note("puts", total, total)
                 else:
                     for edge in edges:
                         self.store.put_edge(edge)
@@ -243,10 +259,12 @@ class GraphServiceSupport:
             self._edge_batches.edges = None
             self._edge_batches.deletes = None
             self._edge_batches.scope = None
+            self._edge_batches.on_progress = None
 
     def _begin_edge_batch_for_scope(self, scope: Scope) -> None:
         self._begin_edge_batch()
         self._edge_batches.scope = scope
+        self._edge_batches.on_progress = None
 
     def _ensure_unresolved_symbol(self, scope: Scope, symbol_id: str) -> None:
         """Backward-compatible alias for placeholder materialization."""

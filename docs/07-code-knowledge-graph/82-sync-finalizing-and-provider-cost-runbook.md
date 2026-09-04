@@ -98,6 +98,8 @@ This is **not** the Neo4j heap OOM path — see [`81`](81-neo4j-memory-and-conte
 | Finalize loaded **all** CALL/IMPORT edges | Relink reads `target_id_prefixes` (`unresolved:` / `ext:`) first; dispatch still needs broader CALL reads |
 | Per-file DI/HTTP emit re-ran full `list_symbols` / unfiltered `list_edges` under LockedStore | Pass shared `short_names` / `routes_by_path`; HTTP uses `list_symbols_for_file` + `ROUTES_TO`-scoped edge fallback |
 | Constants-only FILE hashes never published (no function/class/method children) | Publish when `metadata.ingest_complete` **or** code children exist (`file_content_hash_publishable`) |
+| Bulk `delete_edges` / MERGE by `CODE_REL.id` scanned ~all relationships (no rel index) | `CREATE RANGE INDEX code_rel_id` (+ scope/rel_type) in `ensure_schema`; `DELETE_EDGES` uses `WHERE r.id IN $ids` |
+| Progress silent for minutes during first finalize flush | `status=finalizing` chunk notes `flushing edge deletes N/M` |
 
 ## Diagnosis
 
@@ -132,6 +134,7 @@ RETURN count(r) AS unresolved
 | `rpm_inflight` / `starts_in_window` saturated while `files_in_flight` > 0 | Provider / living docs + embeds |
 | Long wall on `file-hashes` / `building resolution indexes` with RPM idle | Neo4j listing — expect compact hash/index paths after `56dc4ce` |
 | `rpm_*` = 0, `files_in_flight` = 0, `status=finalizing` | Cross-file finalize / Neo4j |
+| py-spy in `delete_edges` / Bolt `recv` for many minutes on a large graph | Missing `code_rel_id` relationship index — confirm `SHOW INDEXES` includes it |
 | Bolt handshake / Neo4j dead | Heap OOM → doc [`81`](81-neo4j-memory-and-content-push-oom-runbook.md) |
 
 ## Flow (agent-readable)
@@ -176,7 +179,7 @@ astloom service restart
 
 | Check | Expectation |
 | --- | --- |
-| Unit | `test_finalize_batches_edge_rewrites.py`, `test_llm_batch_docs.py`, `test_sync_index_and_hash_fastpath.py`, `test_content_push_http.py` (constants-only skip), client `_batches` finalize flags |
+| Unit | `test_finalize_batches_edge_rewrites.py`, `test_neo4j_rel_id_index.py`, `test_llm_batch_docs.py`, `test_sync_index_and_hash_fastpath.py`, `test_content_push_http.py` (constants-only skip), client `_batches` finalize flags |
 | Live local | Finalize wall time seconds–tens of seconds on ~5k–8k unresolved CALLS after batching (not tens of minutes of single deletes) |
 | Live client | `tests/live/code-graph-service/test_client_content_push_speed_live.py` — finalize events only on last batch; push completes |
 | Ops (ThinkingSOC-scale) | `file-hashes` ~1–3s (not ~7s+ body dump); resolution index ~5–8s; remaining multi-minute wall on small pushes is usually Provider docs/embeds |
