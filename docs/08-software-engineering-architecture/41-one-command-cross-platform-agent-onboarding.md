@@ -37,8 +37,8 @@ related_docs:
 - docs/08-software-engineering-architecture/52-client-tls-trust-and-verify.md
 - docs/superpowers/specs/2026-07-25-thin-client-cli-design.md
 - docs/superpowers/specs/2026-08-04-api-only-https-no-ssh-design.md
-doc_version: 2.4.1
-updated_at: 2026-08-10
+doc_version: 2.4.2
+updated_at: 2026-09-04
 linked_symbols:
 - backend/packages/astloom_cli/connect_wizard.py::run_https_connect_wizard
 - backend/packages/astloom_cli/connect_wizard.py::prompt_usage_profile
@@ -68,7 +68,10 @@ This document is the **operator guide** (examples included) and the **normative 
 Historical SSH wiring (removed): [40-remote-dev-client-mcp-wiring.md](./40-remote-dev-client-mcp-wiring.md).  
 CLI reference: [36-astloom-cli.md](./36-astloom-cli.md).  
 Server install: [39-local-install-runbook.md](./39-local-install-runbook.md).  
-Client TLS verify / CA trust: [52-client-tls-trust-and-verify.md](./52-client-tls-trust-and-verify.md).
+Client TLS verify / CA trust (including **Cursor MCP `fetch failed` on private auto-TLS**):
+[52-client-tls-trust-and-verify.md](./52-client-tls-trust-and-verify.md) — after connect,
+expect `.cursor/mcp.json` to use `npx mcp-remote` + `NODE_EXTRA_CA_CERTS` when `ca.pem` exists;
+then Reload Cursor / reconnect Remote SSH.
 
 ## Two hosts (topology)
 
@@ -271,9 +274,36 @@ cd /opt/MyApp
 astloom connect
 ```
 
-Expected: prints `transport: streamable_http (https://astloom.example.internal:32500/mcp)`.
+Expected: prints `transport: streamable_http (https://astloom.example.internal:32500/mcp)`
+and, when the client has `ca.pem`, notes that Cursor MCP uses **stdio `mcp-remote`**
+(see [52](./52-client-tls-trust-and-verify.md)).
 
-What lands in MCP config (shape):
+What lands in MCP config (shape) — **with private CA** (normal auto-TLS lab):
+
+```json
+{
+  "mcpServers": {
+    "Astloom-Programming": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "mcp-remote",
+        "https://astloom.example.internal:32500/mcp",
+        "--header", "Authorization: Bearer as1....",
+        "--header", "X-Tenant-Id: acme",
+        "--header", "X-Workspace-Id: eng",
+        "--header", "X-Project-Id: MyApp",
+        "--header", "X-Usage-Profile: programming-cursor-mcp"
+      ],
+      "env": {
+        "NODE_EXTRA_CA_CERTS": "/opt/MyApp/.astloom/certs/ca.pem"
+      }
+    }
+  }
+}
+```
+
+Bare HTTPS `url` + `headers` (legacy / public CA only):
 
 ```json
 {
@@ -293,6 +323,9 @@ What lands in MCP config (shape):
 ```
 
 Do **not** commit files that contain live bearer tokens. Prefer gitignoring generated MCP JSON or redacting before commit.
+
+After connect: **Reload Window** (or reconnect Cursor Remote). If MCP shows
+`fetch failed`, follow the repair steps in [52](./52-client-tls-trust-and-verify.md).
 
 ---
 

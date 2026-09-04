@@ -59,14 +59,14 @@ related_docs:
 - docs/08-software-engineering-architecture/52-client-tls-trust-and-verify.md
 - docs/08-software-engineering-architecture/43-app-docker-and-wheelhouse-runbook.md
 - docs/08-software-engineering-architecture/51-software-upgrade-server-and-client.md
-doc_version: 1.7.3
+doc_version: 1.7.4
 audience:
 - engineer
 - operator
 - agent
 language: en
 security_classification: internal
-updated_at: 2026-08-15
+updated_at: 2026-09-04
 ---
 
 # 39 - Local Install Runbook
@@ -167,7 +167,10 @@ false “Astloom is up” for content-push (`Connection refused` on ingest-push)
 
 Client certificate validation is separate: see
 [52 - Client TLS Trust And Certificate Verify](./52-client-tls-trust-and-verify.md)
-(`auth.tls_verify` defaults to **false**; set `true` + `auth.ca_file` to pin the server CA).
+(`auth.tls_verify` defaults to **false** for the CLI; set `true` + `auth.ca_file` to pin
+the server CA). **Cursor MCP** is different: private auto-TLS needs
+`astloom-client connect` to write `npx mcp-remote` + `NODE_EXTRA_CA_CERTS` — a bare
+HTTPS `url` in `.cursor/mcp.json` yields `fetch failed`. Operator checklist is in doc 52.
 
 ```bash
 # Non-interactive: create JWT+bootstrap only (no API key)

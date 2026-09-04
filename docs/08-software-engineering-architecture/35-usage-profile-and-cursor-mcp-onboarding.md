@@ -20,8 +20,8 @@ audience_lane:
 authority: normative
 visibility: internal
 linked_symbols: []
-doc_version: 1.2.1
-updated_at: 2026-08-10
+doc_version: 1.2.2
+updated_at: 2026-09-04
 ---
 
 # Usage Profile and Cursor MCP Onboarding
@@ -113,11 +113,19 @@ Each MCP tool entry:
 
 ## Cursor onboarding (operator steps)
 
+Preferred path today: from the application checkout run **`astloom-client connect`**
+(HTTPS + Usage Profile). That materializes project `.cursor/mcp.json`. On private
+auto-TLS servers, expect **stdio `npx mcp-remote`** with `NODE_EXTRA_CA_CERTS` — not a
+bare HTTPS `url`. Full operator checklist and `fetch failed` repair:
+[52 - Client TLS Trust And Certificate Verify](./52-client-tls-trust-and-verify.md).
+
+Manual / export path (legacy checklist):
+
 1. Activate Usage Profile on the project via API (`PATCH` / activate endpoint).
-2. Download or copy the generated MCP connection fragment.
+2. Download or copy the generated MCP connection fragment (or run connect).
 3. Merge into Cursor MCP settings (user or project `mcp.json`).
-4. Restart MCP / reload window.
-5. Verify tools appear and a smoke `tools/call` succeeds.
+4. Restart MCP / reload window (reconnect Cursor Remote if applicable).
+5. Verify tools appear and a smoke `tools/call` / `mcp_search_tools` succeeds.
 
 ### ≤30 minute checklist (`programming-cursor-mcp`, backlog 34 C2)
 

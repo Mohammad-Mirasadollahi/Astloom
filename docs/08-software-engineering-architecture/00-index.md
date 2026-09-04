@@ -169,7 +169,7 @@ PYTHONPATH=tests/support:backend/packages .venv/bin/python -m pytest tests/backe
 | app Docker + `/opt` wheelhouse (`mcp-gateway`) | 43-app-docker-and-wheelhouse-runbook.md |
 | remote dev client MCP (SSH, historical/removed) | 40-remote-dev-client-mcp-wiring.md |
 | one-command agent connect (spec, HTTPS) | 41-one-command-cross-platform-agent-onboarding.md |
-| client TLS verify + CA trust (`auth.tls_verify`) | 52-client-tls-trust-and-verify.md |
+| client TLS verify + CA trust + Cursor MCP private-CA (`auth.tls_verify`, mcp-remote) | 52-client-tls-trust-and-verify.md |
 | astloom CLI install / overview | 36-astloom-cli.md |
 | astloom CLI full command reference | 42-astloom-cli-command-reference.md |
 | MCP token accounting (`mcp tokens`) | 44-mcp-token-accounting.md |
