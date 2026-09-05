@@ -102,7 +102,7 @@ these defaults:
 | `ASTLOOM_NEO4J_HEAP_MAX_SIZE` | `NEO4J_server_memory_heap_max__size` | `4G` |
 | `ASTLOOM_NEO4J_PAGECACHE_SIZE` | `NEO4J_server_memory_pagecache_size` | `1G` |
 
-A historical hard-coded **512M** heap OOMs on ThinkingSOC-scale multi-hour
+A historical hard-coded **512M** heap OOMs on large-monorepo-scale multi-hour
 content-push. Hosts with little RAM **may** lower the vars; large graphs
 **should** raise heap (for example `4G` → `8G`) before re-running sync.
 

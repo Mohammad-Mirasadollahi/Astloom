@@ -74,9 +74,9 @@ def test_live_mcp_read_tools_no_hard_timeout():
 
     secret = SECRET.read_text(encoding="utf-8").strip()
     os.environ["ASTLOOM_MCP_TOKEN_SECRET"] = secret
-    # Exercise the sshfs-backed ThinkingSOC pin (the timeout regression surface).
+    # Exercise the sshfs-backed demo-app pin (the timeout regression surface).
     token = mint_connect_token(
-        tenant_id="mir", workspace_id="dev", project_id="ThinkingSOC", ttl_seconds=3600
+        tenant_id="mir", workspace_id="dev", project_id="demo-app", ttl_seconds=3600
     )
     headers = {"Authorization": f"Bearer {token}", "Content-Type": "application/json"}
     rid = {"n": 0}

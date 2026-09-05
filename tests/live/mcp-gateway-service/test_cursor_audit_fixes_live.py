@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
-"""Live MCP HTTP: Cursor audit P0/P1 fixes on ThinkingSOC scope (mir/dev/ThinkingSOC).
+"""Live MCP HTTP: Cursor audit P0/P1 fixes on demo-app scope (mir/dev/demo-app).
 
 Requires MCP HTTP up after code load (``astloom service`` / MCP restart).
-Pins are read from ``.astloom/projects/mir/dev/ThinkingSOC.json``.
+Pins are read from ``.astloom/projects/mir/dev/demo-app.json``.
 """
 
 from __future__ import annotations
@@ -26,7 +26,7 @@ MCP_TLS_VERIFY = _VERIFY_RAW in {"1", "true", "yes", "on"}
 
 TENANT = "mir"
 WORKSPACE = "dev"
-PROJECT = "ThinkingSOC"
+PROJECT = "demo-app"
 
 
 def _payload(result: dict) -> dict:
@@ -47,7 +47,7 @@ def _blob(obj: object) -> str:
 
 
 @pytest.mark.live
-def test_live_cursor_audit_fixes_thinkingSOC_mcp_http():
+def test_live_cursor_audit_fixes_astloom_mcp_http():
     if not SECRET.is_file():
         pytest.skip(f"missing MCP secret at {SECRET}")
 
@@ -179,7 +179,7 @@ def test_live_cursor_audit_fixes_thinkingSOC_mcp_http():
         if callers_err is not None:
             assert callers_err.get("code") in {-32001, -32602}, callers_err
 
-    # BUG-3: quality_audit must not scan the Astloom install as ThinkingSOC,
+    # BUG-3: quality_audit must not scan the Astloom install as Astloom,
     # and must finish under the MCP tool budget (no -32001) when the pin is visible.
     audit, audit_err = execute(
         "astloom_quality_audit",
@@ -195,9 +195,9 @@ def test_live_cursor_audit_fixes_thinkingSOC_mcp_http():
     assert not any(r.rstrip("/") == "/opt/Astloom" for r in repos)
     assert "astloom_cli" not in repo.lower()
     if audit.get("ok") is False:
-        assert "software paths" in str(audit.get("error") or "").lower() or "/opt/ThinkingSOC" in joined
+        assert "software paths" in str(audit.get("error") or "").lower() or "/opt/demo-app" in joined
     else:
-        assert repo.rstrip("/") == "/opt/ThinkingSOC" or "/opt/ThinkingSOC" in joined
+        assert repo.rstrip("/") == "/opt/demo-app" or "/opt/demo-app" in joined
 
     # Small-batch sync must not hard-timeout (-32001) on large Neo4j scopes / sshfs.
     t_sync = time.monotonic()
@@ -215,7 +215,7 @@ def test_live_cursor_audit_fixes_thinkingSOC_mcp_http():
     _ide, ide_err = execute(
         "astloom_code_graph_ide_definition",
         {
-            "root_path": "/opt/ThinkingSOC",
+            "root_path": "/opt/demo-app",
             "file_path": "backend/services/chat_service/__init__.py",
             "line": 0,
             "character": 0,
@@ -223,7 +223,7 @@ def test_live_cursor_audit_fixes_thinkingSOC_mcp_http():
         },
     )
     ide_text = _blob(ide_err or _ide)
-    if Path("/opt/ThinkingSOC").is_dir():
+    if Path("/opt/demo-app").is_dir():
         assert "does not exist" not in ide_text
         assert "not visible" not in ide_text
     else:
@@ -243,7 +243,7 @@ def test_live_cursor_audit_fixes_thinkingSOC_mcp_http():
         assert "symbols" in search or search.get("degraded") is True
         assert "dns" not in _blob(search.get("error") if "error" in search else {})
 
-    # BUG-8: ThinkingSOC backup_status must not leak pytest fixture jobs.
+    # BUG-8: Astloom backup_status must not leak pytest fixture jobs.
     backup, backup_err = execute("astloom_backup_status", {})
     assert backup_err is None, backup_err
     job = backup.get("job")
@@ -305,10 +305,10 @@ def test_live_cursor_audit_fixes_thinkingSOC_mcp_http():
     if changed_err is None:
         assert changed.get("changed_files") is not None or "review" in _blob(changed) or changed
 
-    if not Path("/opt/ThinkingSOC").is_dir():
+    if not Path("/opt/demo-app").is_dir():
         sync_payload, sync_err, sync_elapsed = timed(
             "astloom_code_graph_sync",
-            {"root_path": "/opt/ThinkingSOC", "max_files": 1},
+            {"root_path": "/opt/demo-app", "max_files": 1},
             budget=12.0,
         )
         _ = sync_elapsed
@@ -316,12 +316,12 @@ def test_live_cursor_audit_fixes_thinkingSOC_mcp_http():
         assert "does not exist" in sync_text or "not visible" in sync_text or "permission" in sync_text
 
     catalog, catalog_err = execute("astloom_docs_catalog", {"refresh": False, "limit": 5})
-    if catalog_err is not None and Path("/opt/ThinkingSOC").is_dir():
+    if catalog_err is not None and Path("/opt/demo-app").is_dir():
         assert catalog_err.get("code") == -32001, catalog_err
     elif catalog_err is None:
         repo = str(catalog.get("repo") or "")
         if catalog.get("ok") is False:
-            assert "/opt/Astloom" not in repo or "ThinkingSOC" in repo
-            assert "ThinkingSOC" in repo or "not visible" in _blob(catalog) or "does not exist" in _blob(catalog)
+            assert "/opt/Astloom" not in repo or "demo-app" in repo
+            assert "demo-app" in repo or "not visible" in _blob(catalog) or "does not exist" in _blob(catalog)
         else:
             assert repo.rstrip("/") != "/opt/Astloom"

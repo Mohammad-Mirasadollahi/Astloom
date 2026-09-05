@@ -41,7 +41,7 @@ How the engineering skills should consume this repo's domain documentation when 
 
 If any of these files don't exist, **proceed silently**. Don't flag their absence; don't suggest creating them upfront. The `/domain-modeling` skill (reached via `/grill-with-docs` and `/improve-codebase-architecture`) creates them lazily when terms or decisions actually get resolved.
 
-## ThinkingSOC layout (multi-context monorepo)
+## Astloom layout (multi-context monorepo)
 
 This repo does not yet have a root `CONTEXT.md`. Use the existing documentation graph as domain context until glossary files are created:
 

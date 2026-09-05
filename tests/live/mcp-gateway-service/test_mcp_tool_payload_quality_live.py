@@ -21,7 +21,6 @@ MCP_TLS_VERIFY = _VERIFY_RAW in {"1", "true", "yes", "on"}
 
 SCOPES = (
     ("astloom", "/opt/Astloom", "ai-toolstack/lib/cli/__init__.py"),
-    ("ThinkingSOC", "/opt/ThinkingSOC", "backend/cli/paths.py"),
 )
 
 
@@ -123,10 +122,7 @@ def test_live_mcp_tool_payload_quality(project: str, root: str, probe: str):
     assert audit.get("ok") is True
     assert audit.get("degraded") is not True
     assert isinstance(audit.get("findings"), list)
-    if project == "ThinkingSOC":
-        assert str(audit.get("repo") or "").rstrip("/") == "/opt/ThinkingSOC"
-    else:
-        assert "/opt/Astloom" in str(audit.get("repo") or "")
+    assert "/opt/Astloom" in str(audit.get("repo") or "")
 
     arch = execute("astloom_code_graph_architecture_overview", {"top_n": 5})
     expect_scope(arch)

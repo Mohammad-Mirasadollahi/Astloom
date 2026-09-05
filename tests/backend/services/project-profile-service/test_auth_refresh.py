@@ -79,7 +79,7 @@ def test_connect_route_requires_bearer_when_enforcement_enabled(monkeypatch):
     missing_bearer = client.post(
         "/api/v1/projects/p/connect/sources",
         headers=H,
-        json={"server_path": "/opt/ThinkingSOC"},
+        json={"server_path": "/opt/demo-app"},
     )
     assert missing_bearer.status_code == 401
 
@@ -94,7 +94,7 @@ def test_connect_route_accepts_valid_bearer(monkeypatch):
     authed = client.post(
         "/api/v1/projects/p/connect/sources",
         headers={**H, "Authorization": f"Bearer {access_token}"},
-        json={"server_path": "/opt/ThinkingSOC"},
+        json={"server_path": "/opt/demo-app"},
     )
     assert authed.status_code == 200
 

@@ -55,7 +55,7 @@ services:
     profiles: ["core", "all"]
     environment:
       NEO4J_AUTH: ${ASTLOOM_NEO4J_USER:-neo4j}/${ASTLOOM_NEO4J_PASSWORD:?ASTLOOM_NEO4J_PASSWORD is required}
-      # 512M heap OOMs on multi-hour ThinkingSOC-scale content-push (Bolt handshake dies).
+      # 512M heap OOMs on multi-hour large-monorepo-scale content-push (Bolt handshake dies).
       # Override via ASTLOOM_NEO4J_*_SIZE when the host is smaller or the graph is huge.
       NEO4J_server_memory_pagecache_size: ${ASTLOOM_NEO4J_PAGECACHE_SIZE:-1G}
       NEO4J_server_memory_heap_initial__size: ${ASTLOOM_NEO4J_HEAP_INITIAL_SIZE:-4G}

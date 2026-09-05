@@ -5,7 +5,7 @@ doc_type: standard
 status: active
 schema_version: '1.0'
 owner: platform-docs
-summary: IDE-agnostic law for writing and reviewing ThinkingSOC Markdown. Applies to Cursor,
+summary: IDE-agnostic law for writing and reviewing Astloom Markdown. Applies to Cursor,
   Claude Code, Codex, and any agent that reads docs/agents or AGENTS.md.
 tags:
 - documentation
@@ -34,7 +34,7 @@ security_classification: internal
 
 ## Purpose
 
-IDE-agnostic law for writing and reviewing ThinkingSOC Markdown. Applies to Cursor, Claude Code, Codex, and any agent that reads docs/agents or AGENTS.md.
+IDE-agnostic law for writing and reviewing Astloom Markdown. Applies to Cursor, Claude Code, Codex, and any agent that reads docs/agents or AGENTS.md.
 
 **Scope:** Every coding agent working in this repository (Cursor, Claude Code, Codex, Copilot workspace agents, and others). This file is the **portable law**. Cursor also loads a mirror as `documentation-authoring.mdc` after `./ai-toolstack/install.sh`.
 
@@ -47,7 +47,7 @@ IDE-agnostic law for writing and reviewing ThinkingSOC Markdown. Applies to Curs
 | `03-documentation-classification-and-lanes.md` | Lifecycle / concern / audience / authority / visibility |
 | `04-diagrams-and-agent-readable-flows.md` | Mermaid + agent-readable flow tables |
 
-**Skill (portable):** `.agents/skills/write-documentation/` (symlink to `ai-toolstack/skills/thinkingsoc/write-documentation/`). Guide: [write-documentation.md](./write-documentation.md).
+**Skill (portable):** `.agents/skills/write-documentation/` (symlink to `ai-toolstack/skills/astloom/write-documentation/`). Guide: [write-documentation.md](./write-documentation.md).
 
 **Language:** English only in committed docs (`code-and-docs-english-only` project law).
 

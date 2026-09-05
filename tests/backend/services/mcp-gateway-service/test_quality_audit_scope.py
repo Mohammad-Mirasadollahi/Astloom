@@ -18,7 +18,7 @@ def test_quality_audit_errors_when_project_has_no_paths(monkeypatch):
     out = quality_audit(
         backends,
         {"create_tasks": False, "top_n": 3},
-        scope={"tenant_id": "mir", "workspace_id": "dev", "project_id": "ThinkingSOC"},
+        scope={"tenant_id": "mir", "workspace_id": "dev", "project_id": "demo-app"},
         correlation_id=str(uuid4()),
         base={"maps_to": "quality.audit"},
     )
@@ -28,7 +28,7 @@ def test_quality_audit_errors_when_project_has_no_paths(monkeypatch):
 
 
 def test_quality_audit_uses_pinned_project_root(tmp_path: Path, monkeypatch):
-    app = tmp_path / "ThinkingSOC"
+    app = tmp_path / "demo-app"
     app.mkdir()
     monkeypatch.setattr(
         "astloom_cli.software_paths.software_paths_for_project",
@@ -56,7 +56,7 @@ def test_quality_audit_uses_pinned_project_root(tmp_path: Path, monkeypatch):
     out = quality_audit(
         backends,
         {"create_tasks": False, "top_n": 3},
-        scope={"tenant_id": "mir", "workspace_id": "dev", "project_id": "ThinkingSOC"},
+        scope={"tenant_id": "mir", "workspace_id": "dev", "project_id": "demo-app"},
         correlation_id=str(uuid4()),
         base={"maps_to": "quality.audit"},
     )
@@ -66,7 +66,7 @@ def test_quality_audit_uses_pinned_project_root(tmp_path: Path, monkeypatch):
 
 
 def test_quality_audit_passes_mcp_graph_scope(tmp_path: Path, monkeypatch):
-    app = tmp_path / "ThinkingSOC"
+    app = tmp_path / "demo-app"
     app.mkdir()
     monkeypatch.setattr(
         "astloom_cli.software_paths.software_paths_for_project",
@@ -90,7 +90,7 @@ def test_quality_audit_passes_mcp_graph_scope(tmp_path: Path, monkeypatch):
         "astloom_cli.commands.quality_audit.collect.build_quality_audit_report",
         _fake_report,
     )
-    graph_scope = SimpleNamespace(tenant_id="mir", workspace_id="dev", project_id="ThinkingSOC")
+    graph_scope = SimpleNamespace(tenant_id="mir", workspace_id="dev", project_id="demo-app")
     backends = SimpleNamespace(
         docs=None,
         docs_scope=lambda _s: None,
@@ -99,7 +99,7 @@ def test_quality_audit_passes_mcp_graph_scope(tmp_path: Path, monkeypatch):
     out = quality_audit(
         backends,
         {"create_tasks": False, "top_n": 3},
-        scope={"tenant_id": "mir", "workspace_id": "dev", "project_id": "ThinkingSOC"},
+        scope={"tenant_id": "mir", "workspace_id": "dev", "project_id": "demo-app"},
         correlation_id=str(uuid4()),
         base={"maps_to": "quality.audit"},
     )

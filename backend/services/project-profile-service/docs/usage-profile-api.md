@@ -112,7 +112,7 @@ Response (plaintext token returned **once**):
   "scope": {
     "tenant_id": "mir",
     "workspace_id": "dev",
-    "project_id": "ThinkingSOC"
+    "project_id": "demo-app"
   }
 }
 ```

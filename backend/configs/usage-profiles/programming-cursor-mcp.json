@@ -1092,7 +1092,7 @@
       },
       {
         "name": "astloom_docs_authoring_standards",
-        "description": "Return Full-tier Astloom/ThinkingSOC documentation authoring law: required frontmatter, lanes, Mermaid+flow tables, size budgets, procedure 10, and CLI gates. Call when the user asks how documentation works or before writing/remediating product Markdown under docs/. Docs-sync validate is Body-tier only.",
+        "description": "Return Full-tier Astloom documentation authoring law: required frontmatter, lanes, Mermaid+flow tables, size budgets, procedure 10, and CLI gates. Call when the user asks how documentation works or before writing/remediating product Markdown under docs/. Docs-sync validate is Body-tier only.",
         "maps_to": "docs_sync.authoring_standards",
         "input_schema": {
           "type": "object",

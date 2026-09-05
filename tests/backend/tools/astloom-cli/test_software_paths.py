@@ -107,7 +107,7 @@ def test_software_paths_for_project_ignores_cli_identity(tmp_path: Path, monkeyp
         [str(app)],
         tenant="mir",
         workspace="dev",
-        project="ThinkingSOC",
+        project="demo-app",
     )
-    assert software_paths_for_project("mir", "dev", "ThinkingSOC") == [str(app.resolve())]
-    assert software_paths_for_project("other", "dev", "ThinkingSOC") == []
+    assert software_paths_for_project("mir", "dev", "demo-app") == [str(app.resolve())]
+    assert software_paths_for_project("other", "dev", "demo-app") == []

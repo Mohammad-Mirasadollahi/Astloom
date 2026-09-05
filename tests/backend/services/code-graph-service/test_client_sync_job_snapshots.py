@@ -23,7 +23,7 @@ def test_write_list_read_clear_job_snapshot(tmp_path: Path):
         data_root=data_root,
         tenant_id="mir",
         workspace_id="dev",
-        project_id="ThinkingSOC",
+        project_id="demo-app",
     )
     assert path is not None
     assert path.is_file()
@@ -87,7 +87,7 @@ def test_late_progress_write_after_clear_does_not_recreate(tmp_path: Path):
             jid,
             {"phase": "ingest", "done": 96, "total": 815, "status": "ok", "active": True},
             data_root=data_root,
-            project_id="ThinkingSOC",
+            project_id="demo-app",
         )
         is not None
     )
@@ -100,7 +100,7 @@ def test_late_progress_write_after_clear_does_not_recreate(tmp_path: Path):
             jid,
             {"phase": "ingest", "done": 97, "total": 815, "status": "ok", "active": True},
             data_root=data_root,
-            project_id="ThinkingSOC",
+            project_id="demo-app",
         )
         is None
     )

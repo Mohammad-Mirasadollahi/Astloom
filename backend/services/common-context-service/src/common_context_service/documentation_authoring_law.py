@@ -91,7 +91,7 @@ CLI_GATES: list[str] = [
 
 SKILL_MARKDOWN = """---
 name: astloom-documentation-authoring
-description: Full-tier ThinkingSOC/Astloom Markdown authoring law for MCP coding agents.
+description: Full-tier Astloom Markdown authoring law for MCP coding agents.
 ---
 
 # Astloom documentation authoring (Full-tier)

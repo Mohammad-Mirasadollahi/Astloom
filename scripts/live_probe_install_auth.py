@@ -77,7 +77,7 @@ def main() -> int:
         ROOT,
         tenant_id="mir",
         workspace_id="dev",
-        project_id="ThinkingSOC",
+        project_id="demo-app",
         ttl_seconds=0,
     )
     check("mint_ok", mint.get("ok") is True, {k: mint.get(k) for k in ("token_id", "expires_in", "registry")})
@@ -112,7 +112,7 @@ def main() -> int:
     }
     status, body = _http_json(
         "GET",
-        "https://127.0.0.1:32194/api/v1/projects/ThinkingSOC/connect/status",
+        "https://127.0.0.1:32194/api/v1/projects/demo-app/connect/status",
         headers=headers,
     )
     check("profile_status_bearer", status == 200, {"status": status, "keys": sorted(body.keys())[:12]})
@@ -120,7 +120,7 @@ def main() -> int:
     # Create another short-lived API key via HTTP
     status2, body2 = _http_json(
         "POST",
-        "https://127.0.0.1:32194/api/v1/projects/ThinkingSOC/access-tokens",
+        "https://127.0.0.1:32194/api/v1/projects/demo-app/access-tokens",
         headers=headers,
         body={"ttl_seconds": 3600},
     )
@@ -134,7 +134,7 @@ def main() -> int:
     # Create non-expiring via HTTP
     status3, body3 = _http_json(
         "POST",
-        "https://127.0.0.1:32194/api/v1/projects/ThinkingSOC/access-tokens",
+        "https://127.0.0.1:32194/api/v1/projects/demo-app/access-tokens",
         headers=headers,
         body={"ttl_seconds": 0},
     )
@@ -148,7 +148,7 @@ def main() -> int:
     if created_id:
         status4, body4 = _http_json(
             "DELETE",
-            f"https://127.0.0.1:32194/api/v1/projects/ThinkingSOC/access-tokens/{created_id}",
+            f"https://127.0.0.1:32194/api/v1/projects/demo-app/access-tokens/{created_id}",
             headers=headers,
         )
         check("http_revoke", status4 == 200 and body4.get("revoked") is True, {"status": status4, "body": body4})
@@ -159,7 +159,7 @@ def main() -> int:
         bad_headers["Authorization"] = f"Bearer {revoked_token}"
         status5, _ = _http_json(
             "GET",
-            "https://127.0.0.1:32194/api/v1/projects/ThinkingSOC/connect/status",
+            "https://127.0.0.1:32194/api/v1/projects/demo-app/connect/status",
             headers=bad_headers,
         )
         check("revoked_token_rejected", status5 in (401, 403), status5)

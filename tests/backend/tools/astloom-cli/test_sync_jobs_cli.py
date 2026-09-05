@@ -71,7 +71,7 @@ def test_cmd_sync_jobs_lists_and_details(monkeypatch, tmp_path: Path, capsys):
         data_root=tmp_path,
         tenant_id="mir",
         workspace_id="dev",
-        project_id="ThinkingSOC",
+        project_id="demo-app",
     )
     monkeypatch.setattr(jobs_mod, "_require_server_role", lambda: None)
     monkeypatch.setattr(jobs_mod, "_job_data_roots", lambda: [tmp_path])
@@ -81,7 +81,7 @@ def test_cmd_sync_jobs_lists_and_details(monkeypatch, tmp_path: Path, capsys):
     assert jobs_mod.cmd_sync_jobs(Namespace(sync_job_id="", json=False)) == 0
     listed = capsys.readouterr().out
     assert jid in listed
-    assert "mir/dev/ThinkingSOC" in listed
+    assert "mir/dev/demo-app" in listed
     assert "17/814" in listed
 
     assert jobs_mod.cmd_sync_jobs(Namespace(sync_job_id=jid, json=False)) == 0
@@ -105,7 +105,7 @@ def test_cmd_sync_jobs_lists_snapshot_on_sibling_data_root(monkeypatch, tmp_path
         data_root=sibling,
         tenant_id="mir",
         workspace_id="dev",
-        project_id="ThinkingSOC",
+        project_id="demo-app",
     )
     monkeypatch.setattr(jobs_mod, "_require_server_role", lambda: None)
     monkeypatch.setattr(jobs_mod, "repo_root", lambda: install)

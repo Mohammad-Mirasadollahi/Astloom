@@ -236,7 +236,7 @@ auth:
 scope:
   tenant: mir
   workspace: dev
-  project: ThinkingSOC
+  project: Astloom
 usage_profile: programming-cursor-mcp
 ```
 

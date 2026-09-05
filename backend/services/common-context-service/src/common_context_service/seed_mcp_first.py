@@ -76,7 +76,7 @@ _SKILL_SPECS: list[dict[str, Any]] = [
     {
         "name": "astloom-documentation-authoring",
         "description": (
-            "Full-tier ThinkingSOC/Astloom Markdown authoring law — call before writing, "
+            "Full-tier Astloom Markdown authoring law — call before writing, "
             "explaining, or fix-on-read remediating product documentation."
         ),
         "when_to_use": [

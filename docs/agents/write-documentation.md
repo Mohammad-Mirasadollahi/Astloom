@@ -31,13 +31,13 @@ updated_at: 2026-08-10
 
 ## Purpose
 
-Entry point for **any** IDE or coding agent that authors or reviews ThinkingSOC documentation. Cursor is one consumer; Claude Code, Codex, and others use the same paths.
+Entry point for **any** IDE or coding agent that authors or reviews Astloom documentation. Cursor is one consumer; Claude Code, Codex, and others use the same paths.
 
 ## Load these first
 
 1. **Law:** [documentation-authoring.md](./documentation-authoring.md)
 2. **Skill body:** `.agents/skills/write-documentation/SKILL.md`  
-   Canonical source: `ai-toolstack/skills/thinkingsoc/write-documentation/SKILL.md`  
+   Canonical source: `ai-toolstack/skills/astloom/write-documentation/SKILL.md`  
    (`.agents/skills/` is mirrored by `./ai-toolstack/install.sh`)
 3. **Standards pack:** `backend/docs/standards/documentation/` (`01`–`04`)
 

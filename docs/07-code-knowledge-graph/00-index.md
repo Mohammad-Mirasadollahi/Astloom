@@ -137,7 +137,7 @@ Code evidence anchor: `backend/services/code-graph-service/src/code_graph_servic
 - 2026-09-03: Adaptive living-docs packing for large files (`pack_docs_batches` + split-on-timeout); human docs already window-embed.
 - 2026-09-03: LiteLLM hard deadline + heuristic docs fallback on Provider hang (`ASTLOOM_LITELLM_TIMEOUT_SECONDS`); docs batch chunk size 8 (`82`/`03`/`39`/`40`).
 - 2026-09-03: Extended `82`/`50`/`03` for constants-only FILE hash publish (`ingest_complete` **or** code children via `file_content_hash_publishable`); live-verified client `unchanged_skip` on `.130`.
-- 2026-09-03: Extended `82`/`50`/`03`/`40` for Neo4j index/hash fast path (`list_symbols_index`, `content_hash_maps`, pending `target_id_prefixes`) after ThinkingSOC content-push timing on `.130`.
+- 2026-09-03: Extended `82`/`50`/`03`/`40` for Neo4j index/hash fast path (`list_symbols_index`, `content_hash_maps`, pending `target_id_prefixes`) after large-repo content-push timing on `.130`.
 - 2026-09-05: Added `83-mcp-tool-budget-and-small-batch-sync.md` (MCP hard/soft budgets, FILE-index small-batch sync, quality_audit scope).
 - 2026-09-03: Added `82-sync-finalizing-and-provider-cost-runbook.md`; updated `03`/`40`/`50` for batched living docs, LLM-hot `RPM // 2`, batched finalize, and content-push `finalize_cross_file`.
 - 2026-08-15: Added `81-neo4j-memory-and-content-push-oom-runbook.md` (Compose heap defaults 4G / pagecache 1G; content-push Bolt OOM remediation).

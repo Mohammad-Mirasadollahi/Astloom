@@ -59,7 +59,7 @@ def test_connect_bootstrap_http_transport(monkeypatch):
         json={
             "name": "Demo",
             "usage_profile": "programming-cursor-mcp",
-            "source_path": "/opt/ThinkingSOC",
+            "source_path": "/opt/demo-app",
         },
     )
     assert response.status_code == 200
@@ -67,7 +67,7 @@ def test_connect_bootstrap_http_transport(monkeypatch):
     assert body["mcp"]["transport"] == "streamable_http"
     assert body["mcp"]["url"].endswith("/mcp")
     assert "Authorization" in body["mcp"]["headers"]
-    assert body["project"]["code_source"]["server_path"] == "/opt/ThinkingSOC"
+    assert body["project"]["code_source"]["server_path"] == "/opt/demo-app"
 
 
 def test_connect_sources_status_ingest_deferred(monkeypatch):
@@ -83,11 +83,11 @@ def test_connect_sources_status_ingest_deferred(monkeypatch):
     sources = client.post(
         "/api/v1/projects/p/connect/sources",
         headers=H,
-        json={"server_path": "/opt/ThinkingSOC"},
+        json={"server_path": "/opt/demo-app"},
     )
     assert sources.status_code == 200
     status = client.get("/api/v1/projects/p/connect/status", headers=H)
-    assert status.json()["code_source"]["server_path"] == "/opt/ThinkingSOC"
+    assert status.json()["code_source"]["server_path"] == "/opt/demo-app"
     ingest = client.post("/api/v1/projects/p/connect/ingest", headers=H, json={})
     assert ingest.status_code == 200
     assert ingest.json()["ingest"]["status"] in ("deferred", "ok", "failed")

@@ -57,7 +57,7 @@ security_classification: internal
 ## Purpose
 
 HTTP MCP tools share a hard gateway timeout. Large Neo4j projects and sshfs-mounted pins
-(e.g. ThinkingSOC) previously hit `-32001` on `astloom_code_graph_sync` and
+(e.g. Astloom) previously hit `-32001` on `astloom_code_graph_sync` and
 `astloom_quality_audit` because handlers dumped whole-graph symbol lists or walked entire
 trees. This runbook documents the **root-cause** contracts operators and agents must rely on.
 
@@ -120,7 +120,7 @@ Root contracts:
 2. **Order:** Code inventory runs **before** docs standards under a shared soft deadline (docs must not starve code).
 3. **Under deadline:** Inventory uses `list_file_symbols_compact` and caps discovery at **200** files (sshfs-safe).
 4. **Docs discovery:** Prefer sync `doc_match_globs` with `literal_dir_prefixes` so walks stay under `docs/` / configured roots — not a whole-repo `**/*.md` crawl.
-5. Soft deadline may still set `degraded` / `truncated_phases` if wall time is exhausted; live gates expect **`degraded` is not true** on a healthy ThinkingSOC pin after these fixes.
+5. Soft deadline may still set `degraded` / `truncated_phases` if wall time is exhausted; live gates expect **`degraded` is not true** on a healthy demo-app pin after these fixes.
 
 ## Verification
 
@@ -131,7 +131,7 @@ astloom service restart
 
 | Check | Expect |
 | --- | --- |
-| `astloom_code_graph_sync` `max_files=1` | Completes well under 25s on astloom and ThinkingSOC |
+| `astloom_code_graph_sync` `max_files=1` | Completes well under 25s on astloom and Astloom |
 | `astloom_quality_audit` | `ok=true`, `degraded` not true; no `-32001` |
 | Matrix | `tests/live/mcp-gateway-service/test_mcp_read_tools_matrix_live.py` — no tool ≥24s / `-32001` |
 

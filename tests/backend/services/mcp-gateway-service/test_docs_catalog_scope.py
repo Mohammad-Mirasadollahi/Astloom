@@ -8,7 +8,7 @@ from mcp_gateway_service.backends.docs import docs_catalog
 
 
 def test_docs_catalog_fail_closed_when_pin_not_visible(tmp_path: Path, monkeypatch):
-    missing = tmp_path / "ThinkingSOC"
+    missing = tmp_path / "demo-app"
     monkeypatch.setattr(
         "astloom_cli.software_paths.software_paths_for_project",
         lambda *a, **k: [str(missing)],
@@ -17,11 +17,11 @@ def test_docs_catalog_fail_closed_when_pin_not_visible(tmp_path: Path, monkeypat
     out = docs_catalog(
         {"refresh": False},
         base={"maps_to": "docs_sync.catalog"},
-        scope={"tenant_id": "mir", "workspace_id": "dev", "project_id": "ThinkingSOC"},
+        scope={"tenant_id": "mir", "workspace_id": "dev", "project_id": "demo-app"},
     )
     assert out["ok"] is False
     assert "/opt/Astloom" not in str(out.get("repo") or "")
-    assert "ThinkingSOC" in str(out.get("repo") or "")
+    assert "demo-app" in str(out.get("repo") or "")
     assert "does not exist" in str(out.get("error") or "").lower() or "not visible" in str(
         out.get("error") or ""
     ).lower()
@@ -29,7 +29,7 @@ def test_docs_catalog_fail_closed_when_pin_not_visible(tmp_path: Path, monkeypat
 
 
 def test_docs_catalog_uses_visible_pin(tmp_path: Path, monkeypatch):
-    app = tmp_path / "ThinkingSOC"
+    app = tmp_path / "demo-app"
     app.mkdir()
     (app / "README.md").write_text("# app\n", encoding="utf-8")
     monkeypatch.setattr(
@@ -57,7 +57,7 @@ def test_docs_catalog_uses_visible_pin(tmp_path: Path, monkeypatch):
     out = docs_catalog(
         {"refresh": False},
         base={"maps_to": "docs_sync.catalog"},
-        scope={"tenant_id": "mir", "workspace_id": "dev", "project_id": "ThinkingSOC"},
+        scope={"tenant_id": "mir", "workspace_id": "dev", "project_id": "demo-app"},
     )
     assert captured
     assert captured[0] == app.resolve()

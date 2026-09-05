@@ -183,7 +183,7 @@ astloom service restart
 | Unit | `test_finalize_batches_edge_rewrites.py`, `test_neo4j_rel_id_index.py`, `test_llm_batch_docs.py`, `test_sync_index_and_hash_fastpath.py`, `test_content_push_http.py` (constants-only skip), client `_batches` finalize flags |
 | Live local | Finalize wall time seconds–tens of seconds on ~5k–8k unresolved CALLS after batching (not tens of minutes of single deletes) |
 | Live client | `tests/live/code-graph-service/test_client_content_push_speed_live.py` — finalize events only on last batch; push completes |
-| Ops (ThinkingSOC-scale) | `file-hashes` ~1–3s (not ~7s+ body dump); resolution index ~5–8s; remaining multi-minute wall on small pushes is usually Provider docs/embeds |
+| Ops (large-monorepo-scale) | `file-hashes` ~1–3s (not ~7s+ body dump); resolution index ~5–8s; remaining multi-minute wall on small pushes is usually Provider docs/embeds |
 | Ops (hash-skip) | Second scoped client sync: `push=0` / `unchanged_skip=N` including constants-only modules; incomplete FILE stubs still unpublished |
 
 ## Related Documents

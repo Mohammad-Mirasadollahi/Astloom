@@ -53,7 +53,7 @@ def test_backup_status_omits_foreign_scope_job(tmp_path: Path, monkeypatch):
     )
     status = backup_backend.backup_status(
         base={"maps_to": "backup.status"},
-        scope={"tenant_id": "mir", "workspace_id": "dev", "project_id": "ThinkingSOC"},
+        scope={"tenant_id": "mir", "workspace_id": "dev", "project_id": "demo-app"},
     )
     assert status["ok"] is True
     assert status["job"] is None

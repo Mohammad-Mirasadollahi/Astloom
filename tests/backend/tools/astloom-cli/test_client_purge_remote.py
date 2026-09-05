@@ -23,7 +23,7 @@ def _settings(**kwargs) -> ConnectSettings:
         remote_root="/opt/Astloom",
         tenant="mir",
         workspace="dev",
-        project="ThinkingSOC",
+        project="demo-app",
     )
     base.update(kwargs)
     return ConnectSettings(**base)
@@ -64,9 +64,9 @@ def test_remote_purge_locks_scope_and_purges_over_https(monkeypatch):
     settings = _settings()
     calls: list[str] = []
     monkeypatch.setitem(sys.modules, "httpx", _fake_httpx_module(calls=calls))
-    args = Namespace(yes=True, tenant="mir", workspace="dev", project="ThinkingSOC")
+    args = Namespace(yes=True, tenant="mir", workspace="dev", project="demo-app")
     assert remote_purge_from_args(settings, args) == 0
-    assert calls == ["https://g.internal:8080/api/v1/projects/ThinkingSOC/graph/purge"]
+    assert calls == ["https://g.internal:8080/api/v1/projects/demo-app/graph/purge"]
 
 
 def test_remote_purge_rejects_mismatch_before_http(monkeypatch):
@@ -81,7 +81,7 @@ def test_remote_purge_rejects_mismatch_before_http(monkeypatch):
     with pytest.raises(SystemExit, match="does not match"):
         remote_purge_from_args(
             settings,
-            Namespace(yes=True, tenant="evil", workspace="dev", project="ThinkingSOC"),
+            Namespace(yes=True, tenant="evil", workspace="dev", project="demo-app"),
         )
     assert calls == []
 
@@ -91,15 +91,15 @@ def test_remote_purge_prefers_https_when_graph_url_ready(monkeypatch):
     calls: list[str] = []
     monkeypatch.setitem(sys.modules, "httpx", _fake_httpx_module(calls=calls))
 
-    args = Namespace(yes=True, tenant="mir", workspace="dev", project="ThinkingSOC")
+    args = Namespace(yes=True, tenant="mir", workspace="dev", project="demo-app")
     assert remote_purge_from_args(settings, args) == 0
-    assert calls == ["https://g.internal:8080/api/v1/projects/ThinkingSOC/graph/purge"]
+    assert calls == ["https://g.internal:8080/api/v1/projects/demo-app/graph/purge"]
 
 
 def test_remote_purge_without_graph_url_exits(monkeypatch):
     settings = _settings(graph_url="", api_token="")
     with pytest.raises(SystemExit, match="graph_url"):
-        remote_purge_from_args(settings, Namespace(yes=True, tenant="mir", workspace="dev", project="ThinkingSOC"))
+        remote_purge_from_args(settings, Namespace(yes=True, tenant="mir", workspace="dev", project="demo-app"))
 
 
 def test_cmd_purge_client_role_routes_remote(monkeypatch, tmp_path: Path):

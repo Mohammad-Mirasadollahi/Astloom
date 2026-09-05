@@ -175,10 +175,10 @@ Cursor MCP (`NODE_TLS_REJECT_UNAUTHORIZED=0` via `mcp-remote`). Set
 # Non-interactive: create JWT+bootstrap only (no API key)
 bash install.sh --non-interactive --role server --runtime venv
 
-# Non-interactive: also mint a non-expiring API key for scope mir/dev/ThinkingSOC
+# Non-interactive: also mint a non-expiring API key for scope mir/dev/demo-app
 bash install.sh --non-interactive --yes --role server --runtime venv \
   --mint-api-key --api-key-ttl 0 \
-  --api-key-tenant mir --api-key-workspace dev --api-key-project ThinkingSOC
+  --api-key-tenant mir --api-key-workspace dev --api-key-project demo-app
 ```
 
 Non-interactive / CI (skips menus and the `yes` confirm):
