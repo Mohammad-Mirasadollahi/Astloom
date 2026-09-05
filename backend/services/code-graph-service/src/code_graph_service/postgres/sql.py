@@ -8,6 +8,13 @@ Forbidden: embedding business logic; opening connections here.
 
 from __future__ import annotations
 
+# Neo4j-primary installs never construct PostgresStore; still need outbox (+ base
+# schema) before embedding migrations and OutboxMirror writes.
+BASE_MIGRATION_FILES = (
+    "0001_code_graph.sql",
+    "0002_outbox_published.sql",
+)
+
 EMBEDDING_MIGRATION_FILES = (
     "0003_symbol_embeddings.sql",
     "0004_symbol_embeddings_kind.sql",

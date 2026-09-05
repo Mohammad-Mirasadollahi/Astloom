@@ -20,6 +20,25 @@ from .pg_thread_local import ThreadLocalPsycopg
 from .postgres import sql as pg_sql
 
 
+def _missing_relation_error(exc: BaseException) -> bool:
+    """True when Postgres reports a missing relation (fresh/wiped volume)."""
+    msg = str(exc).lower()
+    if "does not exist" not in msg:
+        return False
+    return "relation" in msg or "code_graph." in msg
+
+
+def _run_with_schema_heal(ensure_schema, op):
+    """Run ``op``; on missing-relation, apply DDL once and retry."""
+    try:
+        return op()
+    except Exception as exc:  # noqa: BLE001 — heal only UndefinedTable-class failures
+        if not _missing_relation_error(exc):
+            raise
+        ensure_schema()
+        return op()
+
+
 class EmbeddingIndex(Protocol):
     def upsert(
         self,
@@ -186,11 +205,10 @@ class PostgresEmbeddingIndex:
     def ensure_schema(self) -> None:
         migrations_dir = Path(__file__).resolve().parents[2] / "migrations"
         with self._connection.cursor() as cur:
-            # Embedding migrations (0003+) assume the Neo4j/postgres store path
-            # already ran 0001_code_graph.sql. Neo4j-primary installs only build
-            # PostgresEmbeddingIndex here — create the schema first.
+            # Neo4j-primary never constructs PostgresStore; apply base (outbox) +
+            # embedding DDL here so mirror writes and pgvector share one bootstrap.
             cur.execute("CREATE SCHEMA IF NOT EXISTS code_graph")
-            for name in pg_sql.EMBEDDING_MIGRATION_FILES:
+            for name in (*pg_sql.BASE_MIGRATION_FILES, *pg_sql.EMBEDDING_MIGRATION_FILES):
                 path = migrations_dir / name
                 if path.is_file():
                     cur.execute(path.read_text(encoding="utf-8"))
@@ -222,20 +240,24 @@ class PostgresEmbeddingIndex:
             raise ValueError(f"embedding dims must be {self._dims}, got {len(vector)}")
         literal = self._vector_literal(vector)
         kind_value = str(kind or "unknown").strip() or "unknown"
-        with self._connection.cursor() as cur:
-            cur.execute(
-                pg_sql.UPSERT_EMBEDDING,
-                (
-                    symbol_id,
-                    scope.tenant_id,
-                    scope.workspace_id,
-                    scope.project_id,
-                    model,
-                    self._dims,
-                    kind_value,
-                    literal,
-                ),
-            )
+
+        def _write() -> None:
+            with self._connection.cursor() as cur:
+                cur.execute(
+                    pg_sql.UPSERT_EMBEDDING,
+                    (
+                        symbol_id,
+                        scope.tenant_id,
+                        scope.workspace_id,
+                        scope.project_id,
+                        model,
+                        self._dims,
+                        kind_value,
+                        literal,
+                    ),
+                )
+
+        _run_with_schema_heal(self.ensure_schema, _write)
 
     def delete(self, scope: Scope, symbol_id: str) -> None:
         with self._connection.cursor() as cur:
@@ -329,7 +351,13 @@ class PostgresEmbeddingIndex:
 class PostgresOutboxMirror:
     """Writes code-graph outbox rows so the Postgres outbox-relay can publish Neo4j events."""
 
-    def __init__(self, database_url: str, *, max_connections: int | None = None) -> None:
+    def __init__(
+        self,
+        database_url: str,
+        *,
+        max_connections: int | None = None,
+        ensure_schema: bool = True,
+    ) -> None:
         if not database_url.startswith(("postgresql://", "postgresql+psycopg://")):
             raise ValueError("Outbox mirror database URL must use PostgreSQL")
         try:
@@ -351,6 +379,18 @@ class PostgresOutboxMirror:
             lambda: psycopg.connect(normalized, autocommit=True, row_factory=dict_row),
             max_size=pool_max,
         )
+        if ensure_schema:
+            self.ensure_schema()
+
+    def ensure_schema(self) -> None:
+        """Idempotent outbox DDL for Neo4j-primary installs (no PostgresStore)."""
+        migrations_dir = Path(__file__).resolve().parents[2] / "migrations"
+        with self._connection.cursor() as cur:
+            cur.execute("CREATE SCHEMA IF NOT EXISTS code_graph")
+            for name in pg_sql.BASE_MIGRATION_FILES:
+                path = migrations_dir / name
+                if path.is_file():
+                    cur.execute(path.read_text(encoding="utf-8"))
 
     @property
     def _connection(self) -> Any:
@@ -364,8 +404,11 @@ class PostgresOutboxMirror:
         self._pool.close_all()
 
     def append_event(self, event: dict[str, Any]) -> None:
-        with self._connection.cursor() as cur:
-            cur.execute(
-                pg_sql.APPEND_OUTBOX_EVENT,
-                (event["event_id"], event["event_type"], self._json(event)),
-            )
+        def _write() -> None:
+            with self._connection.cursor() as cur:
+                cur.execute(
+                    pg_sql.APPEND_OUTBOX_EVENT,
+                    (event["event_id"], event["event_type"], self._json(event)),
+                )
+
+        _run_with_schema_heal(self.ensure_schema, _write)

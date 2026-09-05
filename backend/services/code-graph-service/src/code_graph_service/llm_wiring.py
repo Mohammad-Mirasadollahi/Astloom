@@ -21,24 +21,30 @@ from .domain.models import EmbeddingResult, GraphSymbol
 def _embed_timeout_seconds() -> float:
     import os
 
-    raw = str(os.environ.get("ASTLOOM_EMBED_TIMEOUT_SECONDS", "10")).strip()
+    # Cloud embed providers often need >10s for cold/batch calls; keep a hard cap.
+    raw = str(os.environ.get("ASTLOOM_EMBED_TIMEOUT_SECONDS", "60")).strip()
     try:
         value = float(raw)
     except ValueError:
-        value = 10.0
-    return max(1.0, min(value, 120.0))
+        value = 60.0
+    return max(1.0, min(value, 180.0))
 
 
 def _run_with_timeout(fn, *args, **kwargs):
     import concurrent.futures
 
     timeout = _embed_timeout_seconds()
-    with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
-        fut = pool.submit(fn, *args, **kwargs)
-        try:
-            return fut.result(timeout=timeout)
-        except concurrent.futures.TimeoutError as exc:
-            raise RuntimeError(f"embedding call timed out after {timeout}s") from exc
+    attempts = 2
+    last_exc: BaseException | None = None
+    for _ in range(attempts):
+        with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
+            fut = pool.submit(fn, *args, **kwargs)
+            try:
+                return fut.result(timeout=timeout)
+            except concurrent.futures.TimeoutError as exc:
+                last_exc = exc
+                continue
+    raise RuntimeError(f"embedding call timed out after {timeout}s") from last_exc
 
 
 class _DocGenerator(Protocol):
