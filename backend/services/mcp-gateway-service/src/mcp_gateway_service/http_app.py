@@ -32,14 +32,28 @@ async def _handle_message_bounded(gateway: Any, message: dict[str, Any]) -> dict
             timeout=timeout,
         )
     except TimeoutError:
+        tool_hint = ""
+        params = message.get("params") if isinstance(message.get("params"), dict) else {}
+        args = params.get("arguments") if isinstance(params.get("arguments"), dict) else {}
+        nested = args.get("arguments") if isinstance(args.get("arguments"), dict) else {}
+        for candidate in (
+            args.get("tool_name"),
+            args.get("tool"),
+            params.get("name"),
+            nested.get("tool_name") if nested else None,
+        ):
+            text = str(candidate or "").strip()
+            if text and text not in {"mcp_execute_tool", "mcp_search_tools"}:
+                tool_hint = f" ({text})"
+                break
         return {
             "jsonrpc": "2.0",
             "id": message.get("id"),
             "error": {
                 "code": -32001,
                 "message": (
-                    f"tool timed out after {int(timeout)}s; "
-                    "retry with a smaller budget or check Neo4j/embeddings"
+                    f"tool timed out after {int(timeout)}s{tool_hint}; "
+                    "retry with a smaller budget or check Neo4j/embeddings/filesystem"
                 ),
             },
         }

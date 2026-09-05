@@ -179,9 +179,15 @@ def test_live_cursor_audit_fixes_thinkingSOC_mcp_http():
         if callers_err is not None:
             assert callers_err.get("code") in {-32001, -32602}, callers_err
 
-    # BUG-3: quality_audit must not scan the Astloom install as ThinkingSOC.
-    audit, audit_err = execute("astloom_quality_audit", {"create_tasks": False, "top_n": 5})
+    # BUG-3: quality_audit must not scan the Astloom install as ThinkingSOC,
+    # and must finish under the MCP tool budget (no -32001) when the pin is visible.
+    audit, audit_err = execute(
+        "astloom_quality_audit",
+        {"create_tasks": False, "top_n": 5},
+        timeout=40.0,
+    )
     assert audit_err is None, audit_err
+    assert audit.get("degraded") is not True, audit.get("truncated_phases")
     repo = str(audit.get("repo") or "")
     repos = [str(x) for x in (audit.get("repos") or [])]
     joined = " ".join([repo, *repos, str(audit.get("error") or "")])
@@ -192,6 +198,18 @@ def test_live_cursor_audit_fixes_thinkingSOC_mcp_http():
         assert "software paths" in str(audit.get("error") or "").lower() or "/opt/ThinkingSOC" in joined
     else:
         assert repo.rstrip("/") == "/opt/ThinkingSOC" or "/opt/ThinkingSOC" in joined
+
+    # Small-batch sync must not hard-timeout (-32001) on large Neo4j scopes / sshfs.
+    t_sync = time.monotonic()
+    sync_payload, sync_err = execute(
+        "astloom_code_graph_sync",
+        {"max_files": 1},
+        timeout=40.0,
+    )
+    sync_elapsed = time.monotonic() - t_sync
+    assert sync_err is None, sync_err
+    assert sync_elapsed < 24.0, f"sync hung {sync_elapsed:.1f}s under MCP budget"
+    assert sync_payload.get("sync") or sync_payload.get("ok") is not False
 
     # BUG-4: missing/unreadable root is not reported as a false "not a directory".
     _ide, ide_err = execute(
@@ -205,7 +223,10 @@ def test_live_cursor_audit_fixes_thinkingSOC_mcp_http():
         },
     )
     ide_text = _blob(ide_err or _ide)
-    if not Path("/opt/ThinkingSOC").is_dir():
+    if Path("/opt/ThinkingSOC").is_dir():
+        assert "does not exist" not in ide_text
+        assert "not visible" not in ide_text
+    else:
         assert "does not exist" in ide_text or "not visible" in ide_text or "permission" in ide_text
         assert "is not a directory" not in ide_text
 
@@ -239,3 +260,68 @@ def test_live_cursor_audit_fixes_thinkingSOC_mcp_http():
         assert fresh_err.get("code") == -32001, fresh_err
     else:
         assert "last_sync_at" in fresh or "pending" in _blob(fresh) or fresh.get("ok") is not False
+
+    def timed(tool_name: str, tool_args: dict, *, budget: float = 20.0) -> tuple[dict, dict | None, float]:
+        t0 = time.monotonic()
+        payload, err = execute(tool_name, tool_args, timeout=40.0)
+        elapsed = time.monotonic() - t0
+        assert elapsed < budget, f"{tool_name} hung {elapsed:.1f}s (budget {budget}s)"
+        if err is not None:
+            assert err.get("code") != -32001, err
+        return payload, err, elapsed
+
+    unused, unused_err, _ = timed("astloom_code_graph_unused_candidates", {})
+    if unused_err is None:
+        assert unused.get("candidates") == [] or unused.get("note") or "candidates" in unused
+
+    lang, lang_err, _ = timed("astloom_code_graph_language_profile", {})
+    if lang_err is None:
+        assert "language_profile" in lang or lang.get("languages") is not None or lang.get("is_polyglot") is not None
+
+    arch, arch_err, _ = timed("astloom_code_graph_architecture_overview", {"top_n": 5})
+    if arch_err is None:
+        assert "hubs" in arch or "communities" in arch or arch.get("algorithm")
+
+    seed = seed_ids[0] if seed_ids else ""
+    community_args = {"symbol_id": seed, "member_limit": 10} if seed else {"qualified_name": "login", "member_limit": 10}
+    comm, comm_err, _ = timed("astloom_code_graph_community", community_args)
+    if comm_err is None:
+        assert comm.get("symbol") or comm.get("community_id") is not None or "members" in comm
+
+    path_args = {"symbol_id": seed, "max_depth": 2, "max_nodes": 20} if seed else {"qualified_name": "login", "max_depth": 2}
+    cpath, cpath_err, _ = timed("astloom_code_graph_call_path", path_args)
+    if cpath_err is None:
+        assert cpath.get("symbol") or "path_ids" in cpath or "path" in cpath
+
+    gen_args = {"symbol_id": seed, "max_symbols": 8} if seed else {"qualified_name": "login", "max_symbols": 8}
+    gen, gen_err, _ = timed("astloom_code_graph_generation_context", gen_args)
+    if gen_err is None:
+        assert gen.get("seed") or gen.get("symbols") is not None or "related" in _blob(gen)
+
+    changed, changed_err, _ = timed(
+        "astloom_code_graph_detect_changes",
+        {"changed_files": ["backend/services/chat_service/__init__.py"], "include_flows": False},
+    )
+    if changed_err is None:
+        assert changed.get("changed_files") is not None or "review" in _blob(changed) or changed
+
+    if not Path("/opt/ThinkingSOC").is_dir():
+        sync_payload, sync_err, sync_elapsed = timed(
+            "astloom_code_graph_sync",
+            {"root_path": "/opt/ThinkingSOC", "max_files": 1},
+            budget=12.0,
+        )
+        _ = sync_elapsed
+        sync_text = _blob(sync_err or sync_payload)
+        assert "does not exist" in sync_text or "not visible" in sync_text or "permission" in sync_text
+
+    catalog, catalog_err = execute("astloom_docs_catalog", {"refresh": False, "limit": 5})
+    if catalog_err is not None and Path("/opt/ThinkingSOC").is_dir():
+        assert catalog_err.get("code") == -32001, catalog_err
+    elif catalog_err is None:
+        repo = str(catalog.get("repo") or "")
+        if catalog.get("ok") is False:
+            assert "/opt/Astloom" not in repo or "ThinkingSOC" in repo
+            assert "ThinkingSOC" in repo or "not visible" in _blob(catalog) or "does not exist" in _blob(catalog)
+        else:
+            assert repo.rstrip("/") != "/opt/Astloom"
