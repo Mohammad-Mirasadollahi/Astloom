@@ -25,7 +25,8 @@ from ...domain.models import (
     Scope,
     SyncRepoResult,
 )
-from ...domain.ports import list_symbols_compact
+from ...domain.ports import list_symbols_compact, scope_has_symbols
+from ...domain.repo_discovery import DEFAULT_MAX_FILES
 from ...locked_store import sync_max_file_workers
 from .parallel_files import run_parallel_file_jobs
 
@@ -69,6 +70,67 @@ class SyncMixin:
             except Exception:  # noqa: BLE001 — progress must never break sync
                 return
 
+        max_files = int(payload.get("max_files") or DEFAULT_MAX_FILES)
+        small_batch = max_files < DEFAULT_MAX_FILES
+
+        ingest_payload = dict(payload)
+        ingest_payload["root_path"] = str(resolved_root)
+
+        if small_batch:
+            # Avoid whole-graph symbol dumps under MCP HTTP budgets.
+            _emit_prep("checking graph presence")
+            has_symbols = scope_has_symbols(self.store, scope)
+            _emit_prep("checking freshness / pending files")
+            freshness = (
+                self.freshness_status(scope)
+                if hasattr(self, "freshness_status")
+                else {"pending_files": []}
+            )
+            if not has_symbols:
+                ingest = self.ingest_repo(
+                    scope, actor_id, correlation_id, idempotency_key, ingest_payload
+                )
+                hint = ""
+                if ingest.truncated:
+                    hint = "truncated: run sync again to continue indexing more files"
+                if hasattr(self, "record_sync_stamp"):
+                    self.record_sync_stamp(scope)
+                return SyncRepoResult.from_ingest(
+                    mode="full",
+                    ingest=ingest,
+                    freshness=(
+                        self.freshness_status(scope)
+                        if hasattr(self, "freshness_status")
+                        else freshness
+                    ),
+                    hint=hint,
+                )
+            ingest = self.ingest_repo(
+                scope, actor_id, correlation_id, idempotency_key, ingest_payload
+            )
+            mode = "incremental"
+            hint = ""
+            if ingest.truncated:
+                hint = "truncated: run sync again to continue indexing more files"
+            elif ingest.files_ingested == 0 and ingest.files_skipped > 0:
+                mode = "noop"
+                hint = "up to date (no content changes)"
+            elif ingest.files_discovered == 0:
+                mode = "noop"
+                hint = "up to date (no source files discovered)"
+            if hasattr(self, "record_sync_stamp"):
+                self.record_sync_stamp(scope)
+            return SyncRepoResult.from_ingest(
+                mode=mode,
+                ingest=ingest,
+                freshness=(
+                    self.freshness_status(scope)
+                    if hasattr(self, "freshness_status")
+                    else freshness
+                ),
+                hint=hint,
+            )
+
         # list_symbols / freshness can take minutes on a large Neo4j graph with no
         # file-queue progress yet — emit a heartbeat so the CLI is not silent.
         _emit_prep("loading graph symbols")
@@ -79,8 +141,8 @@ class SyncMixin:
         )
         pending = [str(p) for p in (freshness.get("pending_files") or []) if str(p).strip()]
 
-        ingest_payload = dict(payload)
-        ingest_payload["root_path"] = str(resolved_root)
+        # Avoid a second Neo4j full-symbol scan inside ingest_repo.
+        ingest_payload["preloaded_symbols"] = symbols
 
         if not symbols:
             ingest = self.ingest_repo(scope, actor_id, correlation_id, idempotency_key, ingest_payload)
@@ -96,7 +158,9 @@ class SyncMixin:
                 hint=hint,
             )
 
-        if pending:
+        # Small MCP budgets: do not fan out unbounded pending ingest + full
+        # resolution indexes; use capped ingest_repo instead.
+        if pending and max_files >= DEFAULT_MAX_FILES:
             ingest = self._ingest_pending_paths(
                 scope,
                 actor_id,

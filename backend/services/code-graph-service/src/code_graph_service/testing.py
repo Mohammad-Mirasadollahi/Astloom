@@ -89,6 +89,26 @@ class InMemoryStore:
             sym.metadata = {}
         return symbols
 
+    def list_file_symbols_for_paths(self, scope: Scope, paths: list[str]) -> list[GraphSymbol]:
+        wanted = {str(p or "").replace("\\", "/").strip() for p in paths if str(p or "").strip()}
+        if not wanted:
+            return []
+        return [
+            s
+            for s in self.list_symbols_index(scope)
+            if s.kind == SymbolKind.FILE and s.file_path.replace("\\", "/") in wanted
+        ]
+
+    def has_any_symbol(self, scope: Scope) -> bool:
+        return any(self._same_project(item.scope, scope) for item in self._symbols.values())
+
+    def list_file_symbols_index(self, scope: Scope) -> list[GraphSymbol]:
+        return [
+            s
+            for s in self.list_symbols_index(scope)
+            if s.kind == SymbolKind.FILE
+        ]
+
     def content_hash_maps(self, scope: Scope) -> tuple[dict[str, str], dict[str, str]]:
         from .domain.structural_integrity import file_content_hash_publishable
 

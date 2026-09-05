@@ -5,9 +5,17 @@ from __future__ import annotations
 from typing import Any
 from uuid import uuid4
 
-from code_graph_service.domain.errors import CodeGraphError, NotFoundError
+from code_graph_service.domain.errors import CodeGraphError, NotFoundError, ValidationError
+from code_graph_service.domain.fs_paths import require_directory
 
 from ..platform import PlatformBackends
+
+
+def _require_visible_root(root_path: str) -> str:
+    try:
+        return str(require_directory(root_path, label="root_path"))
+    except ValidationError as exc:
+        raise ValueError(str(exc.message)) from exc
 
 
 def _resolve_root_path(arguments: dict[str, Any], scope: dict[str, str]) -> str:
@@ -84,7 +92,7 @@ def ingest_repo(
     correlation_id: str,
     base: dict[str, Any],
 ) -> dict[str, Any]:
-    root_path = _resolve_root_path(arguments, scope)
+    root_path = _require_visible_root(_resolve_root_path(arguments, scope))
     payload: dict[str, Any] = {"root_path": root_path}
     if arguments.get("include_extensions") is not None:
         payload["include_extensions"] = arguments.get("include_extensions")
@@ -130,13 +138,16 @@ def sync_repo(
 ) -> dict[str, Any]:
     from pathlib import Path
 
-    root_path = _resolve_root_path(arguments, scope)
+    root_path = _require_visible_root(_resolve_root_path(arguments, scope))
     payload: dict[str, Any] = {"root_path": root_path, "include_outcomes": True}
     if arguments.get("max_files") is not None:
         payload["max_files"] = int(arguments["max_files"])
     refresh_mode = str(arguments.get("embedding_refresh_mode") or "").strip().lower()
-    if refresh_mode in {"touched", "full"}:
+    if refresh_mode in {"touched", "full", "off", "skip", "none", "disabled"}:
         payload["embedding_refresh_mode"] = refresh_mode
+    elif payload.get("max_files") is not None and int(payload["max_files"]) < 50:
+        # Small MCP batches must finish under the HTTP tool budget; heal embeddings later.
+        payload["embedding_refresh_mode"] = "off"
     if arguments.get("include_extensions") is not None:
         payload["include_extensions"] = arguments.get("include_extensions")
     else:
@@ -194,7 +205,7 @@ def purge_scope(
 
 
 def _position_args(arguments: dict[str, Any], scope: dict[str, str]) -> tuple[str, str, int, int, str]:
-    root_path = _resolve_root_path(arguments, scope)
+    root_path = _require_visible_root(_resolve_root_path(arguments, scope))
     file_path = str(arguments.get("file_path") or "").strip()
     if not root_path or not file_path:
         raise ValueError("root_path and file_path are required")

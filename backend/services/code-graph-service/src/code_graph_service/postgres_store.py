@@ -313,6 +313,53 @@ class PostgresStore:
             sym.metadata = {}
         return symbols
 
+    def list_file_symbols_for_paths(self, scope: Scope, paths: list[str]) -> list[GraphSymbol]:
+        from .domain.enums import SymbolKind
+
+        wanted = {str(p or "").replace("\\", "/").strip() for p in paths if str(p or "").strip()}
+        if not wanted:
+            return []
+        out: list[GraphSymbol] = []
+        for path in wanted:
+            with self._connection.cursor() as cur:
+                cur.execute(
+                    """
+                    SELECT * FROM code_graph.symbols
+                    WHERE tenant_id = %s AND workspace_id = %s AND project_id = %s
+                      AND kind = 'file' AND file_path = %s
+                    """,
+                    (scope.tenant_id, scope.workspace_id, scope.project_id, path),
+                )
+                rows = cur.fetchall()
+            out.extend(self._symbol(row, scope) for row in rows)
+        return out
+
+    def has_any_symbol(self, scope: Scope) -> bool:
+        with self._connection.cursor() as cur:
+            cur.execute(
+                """
+                SELECT 1 FROM code_graph.symbols
+                WHERE tenant_id = %s AND workspace_id = %s AND project_id = %s
+                LIMIT 1
+                """,
+                (scope.tenant_id, scope.workspace_id, scope.project_id),
+            )
+            return cur.fetchone() is not None
+
+    def list_file_symbols_index(self, scope: Scope) -> list[GraphSymbol]:
+        with self._connection.cursor() as cur:
+            cur.execute(
+                """
+                SELECT * FROM code_graph.symbols
+                WHERE tenant_id = %s AND workspace_id = %s AND project_id = %s
+                  AND kind = 'file'
+                ORDER BY file_path, id
+                """,
+                (scope.tenant_id, scope.workspace_id, scope.project_id),
+            )
+            rows = cur.fetchall()
+        return [self._symbol(row, scope) for row in rows]
+
     def list_symbols_for_file(self, scope: Scope, file_path: str) -> list[GraphSymbol]:
         path = str(file_path or "").replace("\\", "/")
         with self._connection.cursor() as cur:

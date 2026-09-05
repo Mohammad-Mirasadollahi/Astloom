@@ -93,7 +93,8 @@ RETURN n {
 } AS n
 """
 
-# Sync resolution / finalize indexes: no body, docs, or metadata blobs on the wire.
+# Sync resolution / finalize indexes: no body/docs/embeddings; keep hash fields
+# so change-detection does not treat every file as dirty.
 LIST_SYMBOLS_INDEX = """
 MATCH (n:CodeSymbol)
 WHERE n.tenant_id = $tenant_id
@@ -114,9 +115,69 @@ RETURN n {
   version: coalesce(n.version, 1),
   created_at: coalesce(n.created_at, ""),
   updated_at: coalesce(n.updated_at, ""),
-  hash_version: "",
-  parser_version: "",
+  hash_version: coalesce(n.hash_version, ""),
+  parser_version: coalesce(n.parser_version, ""),
   metadata_json: "{}"
+} AS n
+"""
+
+# MCP small-batch sync: FILE nodes only for a path set (avoid whole-graph scans).
+LIST_FILE_SYMBOLS_FOR_PATHS = """
+UNWIND $paths AS path
+MATCH (n:CodeSymbol {id: 'file:' + $project_id + ':' + path})
+WHERE n.tenant_id = $tenant_id
+  AND n.workspace_id = $workspace_id
+  AND n.project_id = $project_id
+  AND n.kind = 'file'
+RETURN n {
+  .id, .kind, .file_path, .name, .qualified_name, .doc_status, .language,
+  hash_value: coalesce(n.hash_value, ""),
+  signature: "",
+  body: "",
+  ai_documentation: "",
+  embedding: [],
+  visibility: coalesce(n.visibility, ""),
+  version: coalesce(n.version, 1),
+  created_at: coalesce(n.created_at, ""),
+  updated_at: coalesce(n.updated_at, ""),
+  hash_version: coalesce(n.hash_version, ""),
+  parser_version: coalesce(n.parser_version, ""),
+  metadata_json: "{}"
+} AS n
+"""
+
+HAS_ANY_SYMBOL = """
+MATCH (n:CodeSymbol)
+WHERE n.tenant_id = $tenant_id
+  AND n.workspace_id = $workspace_id
+  AND n.project_id = $project_id
+RETURN n.id AS id
+LIMIT 1
+"""
+
+# Inventory / MCP quality: FILE nodes only (avoid dumping every function symbol).
+LIST_FILE_SYMBOLS_INDEX = """
+MATCH (n:CodeSymbol)
+WHERE n.tenant_id = $tenant_id
+  AND n.workspace_id = $workspace_id
+  AND n.project_id = $project_id
+  AND n.kind = 'file'
+WITH n
+ORDER BY n.file_path, n.id
+RETURN n {
+  .id, .kind, .file_path, .name, .qualified_name, .doc_status, .language,
+  hash_value: coalesce(n.hash_value, ""),
+  signature: "",
+  body: "",
+  ai_documentation: "",
+  embedding: [],
+  visibility: coalesce(n.visibility, ""),
+  version: coalesce(n.version, 1),
+  created_at: coalesce(n.created_at, ""),
+  updated_at: coalesce(n.updated_at, ""),
+  hash_version: coalesce(n.hash_version, ""),
+  parser_version: coalesce(n.parser_version, ""),
+  metadata_json: coalesce(n.metadata_json, "{}")
 } AS n
 """
 

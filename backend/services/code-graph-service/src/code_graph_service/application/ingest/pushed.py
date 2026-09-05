@@ -378,6 +378,11 @@ class PushedIngestMixin:
                     )
                     with state_lock:
                         totals["edges_written"] += int(finals or 0)
+                    if hasattr(self, "record_sync_stamp"):
+                        try:
+                            self.record_sync_stamp(scope)
+                        except Exception:  # noqa: BLE001 — stamp must not fail ingest
+                            pass
                 except Exception:  # noqa: BLE001
                     pass
 

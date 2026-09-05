@@ -260,6 +260,7 @@ def test_cross_file_finalizer_reuses_symbols_and_filters_edge_reads():
             rel_type=None,
             source_id=None,
             target_id=None,
+            target_id_prefixes=None,
         ):
             self.edge_filters.append(rel_type)
             return super().list_edges(
@@ -267,6 +268,7 @@ def test_cross_file_finalizer_reuses_symbols_and_filters_edge_reads():
                 rel_type=rel_type,
                 source_id=source_id,
                 target_id=target_id,
+                target_id_prefixes=target_id_prefixes,
             )
 
     store = ReadProbeStore()
@@ -454,3 +456,69 @@ def test_ingest_repo_queues_language_backfill_only(tmp_path: Path):
         if s.kind == SymbolKind.FILE
     )
     assert result.files_discovered == 2
+
+
+def test_ingest_repo_max_files_prefers_unindexed_and_truncates(tmp_path: Path):
+    """Small max_files prefers new files and truncates when more unindexed remain."""
+    src = tmp_path / "src"
+    src.mkdir()
+    for i in range(20):
+        (src / f"f{i:02d}.py").write_text(f"def f{i}():\n    return {i}\n", encoding="utf-8")
+    service = CodeGraphService(InMemoryStore())
+    scope = Scope("t", "w", "p")
+    service.ingest_repo(
+        scope,
+        "tester",
+        "corr-full",
+        "repo-full",
+        {"root_path": str(tmp_path), "exclude_dirs": [], "embedding_refresh_mode": "off"},
+    )
+    (src / "zzz_new_only.py").write_text("def brand_new():\n    return 1\n", encoding="utf-8")
+    (src / "zzz_new_two.py").write_text("def brand_two():\n    return 2\n", encoding="utf-8")
+    result = service.ingest_repo(
+        scope,
+        "tester",
+        "corr-small",
+        "repo-small",
+        {
+            "root_path": str(tmp_path),
+            "max_files": 1,
+            "exclude_dirs": [],
+            "embedding_refresh_mode": "off",
+            "include_outcomes": True,
+        },
+    )
+    assert result.truncated is True
+    assert result.files_discovered == 1
+    outcomes = list(result.outcomes or [])
+    assert outcomes
+    assert "zzz_new_" in outcomes[0].relative_path
+
+
+def test_ingest_repo_small_batch_does_not_rebuild_resolution_indexes(tmp_path: Path):
+    """Small max_files must not call _resolution_indexes (MCP tool budget)."""
+    src = tmp_path / "src"
+    src.mkdir()
+    (src / "a.py").write_text("def a():\n    return 1\n", encoding="utf-8")
+    service = CodeGraphService(InMemoryStore())
+    scope = Scope("t", "w", "p-budget")
+
+    def _boom(_scope):
+        raise AssertionError("_resolution_indexes must not run for small batches")
+
+    service._resolution_indexes = _boom  # type: ignore[method-assign]
+    result = service.ingest_repo(
+        scope,
+        "tester",
+        "corr-budget",
+        "repo-budget",
+        {
+            "root_path": str(tmp_path),
+            "max_files": 1,
+            "exclude_dirs": [],
+            "embedding_refresh_mode": "off",
+            "prefer_heuristic_docs": True,
+        },
+    )
+    assert result.files_discovered == 1
+    assert result.files_failed == 0

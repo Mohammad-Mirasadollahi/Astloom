@@ -26,7 +26,7 @@ from ...domain.models import (
     Scope,
 )
 from ...domain.package_manifests import load_package_aliases
-from ...domain.ports import list_symbols_compact
+from ...domain.ports import list_file_symbols_for_paths, list_symbols_compact
 from ...domain.structural_integrity import file_needs_contains_repair
 from ...domain.repo_discovery import (
     DEFAULT_MAX_FILE_BYTES,
@@ -87,6 +87,16 @@ class RepoIngestMixin:
                 return
 
         _emit_prep("discovering source files", status="discovering")
+        # Small explicit batches (MCP tool budgets): stop walking once we have a pool.
+        # Full CLI sync keeps uncapped discovery for accurate truncate/prune signals.
+        import time
+
+        discovery_limit = None
+        discovery_deadline = None
+        if max_files < DEFAULT_MAX_FILES:
+            discovery_limit = max(max_files * 25, max_files)
+            # Leave headroom under typical MCP HTTP tool budgets (~25s).
+            discovery_deadline = time.monotonic() + 8.0
         discovered = discover_source_files(
             root_path,
             include_extensions=include_extensions,
@@ -94,16 +104,30 @@ class RepoIngestMixin:
             exclude_globs=exclude_globs,
             reinclude_globs=reinclude_globs,
             include_path_prefixes=include_path_prefixes,
-            max_files=None,
+            max_files=discovery_limit,
             max_file_bytes=max_file_bytes,
+            deadline_monotonic=discovery_deadline,
         )
 
         discovered_paths = {
             item.relative_path.replace("\\", "/") for item in discovered
         }
         _emit_prep("loading indexed symbols for change detection")
-        stored_symbols = list_symbols_compact(self.store, scope)
-        if discovered_paths and not include_path_prefixes:
+        preloaded = payload.get("preloaded_symbols")
+        if preloaded is not None:
+            stored_symbols = list(preloaded)
+        elif discovery_limit is not None:
+            # MCP small batches: only fetch FILE nodes for discovered paths.
+            # Full list_symbols_index on large graphs exceeds the HTTP tool budget.
+            stored_symbols = list_file_symbols_for_paths(
+                self.store,
+                scope,
+                [item.relative_path.replace("\\", "/") for item in discovered],
+            )
+        else:
+            stored_symbols = list_symbols_compact(self.store, scope)
+        # Never prune against a capped discovery walk — that would delete real files.
+        if discovered_paths and not include_path_prefixes and discovery_limit is None:
             stored_symbols = self._prune_removed_source_symbols(
                 scope,
                 stored_symbols=stored_symbols,
@@ -131,27 +155,6 @@ class RepoIngestMixin:
                 or current["parser_version"] != previous.parser_version
             )
 
-        changed_known = [item for item in known if _known_changed(item)]
-        changed_known_paths = {item.relative_path.replace("\\", "/") for item in changed_known}
-        unchanged_known = [
-            item
-            for item in known
-            if item.relative_path.replace("\\", "/") not in changed_known_paths
-        ]
-        # Hash-stable + language already set → skip workers unless CONTAINS missing.
-        # Hash-stable + empty language → enqueue for legacy language backfill.
-        # Hash-stable + edgeless FILE → enqueue for structural edge repair.
-        language_backfill = [
-            item
-            for item in unchanged_known
-            if not str(
-                indexed_files[item.relative_path.replace("\\", "/")].language or ""
-            ).strip()
-        ]
-        backfill_paths = {
-            item.relative_path.replace("\\", "/") for item in language_backfill
-        }
-
         def _needs_edge_repair(item: Any) -> bool:
             rel = item.relative_path.replace("\\", "/")
             previous = indexed_files[rel]
@@ -162,39 +165,58 @@ class RepoIngestMixin:
                 file_path=rel,
             )
 
-        _emit_prep("checking structural edge repair queue")
-        edge_repair = [
-            item
-            for item in unchanged_known
-            if item.relative_path.replace("\\", "/") not in backfill_paths
-            and _needs_edge_repair(item)
-        ]
-        repair_paths = {
-            item.relative_path.replace("\\", "/") for item in edge_repair
-        }
-        hash_stable_skip = [
-            item
-            for item in unchanged_known
-            if item.relative_path.replace("\\", "/") not in backfill_paths
-            and item.relative_path.replace("\\", "/") not in repair_paths
-        ]
-        # Prefer never-indexed files; then changed; then lang backfill / edge repair.
+        # Prefer never-indexed; then changed; then lang backfill / edge repair.
+        # Early-exit once the worker queue is full — full-tree hash/CONTAINS scans
+        # previously made MCP ``sync`` with small max_files exceed the tool budget.
         selected: list = []
+        changed_known: list = []
+        language_backfill: list = []
+        edge_repair: list = []
+        hash_stable_skip: list = []
         selected.extend(unindexed[:max_files])
-        remaining = max_files - len(selected)
-        if remaining > 0:
-            selected.extend(changed_known[:remaining])
-        remaining = max_files - len(selected)
-        if remaining > 0:
-            selected.extend(language_backfill[:remaining])
-        remaining = max_files - len(selected)
-        if remaining > 0:
-            selected.extend(edge_repair[:remaining])
+        known_exhausted = True
+        if len(selected) < max_files and known:
+            _emit_prep("checking changed / repair queue")
+            for item in known:
+                if len(selected) >= max_files:
+                    known_exhausted = False
+                    break
+                rel = item.relative_path.replace("\\", "/")
+                previous = indexed_files[rel]
+                if _known_changed(item):
+                    changed_known.append(item)
+                    selected.append(item)
+                    continue
+                # Small MCP batches: skip language/edge-repair scans (each can be
+                # multi-second Neo4j round-trips). Full CLI sync still heals them.
+                if discovery_limit is not None:
+                    hash_stable_skip.append(item)
+                    continue
+                if not str(previous.language or "").strip():
+                    language_backfill.append(item)
+                    selected.append(item)
+                    continue
+                if _needs_edge_repair(item):
+                    edge_repair.append(item)
+                    selected.append(item)
+                    continue
+                hash_stable_skip.append(item)
+
+        changed_known_paths = {item.relative_path.replace("\\", "/") for item in changed_known}
+        backfill_paths = {item.relative_path.replace("\\", "/") for item in language_backfill}
         selected_paths = {item.relative_path.replace("\\", "/") for item in selected}
         pending_paths = {
             item.relative_path.replace("\\", "/") for item in [*unindexed, *changed_known]
         }
-        truncated = not pending_paths.issubset(selected_paths)
+        truncated = (
+            len(unindexed) > max_files
+            or not known_exhausted
+            or not pending_paths.issubset(selected_paths)
+            or (
+                discovery_limit is not None
+                and len(discovered_paths) >= discovery_limit
+            )
+        )
         discovered = selected
         queue_new = sum(
             1
@@ -237,11 +259,10 @@ class RepoIngestMixin:
         progress_done = 0
         active_files: set[str] = set()
         workers = min(sync_max_file_workers(), max(1, total_files or 1))
-        shared_resolution = {
-            "indexes": None,
-            "by_qualified": {},
-            "short_names": {},
-        }
+        # Small MCP-style batches: skip whole-graph index build / finalize (tool budget).
+        # Must pass empty indexes (not None): file_ingest rebuilds full indexes when
+        # shared_resolution.indexes is None, which blew the 25s MCP tool budget.
+        skip_heavy_graph_pass = discovery_limit is not None
         if callable(on_progress):
             try:
                 on_progress(
@@ -250,21 +271,40 @@ class RepoIngestMixin:
                         "done": 0,
                         "total": 0,
                         "status": "preparing",
-                        "file": "building resolution indexes",
+                        "file": (
+                            "skipping resolution indexes (small batch)"
+                            if skip_heavy_graph_pass
+                            else "building resolution indexes"
+                        ),
                     }
                 )
             except Exception:  # noqa: BLE001 — progress must never break ingest
                 pass
-        try:
-            indexes, by_qualified, short_names, routes_by_path = self._resolution_indexes(scope)
+        if skip_heavy_graph_pass:
+            from ...domain.cross_language import build_symbol_indexes
+
             shared_resolution = {
-                "indexes": indexes,
-                "by_qualified": by_qualified,
-                "short_names": short_names,
-                "routes_by_path": routes_by_path,
+                "indexes": build_symbol_indexes([]),
+                "by_qualified": {},
+                "short_names": {},
+                "routes_by_path": {},
             }
-        except Exception:  # noqa: BLE001 — empty graph / store ok on cold start
-            pass
+        else:
+            shared_resolution = {
+                "indexes": None,
+                "by_qualified": {},
+                "short_names": {},
+            }
+            try:
+                indexes, by_qualified, short_names, routes_by_path = self._resolution_indexes(scope)
+                shared_resolution = {
+                    "indexes": indexes,
+                    "by_qualified": by_qualified,
+                    "short_names": short_names,
+                    "routes_by_path": routes_by_path,
+                }
+            except Exception:  # noqa: BLE001 — empty graph / store ok on cold start
+                pass
 
         def _rpm_progress_fields() -> dict[str, Any]:
             llm = getattr(self, "llm", None)
@@ -425,6 +465,12 @@ class RepoIngestMixin:
                         "defer_cross_file_pass": True,
                         "language_backfill_only": rel in backfill_paths,
                         "reuse_unchanged_embeddings": True,
+                        # Small batches: heuristic docs only (LLM would exceed MCP budgets).
+                        "prefer_heuristic_docs": skip_heavy_graph_pass,
+                        # Heal embeddings later via embedding_refresh / sync heal.
+                        "skip_embeddings": skip_heavy_graph_pass
+                        or str(payload.get("embedding_refresh_mode") or "").strip().lower()
+                        in {"off", "skip", "none", "disabled"},
                         "shared_resolution": shared_resolution,
                         "on_symbol_progress": _on_symbol_progress,
                     },
@@ -481,25 +527,26 @@ class RepoIngestMixin:
         _emit(0, status="started")
         if total_files:
             run_parallel_file_jobs(workers=workers, items=discovered, fn=_process_one)
-            _emit(progress_total, status="finalizing", file="cross-file resolution")
-            try:
-                finals = self.finalize_cross_file_resolution(
-                    scope,
-                    package_aliases=package_aliases,
-                    on_progress=lambda ev: _emit(
-                        progress_total,
-                        file=str(ev.get("file") or "cross-file resolution"),
-                        status=str(ev.get("status") or "finalizing"),
-                    ),
-                )
-                with state_lock:
-                    totals["edges_written"] += int(finals or 0)
-            except Exception:  # noqa: BLE001 — finalize must not fail the ingest walk
-                pass
+            if not skip_heavy_graph_pass:
+                _emit(progress_total, status="finalizing", file="cross-file resolution")
+                try:
+                    finals = self.finalize_cross_file_resolution(
+                        scope,
+                        package_aliases=package_aliases,
+                        on_progress=lambda ev: _emit(
+                            progress_total,
+                            file=str(ev.get("file") or "cross-file resolution"),
+                            status=str(ev.get("status") or "finalizing"),
+                        ),
+                    )
+                    with state_lock:
+                        totals["edges_written"] += int(finals or 0)
+                except Exception:  # noqa: BLE001 — finalize must not fail the ingest walk
+                    pass
 
         resolved_root = str(Path(root_path).expanduser().resolve())
         # Package README maps only when this run visited files (avoid noop graph walks).
-        if total_files:
+        if total_files and not skip_heavy_graph_pass:
             try:
                 readme_edges = self._ingest_package_readme_maps(scope, resolved_root)
                 totals["edges_written"] += readme_edges

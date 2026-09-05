@@ -51,6 +51,7 @@ class FileSymbolsMixin:
         hash_version: str = "",
         parser_version: str = "",
         reuse_unchanged_embedding: bool = False,
+        skip_embeddings: bool = False,
         repository_id: str | None = None,
     ) -> GraphSymbol:
         reused_embedding = bool(
@@ -59,11 +60,19 @@ class FileSymbolsMixin:
             and previous_file.hash_value == file_hash
             and previous_file.embedding
         )
-        file_embedding = (
-            list(previous_file.embedding)
-            if reused_embedding and previous_file is not None
-            else list(self.embeddings.embed(file_path).vector)
-        )
+        if skip_embeddings:
+            file_embedding = (
+                list(previous_file.embedding)
+                if previous_file is not None and previous_file.embedding
+                else []
+            )
+            reused_embedding = bool(file_embedding)
+        else:
+            file_embedding = (
+                list(previous_file.embedding)
+                if reused_embedding and previous_file is not None
+                else list(self.embeddings.embed(file_path).vector)
+            )
         confidence = 0.9 if ai_documentation else 0.7
         meta = merge_code_metadata(
             {
@@ -124,6 +133,7 @@ class FileSymbolsMixin:
         stamp: str,
         prefer_heuristic_docs: bool = False,
         reuse_unchanged_embeddings: bool = False,
+        skip_embeddings: bool = False,
         on_progress: Any | None = None,
     ) -> tuple[list[str], list[str], int, list[tuple[str, str]]]:
         """Return ``(symbol_ids, changed_ids, documented_count, documented_pairs)``.
@@ -225,7 +235,7 @@ class FileSymbolsMixin:
                 parser_version=parser_ver,
                 metadata=hash_meta,
             )
-            if not reuse_embedding:
+            if not skip_embeddings and not reuse_embedding:
                 embedding_requests.append((symbol, f"{item.qualified_name}\n{doc}"))
             pending.append((symbol, item.kind.value, doc_symbol))
 
@@ -330,7 +340,8 @@ class FileSymbolsMixin:
                     language=language,
                     metadata={"doc_origin": doc_origin},
                 )
-                embedding_requests.append((doc_symbol, doc))
+                if not skip_embeddings:
+                    embedding_requests.append((doc_symbol, doc))
                 documented_pairs.append((draft.id, doc_id))
                 _queue_symbol(
                     item=item,

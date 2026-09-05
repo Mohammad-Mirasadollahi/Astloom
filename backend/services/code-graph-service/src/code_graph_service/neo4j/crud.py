@@ -197,6 +197,46 @@ class Neo4jCrudMixin:
             )
         return self._symbols_from_rows(rows, scope)
 
+    def list_file_symbols_for_paths(self, scope: Scope, paths: list[str]) -> list[GraphSymbol]:
+        """FILE symbols for relative paths only (MCP small-batch change detection)."""
+        cleaned = [str(p or "").replace("\\", "/").strip() for p in paths if str(p or "").strip()]
+        if not cleaned:
+            return []
+        with self._driver.session(database=self._database) as session:
+            rows = list(
+                session.run(
+                    cypher.LIST_FILE_SYMBOLS_FOR_PATHS,
+                    paths=cleaned,
+                    tenant_id=scope.tenant_id,
+                    workspace_id=scope.workspace_id,
+                    project_id=scope.project_id,
+                )
+            )
+        return self._symbols_from_rows(rows, scope)
+
+    def has_any_symbol(self, scope: Scope) -> bool:
+        with self._driver.session(database=self._database) as session:
+            row = session.run(
+                cypher.HAS_ANY_SYMBOL,
+                tenant_id=scope.tenant_id,
+                workspace_id=scope.workspace_id,
+                project_id=scope.project_id,
+            ).single()
+        return row is not None
+
+    def list_file_symbols_index(self, scope: Scope) -> list[GraphSymbol]:
+        """FILE symbols only — inventory/MCP quality must not scan every function."""
+        with self._driver.session(database=self._database) as session:
+            rows = list(
+                session.run(
+                    cypher.LIST_FILE_SYMBOLS_INDEX,
+                    tenant_id=scope.tenant_id,
+                    workspace_id=scope.workspace_id,
+                    project_id=scope.project_id,
+                )
+            )
+        return self._symbols_from_rows(rows, scope)
+
     def content_hash_maps(self, scope: Scope) -> tuple[dict[str, str], dict[str, str]]:
         """FILE + human-doc content hashes without loading full symbol bodies."""
         from ..domain.structural_integrity import file_content_hash_publishable

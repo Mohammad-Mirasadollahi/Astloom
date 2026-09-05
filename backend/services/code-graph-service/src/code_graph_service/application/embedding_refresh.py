@@ -113,6 +113,16 @@ class EmbeddingRefreshMixin:
             if str(p or "").strip()
         ]
         mode_norm = str(mode or "touched").strip().lower()
+        if mode_norm in {"off", "skip", "none", "disabled"}:
+            return RefreshReport(
+                policy_id="off",
+                target_model="",
+                state="complete",
+                scanned=0,
+                refreshed=0,
+                skipped=len(paths),
+                reasons={"mode": 1},
+            )
         if mode_norm == "full" or _env_truthy("ASTLOOM_EMBEDDING_REFRESH_FULL"):
             return self.refresh_embeddings(
                 scope,

@@ -2,7 +2,10 @@
 
 from __future__ import annotations
 
+from pathlib import Path
 from types import SimpleNamespace
+
+import pytest
 
 from mcp_gateway_service.backends.code_graph.write import sync_repo
 
@@ -32,12 +35,12 @@ class _Backends:
         return SimpleNamespace(**scope)
 
 
-def test_mcp_sync_repo_forwards_embedding_refresh_mode_full():
+def test_mcp_sync_repo_forwards_embedding_refresh_mode_full(tmp_path: Path):
     backends = _Backends()
     out = sync_repo(
         backends,
         {
-            "root_path": "/tmp/repo",
+            "root_path": str(tmp_path),
             "embedding_refresh_mode": "full",
             "max_files": 10,
         },
@@ -50,13 +53,26 @@ def test_mcp_sync_repo_forwards_embedding_refresh_mode_full():
     assert out["sync"]["embedding_refresh_mode"] == "full"
 
 
-def test_mcp_sync_repo_ignores_unknown_embedding_refresh_mode():
+def test_mcp_sync_repo_ignores_unknown_embedding_refresh_mode(tmp_path: Path):
     backends = _Backends()
     sync_repo(
         backends,
-        {"root_path": "/tmp/repo", "embedding_refresh_mode": "force-all"},
+        {"root_path": str(tmp_path), "embedding_refresh_mode": "force-all"},
         scope={"tenant_id": "t", "workspace_id": "w", "project_id": "p"},
         correlation_id="c2",
         base={"ok": True},
     )
     assert "embedding_refresh_mode" not in backends.graph.payloads[0]
+
+
+def test_mcp_sync_repo_missing_root_fails_before_graph(tmp_path: Path):
+    backends = _Backends()
+    with pytest.raises(ValueError, match="does not exist or is not visible"):
+        sync_repo(
+            backends,
+            {"root_path": str(tmp_path / "missing-tree")},
+            scope={"tenant_id": "t", "workspace_id": "w", "project_id": "p"},
+            correlation_id="c3",
+            base={"ok": True},
+        )
+    assert backends.graph.payloads == []

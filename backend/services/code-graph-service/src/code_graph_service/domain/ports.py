@@ -41,3 +41,38 @@ def list_symbols_compact(store: Any, scope: Scope) -> list[GraphSymbol]:
         if callable(fn):
             return list(fn(scope))
     return []
+
+
+def list_file_symbols_for_paths(store: Any, scope: Scope, paths: list[str]) -> list[GraphSymbol]:
+    """FILE symbols for the given relative paths (small-batch sync)."""
+    fn = getattr(store, "list_file_symbols_for_paths", None)
+    if callable(fn):
+        return list(fn(scope, paths))
+    # Fallback: filter a compact listing (tests / older stores).
+    wanted = {str(p or "").replace("\\", "/").strip() for p in paths if str(p or "").strip()}
+    if not wanted:
+        return []
+    from .enums import SymbolKind
+
+    return [
+        s
+        for s in list_symbols_compact(store, scope)
+        if s.kind == SymbolKind.FILE and s.file_path.replace("\\", "/") in wanted
+    ]
+
+
+def scope_has_symbols(store: Any, scope: Scope) -> bool:
+    fn = getattr(store, "has_any_symbol", None)
+    if callable(fn):
+        return bool(fn(scope))
+    return bool(list_symbols_compact(store, scope))
+
+
+def list_file_symbols_compact(store: Any, scope: Scope) -> list[GraphSymbol]:
+    """FILE nodes only for inventory/change detection under tool budgets."""
+    fn = getattr(store, "list_file_symbols_index", None)
+    if callable(fn):
+        return list(fn(scope))
+    from .enums import SymbolKind
+
+    return [s for s in list_symbols_compact(store, scope) if s.kind == SymbolKind.FILE]

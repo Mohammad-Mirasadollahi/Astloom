@@ -54,6 +54,18 @@ def test_list_symbols_index_strips_bulky_fields() -> None:
     assert all(s.embedding == [] for s in indexed)
 
 
+def test_list_symbols_index_keeps_hash_fields() -> None:
+    store = InMemoryStore()
+    scope = _scope()
+    sym = _sym(scope, sid="f", name="a.py", kind=SymbolKind.FILE)
+    sym.hash_version = "4"
+    sym.parser_version = "stdlib_ast:3.12"
+    store.put_symbol(sym)
+    indexed = store.list_symbols_index(scope)
+    assert indexed[0].hash_version == "4"
+    assert indexed[0].parser_version == "stdlib_ast:3.12"
+
+
 def test_content_hash_maps_incomplete_stub_unpublished() -> None:
     store = InMemoryStore()
     scope = _scope()

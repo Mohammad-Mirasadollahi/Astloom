@@ -198,6 +198,7 @@ class FileIngestMixin(
             hash_version=hash_version,
             parser_version=parser_ver,
             reuse_unchanged_embedding=reuse_unchanged_embeddings,
+            skip_embeddings=bool(payload.get("skip_embeddings")),
             repository_id=str(payload.get("repository_id") or "").strip() or None,
         )
 
@@ -221,6 +222,7 @@ class FileIngestMixin(
             stamp=stamp,
             prefer_heuristic_docs=prefer_heuristic_docs,
             reuse_unchanged_embeddings=reuse_unchanged_embeddings,
+            skip_embeddings=bool(payload.get("skip_embeddings")),
             on_progress=payload.get("on_symbol_progress"),
         )
         self._prune_stale_file_embeddings(
