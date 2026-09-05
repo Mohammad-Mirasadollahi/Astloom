@@ -34,7 +34,7 @@ Exposes Astloom capabilities to IDE clients (Cursor) over the Model Context Prot
 | `astloom_code_graph_path` | read | Shortest path between two symbols |
 | `astloom_code_graph_hybrid_search` | read | RRF hybrid lexical + semantic search |
 | `astloom_code_graph_freshness` | read | Pending-sync / stale banners |
-| `astloom_code_graph_sync` | write | **Preferred:** auto full vs incremental repo sync |
+| `astloom_code_graph_sync` | write | **Preferred:** auto full vs incremental repo sync; under MCP use small `max_files` (see tool-budget runbook) |
 | `astloom_code_graph_purge` | write | Wipe project graph (`confirm=true`); then sync |
 | `astloom_code_graph_generation_context` | read | Generation context pack for coding agents (includes `hybrid_documentation`) |
 | `astloom_code_graph_ingest_file` | write | Index one source file (power users) |
@@ -48,7 +48,7 @@ Exposes Astloom capabilities to IDE clients (Cursor) over the Model Context Prot
 | `astloom_docs_status` | read | Coverage + missing docs |
 | `astloom_docs_catalog` | read | Cached frontmatter catalog (tags/lanes) for retrieval narrowing |
 | `astloom_docs_authoring_standards` | read | Full-tier documentation authoring law |
-| `astloom_quality_audit` | read | Docs+code quality findings (`must_remediate`; optional Task create/reconcile) |
+| `astloom_quality_audit` | read | Docs+code quality findings (`must_remediate`; MCP soft budget + project scope; optional Task create/reconcile) |
 | `astloom_guidance_resolve` | read | Resolve AGENTS entry, always-on rules, skill catalog (seeds MCP-first pack) |
 | `astloom_guidance_list_skills` | read | List skill catalog descriptors |
 | `astloom_guidance_get_skill` | read | Fetch one skill body by id or name |
@@ -81,6 +81,19 @@ Exposes Astloom capabilities to IDE clients (Cursor) over the Model Context Prot
 | `memory` | Tests / default without Neo4j password; **also used as fallback** if Neo4j/Postgres are configured but unreachable at gateway start (ERROR logged; MCP stays up) | In-memory graph + optional demo seed |
 
 Responses include `store_mode` and `graph_mode`.
+
+## HTTP tool budgets (Cursor / concurrent agents)
+
+| Env | Default | Meaning |
+| --- | --- | --- |
+| `ASTLOOM_MCP_TOOL_TIMEOUT_SECONDS` | `25` | Hard JSON-RPC timeout; `-32001` names the tool when known |
+| `ASTLOOM_MCP_QUALITY_AUDIT_BUDGET_SECONDS` | `18` (capped to tool timeout − 6s) | Soft collect deadline for `astloom_quality_audit` |
+
+**`astloom_code_graph_sync`:** Prefer small `max_files` under MCP. When `max_files` is below the ingest default, the gateway sets `embedding_refresh_mode=off` if unset (`max_files < 50`), and code-graph uses FILE-only lookups + empty shared resolution indexes so Neo4j full-graph dumps cannot burn the hard timeout. Re-run while `truncated=true`.
+
+**`astloom_quality_audit`:** Uses the MCP project graph scope (not CLI defaults), runs code inventory before docs under the soft deadline, caps discovery under deadline, and returns `degraded` / `truncated_phases` only when the soft budget is exhausted.
+
+Normative runbook: `docs/07-code-knowledge-graph/83-mcp-tool-budget-and-small-batch-sync.md`.
 
 Per-service URL overrides (optional):
 
@@ -145,7 +158,11 @@ Or: `python -m mcp_gateway_service --http --port 32500`
 ```bash
 PYTHONPATH=backend/services/mcp-gateway-service/src:backend/packages \
   .venv/bin/python -m pytest tests/backend/services/mcp-gateway-service -q
+
+# Live HTTP matrix (gateway up on :32500):
+.venv/bin/python -m pytest tests/live/mcp-gateway-service/ -m live -v
 ```
 
 Design: `docs/08-software-engineering-architecture/35-usage-profile-and-cursor-mcp-onboarding.md`  
+Tool budgets / small-batch sync: `docs/07-code-knowledge-graph/83-mcp-tool-budget-and-small-batch-sync.md`  
 One-command connect: `docs/08-software-engineering-architecture/41-one-command-cross-platform-agent-onboarding.md`

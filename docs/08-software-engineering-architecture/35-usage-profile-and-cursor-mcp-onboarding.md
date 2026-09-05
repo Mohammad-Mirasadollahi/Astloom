@@ -163,6 +163,10 @@ Required after:
 
 See also `docs/07-code-knowledge-graph/55-structural-isolation-and-architecture-overview-residuals.md`.
 
+### HTTP MCP Tool Budgets
+
+Concurrent HTTP MCP (`astloom mcp serve-http` / `astloom service start`) enforces `ASTLOOM_MCP_TOOL_TIMEOUT_SECONDS` (default **25**). Prefer small `max_files` on `astloom_code_graph_sync`; `astloom_quality_audit` uses a soft collect budget and the active MCP project scope. Contracts and verification: [`83-mcp-tool-budget-and-small-batch-sync.md`](../07-code-knowledge-graph/83-mcp-tool-budget-and-small-batch-sync.md).
+
 Example generated fragment (shape):
 
 ```json

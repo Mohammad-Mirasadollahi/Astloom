@@ -179,7 +179,7 @@ Continuation of `docs/08-software-engineering-architecture/42-astloom-cli-comman
 | **Categories** | `docs.standards`, `docs.size_soft`, `docs.size_hard`, `docs.linking_gap`, `docs.flow_table_gap`, `docs.lane_invalid`, `docs.revision_missing`, `docs.revision_invalid`, `code.never_ingested`, `code.stale_edited`, `code.low_symbol_docs`, `code.missing_embeddings` (when applicable) |
 | **Exit code** | `0` when zero findings; `1` when any finding exists (CI-friendly) |
 | **What changes** | Does **not** mutate the code graph. Best-effort **docs registry hygiene** runs first: `purge_docs_registry_fixture_noise` unregisters live-test fixture rows whose symbol/file path contains `never_linked`, `ghost_`, or `never_should_exist` (same helper on MCP `astloom_quality_audit` and sync follow-up). Result JSON may include `docs_registry_hygiene` (`deleted_count`, `deleted`, `errors`). `save` writes report files under the path you named (or `.astloom/quality-audit/`) |
-| **Normative refs** | `docs/00-master-plan/10-documentation-standardization-procedure.md`; durable Tasks: `docs/01-core-data-model/09-automated-followup-task-lifecycle-and-retention.md`; embedding heal: `docs/07-code-knowledge-graph/77-sync-embedding-heal-operator-runbook.md` |
+| **Normative refs** | `docs/00-master-plan/10-documentation-standardization-procedure.md`; durable Tasks: `docs/01-core-data-model/09-automated-followup-task-lifecycle-and-retention.md`; embedding heal: `docs/07-code-knowledge-graph/77-sync-embedding-heal-operator-runbook.md`; MCP soft budget / scope: `docs/07-code-knowledge-graph/83-mcp-tool-budget-and-small-batch-sync.md` |
 
 ### `astloom followup-tasks`
 

@@ -52,6 +52,7 @@ related_docs:
 - docs/07-code-knowledge-graph/03-ingestion-and-living-documentation-workflow.md
 - docs/07-code-knowledge-graph/40-rpm-session-parallel-sync-risks-challenges-and-acceptance.md
 - docs/07-code-knowledge-graph/81-neo4j-memory-and-content-push-oom-runbook.md
+- docs/07-code-knowledge-graph/83-mcp-tool-budget-and-small-batch-sync.md
 - docs/13-technology-stack-and-platform-decisions/12-litellm-environment-configuration.md
 - docs/superpowers/specs/2026-08-04-client-direct-ingest-no-stage-design.md
 language: en
@@ -191,5 +192,6 @@ astloom service restart
 - [`03` ingestion and living documentation](03-ingestion-and-living-documentation-workflow.md)
 - [`40` RPM parallel sync risks](40-rpm-session-parallel-sync-risks-challenges-and-acceptance.md) — C-15 finalization
 - [`81` Neo4j memory / content-push OOM](81-neo4j-memory-and-content-push-oom-runbook.md)
+- [`83` MCP tool budget / small-batch sync](83-mcp-tool-budget-and-small-batch-sync.md) — HTTP `-32001`, FILE-index sync, quality_audit soft deadlines
 - LiteLLM env: [`12-litellm-environment-configuration.md`](../13-technology-stack-and-platform-decisions/12-litellm-environment-configuration.md)
 - Client content-push design: [`2026-08-04-client-direct-ingest-no-stage-design.md`](../superpowers/specs/2026-08-04-client-direct-ingest-no-stage-design.md)

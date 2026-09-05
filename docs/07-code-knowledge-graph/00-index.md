@@ -22,8 +22,8 @@ authority: informative
 visibility: internal
 linked_symbols:
 - backend/services/code-graph-service/src/code_graph_service/application/service.py::CodeGraphService
-doc_version: 1.1.16
-updated_at: '2026-09-03'
+doc_version: 1.1.17
+updated_at: '2026-09-05'
 ---
 
 # 07 - Code-Knowledge Graph Index
@@ -50,6 +50,7 @@ This design extends the existing Docs-as-Code and Technical Logic sections. It f
 - `12-neo4j-runtime-plugins.md` defines required APOC and Graph Data Science plugins for Neo4j (and Compose JVM heap / pagecache env defaults).
 - `81-neo4j-memory-and-content-push-oom-runbook.md` diagnoses Bolt handshake failures from Neo4j heap OOM during long content-push / `ingest-push` syncs.
 - `82-sync-finalizing-and-provider-cost-runbook.md` diagnoses sync stuck at 100% (`status=finalizing`), batched CALL relink, compact `file-hashes` / `list_symbols_index`, pending-edge finalize filters, living-docs file-batch Provider cost, and deferred finalize on multi-batch content-push.
+- `83-mcp-tool-budget-and-small-batch-sync.md` HTTP MCP hard/soft tool budgets, small-batch `sync` (`max_files`), FILE-index change detection, and `quality_audit` scope/deadline contracts (large Neo4j / sshfs).
 - `13-codesymbol-projection-adr.md` accepts `CodeSymbol` + `CODE_REL` as the canonical Neo4j runtime projection.
 - `14-repository-code-wiki-feature-specification.md` defines Repository Code Wiki (holistic repo-level wiki generation; CodeWiki / Google Code Wiki–inspired).
 - `15-call-graph-confidence-and-runtime-traces.md` defines CALL evidence classes, confidence caps/boosts, impact eligibility, and runtime-trace reconciliation (GAP-T02).
@@ -137,6 +138,7 @@ Code evidence anchor: `backend/services/code-graph-service/src/code_graph_servic
 - 2026-09-03: LiteLLM hard deadline + heuristic docs fallback on Provider hang (`ASTLOOM_LITELLM_TIMEOUT_SECONDS`); docs batch chunk size 8 (`82`/`03`/`39`/`40`).
 - 2026-09-03: Extended `82`/`50`/`03` for constants-only FILE hash publish (`ingest_complete` **or** code children via `file_content_hash_publishable`); live-verified client `unchanged_skip` on `.130`.
 - 2026-09-03: Extended `82`/`50`/`03`/`40` for Neo4j index/hash fast path (`list_symbols_index`, `content_hash_maps`, pending `target_id_prefixes`) after ThinkingSOC content-push timing on `.130`.
+- 2026-09-05: Added `83-mcp-tool-budget-and-small-batch-sync.md` (MCP hard/soft budgets, FILE-index small-batch sync, quality_audit scope).
 - 2026-09-03: Added `82-sync-finalizing-and-provider-cost-runbook.md`; updated `03`/`40`/`50` for batched living docs, LLM-hot `RPM // 2`, batched finalize, and content-push `finalize_cross_file`.
 - 2026-08-15: Added `81-neo4j-memory-and-content-push-oom-runbook.md` (Compose heap defaults 4G / pagecache 1G; content-push Bolt OOM remediation).
 - 2026-08-02: Extended `77` with MCP/pgvector URL fallback and operator failure signals (`embedding_index_unavailable`, hybrid `semantic_error`).
@@ -183,6 +185,10 @@ Phased structural/process risk categories on existing `quality_audit` and `unuse
 ## RPM-session parallel sync (current)
 
 Parallel `astloom sync` gated by tracked LiteLLM RPM sessions (start/end), serialized store writer, process-local CLI/HTTP observability. Reading order: `37` → `38` → `39` → `40`.
+
+## MCP HTTP tool budgets (current)
+
+Hard gateway timeout, small-batch `astloom_code_graph_sync`, and `quality_audit` soft deadlines for large graphs / sshfs pins. Reading order: `83` (cross-link `82` for finalize hangs, `77` for embedding heal).
 
 ## Implementation Slice
 
