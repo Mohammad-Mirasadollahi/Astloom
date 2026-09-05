@@ -49,6 +49,31 @@ def _normalize_globs(patterns: Iterable[str] | None, *, default: tuple[str, ...]
     return out
 
 
+def literal_dir_prefixes(match_globs: Iterable[str]) -> list[str] | None:
+    """Static directory prefixes before the first glob metachar, or None = full-tree walk.
+
+    Example: ``docs/**/*.md`` → ``["docs"]``. A pattern like ``**/*.md`` returns None.
+    """
+    prefixes: list[str] = []
+    for raw in match_globs:
+        pat = _normalize_glob(str(raw or ""))
+        if not pat:
+            continue
+        parts: list[str] = []
+        for part in pat.split("/"):
+            if any(ch in part for ch in "*?["):
+                break
+            if part in ("", "."):
+                continue
+            parts.append(part)
+        if not parts:
+            return None
+        prefixes.append("/".join(parts))
+    if not prefixes:
+        return None
+    return list(dict.fromkeys(prefixes))
+
+
 def discover_documentation_files(
     root_path: str | Path,
     *,
@@ -58,13 +83,19 @@ def discover_documentation_files(
     doc_paths: Iterable[str] | None = None,
     max_files: int = DEFAULT_MAX_FILES,
     max_file_bytes: int = DEFAULT_MAX_FILE_BYTES,
+    deadline_monotonic: float | None = None,
 ) -> list[DiscoveredDocFile]:
     """Walk the repo and return Markdown files matching docs globs.
 
     Discovery is **exclude-only** after match: default ``match_globs`` is
     ``**/*.md`` and ``**/*.mdx`` over the whole tree. ``doc_paths`` (legacy) only
     narrows matches to those prefixes when provided and non-empty.
+
+    When every match glob has a static directory prefix (e.g. ``docs/**/*.md``),
+    only those subtrees are walked — critical over slow mounts (sshfs).
     """
+    import time
+
     root = require_directory(root_path)
 
     matches = _normalize_globs(match_globs, default=DEFAULT_DOC_MATCH_GLOBS)
@@ -81,34 +112,54 @@ def discover_documentation_files(
     max_file_bytes = max(1, int(max_file_bytes))
     excluded, globs = _split_excludes(exclude_dirs, exclude_globs)
 
+    dir_prefixes = literal_dir_prefixes(matches)
+    walk_specs: list[tuple[Path, str]] = []
+    if dir_prefixes is None:
+        walk_specs = [(root, "")]
+    else:
+        for pref in dir_prefixes:
+            candidate = root / pref
+            if candidate.is_dir():
+                walk_specs.append((candidate, pref))
+
     discovered: list[DiscoveredDocFile] = []
-    for path, rel_s in iter_repo_files(root, exclude_dirs=excluded, exclude_globs=globs):
-        if path.suffix.lower() not in DOC_EXTENSIONS:
-            continue
-        if globs and _matches_any_glob(rel_s, globs):
-            continue
-        if prefixes and not any(rel_s == p or rel_s.startswith(p + "/") for p in prefixes):
-            continue
-        if not any(path_matches_glob(rel_s, pat) for pat in matches):
-            continue
-        relative = Path(rel_s)
-        if _should_skip_parents(relative, excluded):
-            continue
-        try:
-            size = path.stat().st_size
-        except OSError:
-            continue
-        if size <= 0 or size > max_file_bytes:
-            continue
-        discovered.append(
-            DiscoveredDocFile(
-                absolute_path=str(path),
-                relative_path=rel_s,
-                size_bytes=size,
-            )
-        )
-        if len(discovered) >= max_files:
+    for walk_root, pref in walk_specs:
+        if deadline_monotonic is not None and time.monotonic() >= deadline_monotonic:
             break
+        for path, rel_in_walk in iter_repo_files(
+            walk_root,
+            exclude_dirs=excluded,
+            exclude_globs=globs,
+            deadline_monotonic=deadline_monotonic,
+        ):
+            rel_s = f"{pref}/{rel_in_walk}" if pref else rel_in_walk
+            if path.suffix.lower() not in DOC_EXTENSIONS:
+                continue
+            if globs and _matches_any_glob(rel_s, globs):
+                continue
+            if prefixes and not any(rel_s == p or rel_s.startswith(p + "/") for p in prefixes):
+                continue
+            if not any(path_matches_glob(rel_s, pat) for pat in matches):
+                continue
+            relative = Path(rel_s)
+            if _should_skip_parents(relative, excluded):
+                continue
+            try:
+                size = path.stat().st_size
+            except OSError:
+                continue
+            if size <= 0 or size > max_file_bytes:
+                continue
+            discovered.append(
+                DiscoveredDocFile(
+                    absolute_path=str(path),
+                    relative_path=rel_s,
+                    size_bytes=size,
+                )
+            )
+            if len(discovered) >= max_files:
+                discovered.sort(key=lambda item: item.relative_path)
+                return discovered
 
     discovered.sort(key=lambda item: item.relative_path)
     return discovered
@@ -120,4 +171,5 @@ __all__ = [
     "DOC_EXTENSIONS",
     "DiscoveredDocFile",
     "discover_documentation_files",
+    "literal_dir_prefixes",
 ]

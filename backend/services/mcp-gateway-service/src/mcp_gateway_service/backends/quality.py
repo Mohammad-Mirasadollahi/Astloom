@@ -2,10 +2,32 @@
 
 from __future__ import annotations
 
+import os
+import time
 from typing import Any
 from uuid import uuid4
 
 from .platform import PlatformBackends
+
+
+def _quality_audit_budget_seconds() -> float:
+    """Soft collect budget — leave headroom under the HTTP MCP tool timeout."""
+    raw = str(os.environ.get("ASTLOOM_MCP_QUALITY_AUDIT_BUDGET_SECONDS", "18")).strip()
+    try:
+        value = float(raw)
+    except ValueError:
+        value = 18.0
+    if value <= 0:
+        value = 18.0
+    tool_raw = str(os.environ.get("ASTLOOM_MCP_TOOL_TIMEOUT_SECONDS", "25")).strip()
+    try:
+        tool_timeout = float(tool_raw)
+    except ValueError:
+        tool_timeout = 25.0
+    if tool_timeout <= 0:
+        tool_timeout = 25.0
+    # Keep at least 6s under the hard gateway timeout so the JSON-RPC reply wins.
+    return max(3.0, min(value, max(3.0, tool_timeout - 6.0)))
 
 
 def quality_audit(
@@ -84,7 +106,20 @@ def quality_audit(
             "tasks_created_count": 0,
         }
 
-    report = build_quality_audit_report(repos=[Path(p) for p in pinned])
+    budget = _quality_audit_budget_seconds()
+    deadline = time.monotonic() + budget
+    graph_scope = None
+    scope_fn = getattr(backends, "graph_scope", None)
+    if callable(scope_fn):
+        try:
+            graph_scope = scope_fn(scope)
+        except Exception:  # noqa: BLE001 — inventory falls back to CLI defaults
+            graph_scope = None
+    report = build_quality_audit_report(
+        repos=[Path(p) for p in pinned],
+        deadline_monotonic=deadline,
+        scope=graph_scope,
+    )
     payload = compact_quality_audit_payload(
         report,
         top_n=top_n,

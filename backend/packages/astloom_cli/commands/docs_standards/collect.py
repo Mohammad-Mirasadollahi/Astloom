@@ -28,6 +28,7 @@ def _resolve_audit_paths(
     *,
     roots: list[Path] | None,
     filters: dict[str, Any] | None,
+    deadline_monotonic: float | None = None,
 ) -> tuple[list[Path], list[str], str]:
     """Return (abs paths, display roots, mode) for Full-tier scanning."""
     audit_globs: list[str] = []
@@ -53,6 +54,7 @@ def _resolve_audit_paths(
                 exclude_globs=sync_filters.get("doc_exclude_globs"),
                 doc_paths=sync_filters.get("doc_paths") or None,
                 max_files=int(sync_filters.get("max_files") or 20_000),
+                deadline_monotonic=deadline_monotonic,
             )
         except Exception:  # noqa: BLE001
             discovered = []
@@ -90,11 +92,28 @@ def build_docs_standards_report(
     roots: list[Path] | None = None,
     repo: Path | None = None,
     filters: dict[str, Any] | None = None,
+    deadline_monotonic: float | None = None,
 ) -> dict[str, Any]:
+    import time
+
     base = (repo or repo_root()).resolve()
-    paths, display_roots, mode = _resolve_audit_paths(base, roots=roots, filters=filters)
+    paths, display_roots, mode = _resolve_audit_paths(
+        base,
+        roots=roots,
+        filters=filters,
+        deadline_monotonic=deadline_monotonic,
+    )
+    # Under a tool budget, cap how many Markdown files we open (sshfs-safe).
+    if deadline_monotonic is not None and len(paths) > 120:
+        paths = paths[:120]
+        truncated = True
+    else:
+        truncated = False
     findings: list[dict[str, Any]] = []
     for path in paths:
+        if deadline_monotonic is not None and time.monotonic() >= deadline_monotonic:
+            truncated = True
+            break
         try:
             findings.append(check_file(path, root=base))
         except ValueError:
@@ -142,6 +161,7 @@ def build_docs_standards_report(
         "repo": str(base),
         "roots": display_roots,
         "scan_mode": mode,
+        "truncated": truncated,
         "summary": {
             "total": total,
             "conforming_count": ok_count,

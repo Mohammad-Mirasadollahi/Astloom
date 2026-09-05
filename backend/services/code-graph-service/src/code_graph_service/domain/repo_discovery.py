@@ -51,6 +51,7 @@ def path_matches_glob(relative_path: str, pattern: str) -> bool:
     """Match ``relative_path`` against a user/builtin glob (``*``, ``?``, ``[]``, ``**``).
 
     Leading ``**/`` matches zero or more directories (so ``**/src/**`` matches ``src/a.py``).
+    Interior ``/**/`` also matches zero directories (so ``docs/**/*.md`` matches ``docs/a.md``).
     """
     rel = relative_path.replace("\\", "/").lstrip("./")
     pat = _normalize_glob(pattern)
@@ -64,6 +65,9 @@ def path_matches_glob(relative_path: str, pattern: str) -> bool:
     # ``foo/**`` also matches the directory path ``foo`` itself.
     if pat.endswith("/**"):
         candidates.append(pat[:-3].rstrip("/"))
+    # ``docs/**/*.md`` ≡ ``docs/*.md`` (zero directories between docs and file).
+    if "/**/" in pat:
+        candidates.append(pat.replace("/**/", "/"))
 
     for candidate in candidates:
         if not candidate:
@@ -150,6 +154,7 @@ def iter_repo_files(
     *,
     exclude_dirs: set[str],
     exclude_globs: list[str],
+    deadline_monotonic: float | None = None,
 ) -> Iterator[tuple[Path, str]]:
     """Yield ``(absolute_path, relative_posix)`` using pruned ``os.walk``.
 
@@ -158,9 +163,16 @@ def iter_repo_files(
 
     File-level exclude globs are **not** applied here so callers can filter by
     extension first (much cheaper than fnmatch on every binary/asset path).
+
+    When *deadline_monotonic* is set, stop yielding once ``time.monotonic()``
+    reaches it (partial discovery for MCP/tool budgets).
     """
+    import time
+
     root_s = str(root)
     for dirpath, dirnames, filenames in os.walk(root_s, topdown=True, followlinks=False):
+        if deadline_monotonic is not None and time.monotonic() >= deadline_monotonic:
+            return
         rel_base = os.path.relpath(dirpath, root_s)
         if rel_base == ".":
             rel_base = ""
@@ -178,6 +190,8 @@ def iter_repo_files(
         dirnames[:] = sorted(kept)
 
         for name in sorted(filenames):
+            if deadline_monotonic is not None and time.monotonic() >= deadline_monotonic:
+                return
             rel_s = f"{rel_base}/{name}" if rel_base else name
             yield Path(dirpath) / name, rel_s.replace("\\", "/")
 
@@ -192,6 +206,7 @@ def discover_source_files(
     include_path_prefixes: Iterable[str] | None = None,
     max_files: int | None = DEFAULT_MAX_FILES,
     max_file_bytes: int = DEFAULT_MAX_FILE_BYTES,
+    deadline_monotonic: float | None = None,
 ) -> list[DiscoveredFile]:
     """Walk ``root_path`` and return supported source files (sorted by relative path).
 
@@ -217,7 +232,12 @@ def discover_source_files(
     ]
 
     discovered: list[DiscoveredFile] = []
-    for path, rel_s in iter_repo_files(root, exclude_dirs=excluded, exclude_globs=globs):
+    for path, rel_s in iter_repo_files(
+        root,
+        exclude_dirs=excluded,
+        exclude_globs=globs,
+        deadline_monotonic=deadline_monotonic,
+    ):
         name_lower = path.name.lower()
         if not any(name_lower.endswith(ext) for ext in extensions):
             continue

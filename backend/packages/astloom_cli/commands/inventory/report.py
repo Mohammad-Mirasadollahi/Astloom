@@ -20,9 +20,10 @@ def build_inventory_report(
     roots: list[Path] | None = None,
     max_files: int | None = None,
     scope: Any | None = None,
+    deadline_monotonic: float | None = None,
 ) -> dict[str, Any]:
     svc = _graph_service()
-    # Scope from identity/env/connect defaults only (inventory uses word modes, not dashed flags).
+    # Prefer an explicit scope (MCP project) over CLI/env defaults.
     if scope is None:
         scope = _graph_scope(
             argparse.Namespace(tenant="", workspace="", project=""),
@@ -34,6 +35,10 @@ def build_inventory_report(
         roots = [Path(p).expanduser().resolve() for p in roots]
     if max_files is None:
         max_files = int(getattr(_args, "max_files", None) or 2000) if _args is not None else 2000
+    # Under MCP/tool budgets, a full tree walk on sshfs exhausts the deadline before
+    # classification runs — cap discovery so inventory finishes with real findings.
+    if deadline_monotonic is not None:
+        max_files = min(int(max_files), 200)
     processing = processing_context(svc)
     results = [
         inventory_one_root(
@@ -42,6 +47,7 @@ def build_inventory_report(
             root_path=root,
             max_files=max_files,
             processing=processing,
+            deadline_monotonic=deadline_monotonic,
         )
         for root in roots
     ]

@@ -32,26 +32,81 @@ def inventory_one_root(
     root_path: Path,
     max_files: int,
     processing: dict[str, Any] | None = None,
+    deadline_monotonic: float | None = None,
 ) -> dict[str, Any]:
+    import time
+
     from astloom_cli.commands.inventory.discover import discover_code_and_docs
+    from code_graph_service.domain.ports import list_file_symbols_compact
 
     root_path = root_path.expanduser().resolve()
     filters = resolve_sync_filters(root=root_path)
     processing = processing or processing_context(svc)
-    embed_by_symbol = embed_models_by_symbol(svc, scope)
     docs_model_label = str(processing.get("docs_model_label") or "heuristic")
+    # Under a tool budget, skip per-symbol embed model map (extra Neo4j round-trips).
+    if deadline_monotonic is not None:
+        embed_by_symbol: dict[str, str] = {}
+    else:
+        embed_by_symbol = embed_models_by_symbol(svc, scope)
+
+    if deadline_monotonic is not None and time.monotonic() >= deadline_monotonic:
+        empty = status_bucket([], [], [])
+        return {
+            "path": str(root_path),
+            "truncated": True,
+            "filters": {"sources": [], "docs_enabled": False, "doc_match_globs": []},
+            "processing": processing,
+            "models_used": [],
+            "totals": {"code_files": 0, "code_bytes": 0, "docs_files": 0, "docs_bytes": 0},
+            "languages": [],
+            "code": {
+                **empty,
+                "embeddings": {
+                    "eligible_symbols": 0,
+                    "indexed_symbols": 0,
+                    "missing_symbols": 0,
+                    "coverage_percent": 100.0,
+                },
+                "pending_count": 0,
+                "pending": [],
+                "llm": bucket([], []),
+                "done_files": [],
+                "edited_files": [],
+                "remaining_files": [],
+                "top_done": [],
+                "top_edited": [],
+                "top_remaining": [],
+            },
+            "docs": {
+                **empty,
+                "enabled": False,
+                "done_files": [],
+                "edited_files": [],
+                "remaining_files": [],
+                "top_done": [],
+                "top_edited": [],
+                "top_remaining": [],
+            },
+        }
 
     discovered_code, discovered_docs = discover_code_and_docs(
         root_path,
         filters=filters,
         max_files=max_files,
+        deadline_monotonic=deadline_monotonic,
     )
     code_discovered = {norm_rel(item.relative_path) for item in discovered_code}
     docs_enabled = bool(filters.get("docs_enabled")) and bool(filters.get("doc_match_globs"))
     docs_discovered = {norm_rel(item.relative_path) for item in discovered_docs} if docs_enabled else set()
 
+    if deadline_monotonic is not None:
+        # FILE nodes only — full list_symbols_index on large graphs exceeds MCP budgets.
+        symbols = list(list_file_symbols_compact(svc.store, scope))
+    else:
+        symbols = list(svc.store.list_symbols(scope))
+
     scanned = scan_root_symbols(
-        symbols=list(svc.store.list_symbols(scope)),
+        symbols=symbols,
         root_path=root_path,
         code_discovered=code_discovered,
         docs_discovered=docs_discovered,

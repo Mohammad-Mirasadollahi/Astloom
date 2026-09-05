@@ -25,6 +25,7 @@ def discover_code_and_docs(
     *,
     filters: dict[str, Any],
     max_files: int = 2000,
+    deadline_monotonic: float | None = None,
 ) -> tuple[list[DiscoveredFile], list[DiscoveredDocFile]]:
     """One pruned walk → code files and documentation files."""
     root = root_path.expanduser().resolve()
@@ -52,7 +53,12 @@ def discover_code_and_docs(
 
     code: list[DiscoveredFile] = []
     docs: list[DiscoveredDocFile] = []
-    for path, rel_s in iter_repo_files(root, exclude_dirs=walk_excluded, exclude_globs=walk_globs):
+    for path, rel_s in iter_repo_files(
+        root,
+        exclude_dirs=walk_excluded,
+        exclude_globs=walk_globs,
+        deadline_monotonic=deadline_monotonic,
+    ):
         relative = Path(rel_s)
         name_lower = path.name.lower()
         suffix = path.suffix.lower()

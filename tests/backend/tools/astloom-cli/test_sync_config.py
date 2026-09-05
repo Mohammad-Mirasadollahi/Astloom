@@ -145,6 +145,10 @@ def test_path_matches_glob_patterns():
     assert path_matches_glob("src/app.min.js", "**/*.min.js")
     assert path_matches_glob("pkg/foo_pb2.py", "**/*_pb2.py")
     assert not path_matches_glob("backend/services/a.py", "**/tests/**")
+    # Interior **/ may span zero directories (gitignore-style).
+    assert path_matches_glob("docs/a.md", "docs/**/*.md")
+    assert path_matches_glob("docs/sub/a.md", "docs/**/*.md")
+    assert path_matches_glob("backend/docs/x.md", "backend/docs/**/*.md")
 
 
 def test_discover_respects_include_prefixes(tmp_path: Path):

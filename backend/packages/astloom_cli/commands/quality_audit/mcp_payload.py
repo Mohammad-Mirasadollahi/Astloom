@@ -41,6 +41,8 @@ def compact_quality_audit_payload(
         "findings_total": len(findings_sorted),
         "actionable_count": len(actionable),
         "must_remediate": len(actionable) > 0,
+        "degraded": bool(report.get("degraded")),
+        "truncated_phases": list(report.get("truncated_phases") or []),
         "agent_instruction": (
             "Load skill astloom-quality-audit and remediate high/medium findings "
             "(or create durable tasks) before treating the session work as done."

@@ -68,9 +68,9 @@ def _cited_path_tokens(body: str, *, root: Path) -> list[str]:
     return extract_evidence_link_tokens(body, repo=root, max_tokens=64)
 
 
-def _audit_docs(root: Path) -> list[dict[str, Any]]:
+def _audit_docs(root: Path, *, deadline_monotonic: float | None = None) -> list[dict[str, Any]]:
     findings: list[dict[str, Any]] = []
-    standards = build_docs_standards_report(repo=root)
+    standards = build_docs_standards_report(repo=root, deadline_monotonic=deadline_monotonic)
     rows = list(standards.get("nonconforming") or []) + list(standards.get("conforming") or [])
     for row in rows:
         path = str(row.get("file") or "")
@@ -215,10 +215,19 @@ def _audit_docs(root: Path) -> list[dict[str, Any]]:
 def _audit_code(
     args: Any | None,
     roots: list[Path] | None = None,
+    *,
+    deadline_monotonic: float | None = None,
+    scope: Any | None = None,
 ) -> tuple[list[dict[str, Any]], dict[str, Any]]:
     """Best-effort code inventory findings; empty if roots/filters unavailable."""
-    meta: dict[str, Any] = {"available": False, "error": ""}
+    import time
+
+    meta: dict[str, Any] = {"available": False, "error": "", "truncated": False}
     findings: list[dict[str, Any]] = []
+    if deadline_monotonic is not None and time.monotonic() >= deadline_monotonic:
+        meta["error"] = "budget_exhausted_before_code_audit"
+        meta["truncated"] = True
+        return findings, meta
     try:
         import argparse
 
@@ -230,12 +239,19 @@ def _audit_code(
     try:
         ns = args if args is not None else argparse.Namespace()
         if roots is None:
-            report = build_inventory_report(ns)
+            report = build_inventory_report(
+                ns, deadline_monotonic=deadline_monotonic, scope=scope
+            )
         else:
-            report = build_inventory_report(ns, roots=roots)
+            report = build_inventory_report(
+                ns, roots=roots, deadline_monotonic=deadline_monotonic, scope=scope
+            )
     except (Exception, SystemExit) as exc:  # noqa: BLE001 — inventory/sync-config
         meta["error"] = str(exc)
         return findings, meta
+
+    if deadline_monotonic is not None and time.monotonic() >= deadline_monotonic:
+        meta["truncated"] = True
 
     meta["available"] = True
     meta["paths"] = list(report.get("paths") or [])
@@ -351,17 +367,44 @@ def build_quality_audit_report(
     args: Any | None = None,
     *,
     repos: list[Path] | None = None,
+    deadline_monotonic: float | None = None,
+    scope: Any | None = None,
 ) -> dict[str, Any]:
+    import time
+
     if repos:
         roots = [Path(p).expanduser().resolve() for p in repos]
     else:
         roots = [repo_root().resolve()]
     if not roots:
         roots = [repo_root().resolve()]
+    truncated_phases: list[str] = []
+    # Code first: inventory is project-scoped graph truth and was previously starved
+    # when docs consumed the entire MCP soft budget on sshfs trees.
+    if deadline_monotonic is not None and time.monotonic() >= deadline_monotonic:
+        code_findings: list[dict[str, Any]] = []
+        code_meta: dict[str, Any] = {
+            "available": False,
+            "error": "budget_exhausted_before_code_audit",
+            "truncated": True,
+        }
+        truncated_phases.append("code")
+    else:
+        code_findings, code_meta = _audit_code(
+            args,
+            roots=roots,
+            deadline_monotonic=deadline_monotonic,
+            scope=scope,
+        )
+        if code_meta.get("truncated"):
+            truncated_phases.append("code")
+
     docs_findings: list[dict[str, Any]] = []
     for root in roots:
-        docs_findings.extend(_audit_docs(root))
-    code_findings, code_meta = _audit_code(args, roots=roots)
+        if deadline_monotonic is not None and time.monotonic() >= deadline_monotonic:
+            truncated_phases.append("docs")
+            break
+        docs_findings.extend(_audit_docs(root, deadline_monotonic=deadline_monotonic))
     findings = docs_findings + code_findings
     by_category: dict[str, list[dict[str, Any]]] = defaultdict(list)
     for row in findings:
@@ -391,8 +434,11 @@ def build_quality_audit_report(
         )
     category_summary.sort(key=lambda r: (-int(r["count"]), severity_rank.get(r["severity"], 9)))
 
+    degraded = bool(truncated_phases)
     return {
         "ok": True,
+        "degraded": degraded,
+        "truncated_phases": truncated_phases,
         "generated_at": now_iso(),
         "repo": str(roots[0]) if len(roots) == 1 else str(roots[0]),
         "repos": [str(r) for r in roots],
@@ -402,6 +448,8 @@ def build_quality_audit_report(
             "code_findings": len(code_findings),
             "categories_with_findings": sum(1 for c in category_summary if int(c["count"]) > 0),
             "soft_budget_lines": SOFT_BODY_LINES,
+            "degraded": degraded,
+            "truncated_phases": truncated_phases,
         },
         "code_audit": code_meta,
         "categories": category_summary,
