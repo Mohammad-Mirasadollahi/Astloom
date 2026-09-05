@@ -21,6 +21,7 @@ def resolve_symbol_id(backends: PlatformBackends, scope: dict[str, str], argumen
         hit = getter(graph_scope, qualified)
         if hit is not None:
             return hit.id
+        raise ValueError(f"symbol not found for qualified_name/name={qualified!r}")
     from code_graph_service.domain.ports import list_symbols_compact
 
     matches: list[str] = []

@@ -26,36 +26,41 @@ class GenerationUseCases(GraphServiceSupport):
         hybrid = build_symbol_doc_coverage(self.store, scope, seed, max_neighbors=max_symbols)
         related_ids = {seed.id}
         expansion = "one_hop"
-        expand = getattr(self.store, "expand_neighborhood", None)
-        if callable(expand):
+        fetch = getattr(self.store, "neighborhood_edges", None)
+        if callable(fetch):
             try:
-                for edge in expand(scope, seed_symbol_id, max_depth=2, limit=max(24, max_symbols * 2)):
+                for edge in fetch(
+                    scope,
+                    seed_symbol_id,
+                    max_depth=2,
+                    direction="both",
+                    rel_types=["CALLS", "HTTP_CALLS", "ASYNC_CALLS", "DOCUMENTED_BY"],
+                ):
                     related_ids.add(edge.source_id)
                     related_ids.add(edge.target_id)
-                expansion = "apoc_or_store_expand"
             except Exception:
-                expansion = "one_hop"
-        if expansion == "one_hop":
-            for edge in self.store.list_edges(scope):
-                if edge.source_id == seed.id:
-                    related_ids.add(edge.target_id)
-                if edge.target_id == seed.id:
-                    related_ids.add(edge.source_id)
+                pass
+            expansion = "cypher_neighborhood"
+        else:
+            expand = getattr(self.store, "expand_neighborhood", None)
+            if callable(expand):
+                try:
+                    for edge in expand(
+                        scope, seed_symbol_id, max_depth=2, limit=max(24, max_symbols * 2)
+                    ):
+                        related_ids.add(edge.source_id)
+                        related_ids.add(edge.target_id)
+                    expansion = "apoc_or_store_expand"
+                except Exception:
+                    expansion = "one_hop"
+            if expansion == "one_hop":
+                for edge in self.store.list_edges(scope):
+                    if edge.source_id == seed.id:
+                        related_ids.add(edge.target_id)
+                    if edge.target_id == seed.id:
+                        related_ids.add(edge.source_id)
 
-        # Prefer degree-ranked neighbors when available (Neo4j GDS / Cypher).
-        ranked_ids: list[str] = []
-        rank = getattr(self.store, "rank_symbols_by_degree", None)
-        if callable(rank):
-            try:
-                ranked_ids = [
-                    str(row["symbol_id"])
-                    for row in rank(scope, top_k=max_symbols)
-                    if str(row.get("symbol_id") or "") in related_ids
-                ]
-            except Exception:
-                ranked_ids = []
-
-        ordered_ids = ranked_ids + sorted(related_ids - set(ranked_ids))
+        ordered_ids = sorted(related_ids)
         symbols = []
         for symbol_id in ordered_ids:
             try:

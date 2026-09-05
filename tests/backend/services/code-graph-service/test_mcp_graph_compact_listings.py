@@ -133,3 +133,102 @@ def test_explore_and_callers_use_neighborhood_not_full_edge_scan():
     assert empty.get("symbol")
     impact = service.impact_analysis(SCOPE, seed, max_depth=1, top_k=5)
     assert impact.get("symbol")
+    community = service.community_of_symbol(SCOPE, seed, member_limit=10)
+    assert community.get("symbol")
+    path_pack = service.call_path_pack(SCOPE, seed, max_depth=2)
+    assert path_pack.get("symbol") or path_pack.get("path") or "path_ids" in path_pack
+    unused = service.unused_candidates(SCOPE, scope_mode="task_neighborhood")
+    assert unused.get("candidates") == [] or unused.get("note") == "no_anchor_symbols_or_paths"
+
+
+def test_unused_candidates_without_anchors_skips_catalog_dump():
+    store = InMemoryStore()
+    service = CodeGraphService(store)
+
+    def _boom(_scope):
+        raise AssertionError("unused_candidates must not dump the catalog without anchors")
+
+    store.list_symbols_index = _boom  # type: ignore[method-assign]
+    store.list_symbols_lean = _boom  # type: ignore[method-assign]
+    store.list_symbols = _boom  # type: ignore[method-assign]
+    store.list_edges = _boom  # type: ignore[method-assign]
+    payload = service.unused_candidates(SCOPE, scope_mode="task_neighborhood")
+    assert payload["candidates"] == []
+    assert payload.get("note") == "no_anchor_symbols_or_paths"
+
+
+def test_polyglot_profile_uses_language_counts_not_catalog_dump():
+    store = InMemoryStore()
+    service = CodeGraphService(store)
+
+    def _boom(_scope):
+        raise AssertionError("polyglot must not dump symbols/edges when language_counts exists")
+
+    store.list_symbols_index = _boom  # type: ignore[method-assign]
+    store.list_symbols_lean = _boom  # type: ignore[method-assign]
+    store.list_symbols = _boom  # type: ignore[method-assign]
+    store.list_edges = _boom  # type: ignore[method-assign]
+    store.language_counts = lambda _scope: {  # type: ignore[method-assign]
+        "file_counts": {"python": 4},
+        "symbol_counts": {"python": 12},
+    }
+    profile = service.get_polyglot_profile(SCOPE)
+    assert profile.file_counts_by_language["python"] == 4
+    assert profile.symbol_counts_by_language["python"] == 12
+
+
+def test_architecture_overview_skips_catalog_dump_on_neo4j_scale_path():
+    store = InMemoryStore()
+    service = CodeGraphService(store)
+
+    def _boom(_scope, *_a, **_k):
+        raise AssertionError("architecture_overview must not dump the catalog on Neo4j")
+
+    store.list_symbols_index = _boom  # type: ignore[method-assign]
+    store.list_symbols_lean = _boom  # type: ignore[method-assign]
+    store.list_symbols = _boom  # type: ignore[method-assign]
+    store.list_edges = _boom  # type: ignore[method-assign]
+    store.neighborhood_edges = lambda *_a, **_k: []  # type: ignore[method-assign]
+    store.rank_symbols_by_degree = lambda *_a, **_k: []  # type: ignore[method-assign]
+    overview = service.architecture_overview(SCOPE, top_n=5)
+    assert overview.get("hubs") == [] or overview.get("communities") == [] or "algorithm" in overview
+
+
+def test_generation_context_skips_catalog_dump_when_neighborhood_exists():
+    store = InMemoryStore()
+    service = CodeGraphService(store)
+    ingested = service.ingest_file(
+        SCOPE,
+        "agent",
+        str(uuid4()),
+        "one",
+        {
+            "file_path": "src/auth.py",
+            "language": "python",
+            "source": (
+                "def hash_password(value: str) -> str:\n"
+                "    return value\n"
+                "def login(password: str) -> str:\n"
+                "    return hash_password(password)\n"
+            ),
+        },
+    )
+    frozen_edges = list(store.list_edges(SCOPE))
+    seed = ingested.changed_symbol_ids[0]
+
+    def _boom(_scope, *_a, **_k):
+        raise AssertionError("generation_context must not dump list_edges on Neo4j")
+
+    def _neighborhood(scope, seed_id, **_kwargs):
+        _ = scope
+        return [e for e in frozen_edges if e.source_id == seed_id or e.target_id == seed_id]
+
+    store.list_edges = _boom  # type: ignore[method-assign]
+    store.neighborhood_edges = _neighborhood  # type: ignore[method-assign]
+    store.language_counts = lambda _scope: {  # type: ignore[method-assign]
+        "file_counts": {"python": 1},
+        "symbol_counts": {"python": 2},
+    }
+    ctx = service.build_generation_context(SCOPE, seed, max_symbols=8)
+    assert ctx.get("seed_symbol_id") == seed
+    assert ctx.get("expansion") == "cypher_neighborhood"

@@ -99,7 +99,21 @@ def docs_catalog(
             must_exist=False,
         )
         if pinned:
-            catalog_root = Path(pinned[0]).expanduser().resolve()
+            from code_graph_service.domain.errors import ValidationError
+            from code_graph_service.domain.fs_paths import require_directory
+
+            try:
+                catalog_root = require_directory(pinned[0], label="pinned software path")
+            except ValidationError as exc:
+                return {
+                    **base,
+                    "ok": False,
+                    "error": str(exc.message),
+                    "repo": str(Path(pinned[0]).expanduser()),
+                    "documents": [],
+                    "entries": [],
+                    "stats": {"document_count": 0},
+                }
     catalog = get_docs_catalog(
         catalog_root,
         refresh=refresh or bool(roots),

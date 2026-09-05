@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import hashlib
 import json
 from typing import Any
 
@@ -110,6 +109,38 @@ class Neo4jRetrievalMixin:
             except Exception:
                 return []
         return [{"symbol_id": row["symbol_id"], "score": 1.0, "method": "cypher.name"} for row in rows]
+
+    def language_counts(self, scope: Scope) -> dict[str, dict[str, int]]:
+        """FILE/symbol counts by language without transferring bodies."""
+        file_counts: dict[str, int] = {}
+        symbol_counts: dict[str, int] = {}
+        with self._driver.session(database=self._database) as session:
+            try:
+                rows = list(
+                    session.run(
+                        """
+                        MATCH (n:CodeSymbol)
+                        WHERE n.tenant_id = $tenant_id
+                          AND n.workspace_id = $workspace_id
+                          AND n.project_id = $project_id
+                          AND n.kind IN ['file', 'function', 'method', 'class']
+                        RETURN n.kind AS kind, coalesce(n.language, '') AS language, count(*) AS c
+                        """,
+                        tenant_id=scope.tenant_id,
+                        workspace_id=scope.workspace_id,
+                        project_id=scope.project_id,
+                    )
+                )
+            except Exception:
+                return {"file_counts": file_counts, "symbol_counts": symbol_counts}
+        for row in rows:
+            lang = str(row.get("language") or "").strip() or "unknown"
+            count = int(row.get("c") or 0)
+            if str(row.get("kind") or "") == "file":
+                file_counts[lang] = file_counts.get(lang, 0) + count
+            else:
+                symbol_counts[lang] = symbol_counts.get(lang, 0) + count
+        return {"file_counts": file_counts, "symbol_counts": symbol_counts}
 
     def _fulltext_index_name(self) -> str:
         with self._driver.session(database=self._database) as session:
@@ -244,106 +275,37 @@ class Neo4jRetrievalMixin:
         *,
         top_k: int = 20,
     ) -> list[dict[str, Any]]:
-        """Degree-based importance ranking.
+        """Degree-based importance ranking via Cypher ``count(r)`` (LIMIT top_k).
 
-        Prefers ``gds.degree`` when the GDS *Community* plugin is loaded (no
-        Enterprise license key required). Always falls back to Cypher degree.
-        See docs/07-code-knowledge-graph/32-intentional-fallbacks-and-neo4j-plugin-licensing.md.
+        Full-graph ``gds.graph.project`` + ``gds.degree`` exceeds the MCP HTTP
+        tool budget on large repos; Cypher degree on CALLS-like edges is the
+        same hub metric. Query is time-capped so MCP never waits out ``-32001``.
         """
         top_k = max(1, min(int(top_k), 100))
-        caps = self.capabilities()
-        # Native Cypher projection (gds.graph.project aggregation) — not deprecated
-        # gds.graph.project.cypher. Graph name must be unique per scope for concurrency.
-        graph_name = "cgr_" + hashlib.sha256(self._scope_key(scope).encode()).hexdigest()[:16]
-        with self._driver.session(database=self._database) as session:
-            if caps.get("gds"):
-                try:
-                    session.run(
-                        "CALL gds.graph.drop($graph_name, false) YIELD graphName RETURN graphName",
-                        graph_name=graph_name,
-                    )
-                    session.run(
-                        """
-                        MATCH (source:CodeSymbol)
-                        WHERE source.tenant_id = $tenant_id
-                          AND source.workspace_id = $workspace_id
-                          AND source.project_id = $project_id
-                          AND source.kind <> 'documentation'
-                          AND source.kind <> 'unresolved'
-                          AND source.kind <> 'external'
-                        OPTIONAL MATCH (source)-[:CODE_REL]->(target:CodeSymbol)
-                        WHERE target IS NULL OR (
-                          target.tenant_id = $tenant_id
-                          AND target.workspace_id = $workspace_id
-                          AND target.project_id = $project_id
-                        )
-                        WITH gds.graph.project($graph_name, source, target) AS g
-                        RETURN g.graphName AS graphName
-                        """,
-                        graph_name=graph_name,
-                        tenant_id=scope.tenant_id,
-                        workspace_id=scope.workspace_id,
-                        project_id=scope.project_id,
-                    )
-                    rows = list(
-                        session.run(
-                            """
-                            CALL gds.degree.stream($graph_name, {concurrency: $concurrency})
-                            YIELD nodeId, score
-                            WITH gds.util.asNode(nodeId) AS n, score
-                            RETURN n.id AS id, n.qualified_name AS qualified_name, n.kind AS kind, score
-                            ORDER BY score DESC, qualified_name
-                            LIMIT $top_k
-                            """,
-                            graph_name=graph_name,
-                            concurrency=self._gds_concurrency,
-                            top_k=top_k,
-                        )
-                    )
-                    session.run(
-                        "CALL gds.graph.drop($graph_name, false) YIELD graphName RETURN graphName",
-                        graph_name=graph_name,
-                    )
-                    return [
-                        {
-                            "symbol_id": row["id"],
-                            "qualified_name": row["qualified_name"],
-                            "kind": row["kind"],
-                            "score": float(row["score"]),
-                            "method": "gds.degree",
-                        }
-                        for row in rows
-                    ]
-                except Exception:
-                    try:
-                        session.run(
-                            "CALL gds.graph.drop($graph_name, false) YIELD graphName RETURN graphName",
-                            graph_name=graph_name,
-                        )
-                    except Exception:
-                        pass
-
-            rows = list(
-                session.run(
-                    f"""
-                    MATCH (n:CodeSymbol)
+        cypher = f"""
+                    MATCH (n:CodeSymbol)-[r:{_REL}]->(m:CodeSymbol)
                     WHERE n.tenant_id = $tenant_id
                       AND n.workspace_id = $workspace_id
                       AND n.project_id = $project_id
-                      AND n.kind <> 'documentation'
-                      AND n.kind <> 'unresolved'
-                      AND n.kind <> 'external'
-                    OPTIONAL MATCH (n)-[r:{_REL}]-(m:CodeSymbol)
-                    WHERE m.tenant_id = $tenant_id
+                      AND m.tenant_id = $tenant_id
                       AND m.workspace_id = $workspace_id
                       AND m.project_id = $project_id
+                      AND n.kind IN ['function', 'method', 'class']
+                      AND r.rel_type IN ['CALLS', 'HTTP_CALLS', 'ASYNC_CALLS', 'IMPORTS']
+                    WITH n, count(r) AS score
                     RETURN n.id AS id,
                            n.qualified_name AS qualified_name,
                            n.kind AS kind,
-                           count(r) AS score
+                           score
                     ORDER BY score DESC, qualified_name
                     LIMIT $top_k
-                    """,
+                    """
+        from neo4j import Query
+
+        with self._driver.session(database=self._database) as session:
+            rows = list(
+                session.run(
+                    Query(cypher, timeout=8.0),
                     tenant_id=scope.tenant_id,
                     workspace_id=scope.workspace_id,
                     project_id=scope.project_id,

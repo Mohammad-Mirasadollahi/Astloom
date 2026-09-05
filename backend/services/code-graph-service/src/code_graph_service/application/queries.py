@@ -8,7 +8,11 @@ from ..domain.embeddings import cosine
 from ..domain.errors import NotFoundError, ValidationError
 from ..domain.impact import directed_impact, escalate_hint, rank_callers
 from ..domain.models import GraphSymbol, Scope
-from ..domain.polyglot_profile import PolyglotProjectProfile, build_polyglot_profile
+from ..domain.polyglot_profile import (
+    PolyglotProjectProfile,
+    build_polyglot_profile,
+    build_polyglot_profile_from_counts,
+)
 from ..domain.ports import list_symbols_compact
 from ..domain.rag import (
     DEFAULT_EXPAND_DEPTH,
@@ -34,6 +38,39 @@ class QueryUseCases(GraphServiceSupport):
             except NotFoundError:
                 continue
         return out
+
+    def _subgraph_around_seeds(
+        self,
+        scope: Scope,
+        seed_ids: list[str],
+        *,
+        max_depth: int = 2,
+        rel_types: list[str] | None = None,
+    ) -> tuple[dict[str, GraphSymbol], list[Any]]:
+        """Bounded neighborhood (Cypher when available) — never a full-graph dump."""
+        edges: list[Any] = []
+        seen: set[str] = set()
+        fetch = getattr(self, "_structural_edges_for_seed", None)
+        for sid in seed_ids:
+            if not sid or not callable(fetch):
+                continue
+            for edge in fetch(
+                scope,
+                sid,
+                max_depth=max_depth,
+                direction="both",
+                rel_types=rel_types,
+            ):
+                eid = getattr(edge, "id", None) or f"{edge.source_id}:{edge.rel_type}:{edge.target_id}"
+                if str(eid) in seen:
+                    continue
+                seen.add(str(eid))
+                edges.append(edge)
+        ids = {sid for sid in seed_ids if sid}
+        for edge in edges:
+            ids.add(edge.source_id)
+            ids.add(edge.target_id)
+        return self._symbols_for_ids(scope, ids), edges
 
     def unused_candidates(
         self,
@@ -74,11 +111,17 @@ class QueryUseCases(GraphServiceSupport):
         if not repo_root:
             env_root = str(__import__("os").environ.get("ASTLOOM_ROOT") or "").strip()
             repo_root = env_root or None
-        symbols = list_symbols_compact(self.store, scope)
+        mode = (scope_mode or "").strip()
+        if mode != "project_scan" and not (anchor_symbols or anchor_paths):
+            symbols: list[Any] = []
+            edges: list[Any] = []
+        else:
+            symbols = list_symbols_compact(self.store, scope)
+            edges = self.store.list_edges(scope)
         try:
             payload = find_unused_candidates(
                 symbols,
-                self.store.list_edges(scope),
+                edges,
                 scope_mode=scope_mode,
                 anchor_symbols=anchor_symbols,
                 anchor_paths=anchor_paths,
@@ -157,6 +200,19 @@ class QueryUseCases(GraphServiceSupport):
         return payload
 
     def get_polyglot_profile(self, scope: Scope) -> PolyglotProjectProfile:
+        counter = getattr(self.store, "language_counts", None)
+        if callable(counter):
+            try:
+                rows = counter(scope) or {}
+                files = rows.get("file_counts") if isinstance(rows, dict) else None
+                symbols = rows.get("symbol_counts") if isinstance(rows, dict) else None
+                if isinstance(files, dict) or isinstance(symbols, dict):
+                    return build_polyglot_profile_from_counts(
+                        dict(files or {}),
+                        dict(symbols or {}),
+                    )
+            except Exception:
+                pass
         return build_polyglot_profile(
             list_symbols_compact(self.store, scope), self.store.list_edges(scope)
         )

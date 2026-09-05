@@ -144,6 +144,36 @@ def build_polyglot_profile(
     )
 
 
+def build_polyglot_profile_from_counts(
+    file_counts: dict[str, int],
+    symbol_counts: dict[str, int],
+) -> PolyglotProjectProfile:
+    """Language histogram without loading every symbol/edge into Python."""
+    languages = sorted(
+        {
+            language
+            for language in set(file_counts) | set(symbol_counts)
+            if language and language != "unknown"
+        }
+    )
+    is_polyglot = len(languages) >= 2
+    groups = [[language] for language in languages]
+    relatedness = _relatedness_label(languages, groups, 0)
+    return PolyglotProjectProfile(
+        is_polyglot=is_polyglot,
+        languages=languages,
+        file_counts_by_language={language: int(file_counts.get(language, 0)) for language in languages},
+        symbol_counts_by_language={
+            language: int(symbol_counts.get(language, 0)) for language in languages
+        },
+        language_links=[],
+        related_language_groups=groups,
+        relatedness=relatedness,
+        cross_language_edge_count=0,
+        summary=_summary(is_polyglot, languages, groups, [], relatedness),
+    )
+
+
 def _connected_language_groups(
     languages: list[str],
     adjacency: dict[str, set[str]],

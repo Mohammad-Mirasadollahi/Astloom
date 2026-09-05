@@ -95,6 +95,21 @@ def test_ide_rename_applies_and_reconciles(tmp_path: Path):
     assert "hello" not in names
 
 
+def test_ide_definition_missing_root_is_validation_error(tmp_path: Path):
+    import pytest
+    from code_graph_service.domain.errors import ValidationError
+
+    svc = _svc()
+    missing = tmp_path / "no-such-tree"
+    with pytest.raises(ValidationError, match="does not exist or is not visible"):
+        svc.ide_definition(
+            root_path=str(missing),
+            file_path="a.py",
+            line=0,
+            character=0,
+        )
+
+
 def test_ide_tools_unavailable_without_factory_or_ls(tmp_path: Path, monkeypatch):
     monkeypatch.setenv("ASTLOOM_LSP_EDIT_SESSION", "0")
     root = tmp_path

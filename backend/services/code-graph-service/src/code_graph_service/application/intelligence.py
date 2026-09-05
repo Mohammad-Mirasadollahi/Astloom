@@ -168,26 +168,6 @@ class IntelligenceUseCases(GraphServiceSupport):
             return None
         return str(meta.updated_at or meta.body or "") or None
 
-    def _community_map(self, scope: Scope) -> dict[str, int]:
-        symbols = [
-            s
-            for s in list_symbols_compact(self.store, scope)
-            if s.kind in {SymbolKind.FUNCTION, SymbolKind.METHOD, SymbolKind.CLASS}
-        ]
-        edges = [
-            (e.source_id, e.target_id, e.rel_type)
-            for e in self.store.list_edges(scope)
-            if e.rel_type not in {RelType.CALLS.value, "CALLS"}
-            or is_blast_call_edge(
-                target_id=e.target_id,
-                metadata=e.metadata,
-                confidence=e.confidence,
-            )
-        ]
-        labels = {s.id: s.name for s in symbols}
-        communities = detect_communities([s.id for s in symbols], edges, labels_by_id=labels)
-        return {mid: c.id for c in communities for mid in c.member_ids}
-
     def community_of_symbol(
         self,
         scope: Scope,
@@ -200,15 +180,23 @@ class IntelligenceUseCases(GraphServiceSupport):
 
         symbol = self.store.get_symbol(symbol_id, scope)
         member_limit = max(1, min(int(member_limit), 200))
-        symbols = [
-            s
-            for s in list_symbols_compact(self.store, scope)
-            if s.kind in {SymbolKind.FUNCTION, SymbolKind.METHOD, SymbolKind.CLASS, SymbolKind.ROUTE}
-        ]
-        by_id = {s.id: s for s in symbols}
-        edges = [
+        by_id, graph_edges = self._subgraph_around_seeds(
+            scope,
+            [symbol.id],
+            max_depth=2,
+            rel_types=[
+                RelType.CALLS.value,
+                RelType.HTTP_CALLS.value,
+                RelType.ASYNC_CALLS.value,
+                RelType.IMPORTS.value,
+                RelType.INHERITS_FROM.value,
+                RelType.ROUTES_TO.value,
+            ],
+        )
+        by_id.setdefault(symbol.id, symbol)
+        edge_triples = [
             (e.source_id, e.target_id, e.rel_type)
-            for e in self.store.list_edges(scope)
+            for e in graph_edges
             if e.rel_type not in {RelType.CALLS.value, "CALLS"}
             or is_blast_call_edge(
                 target_id=e.target_id,
@@ -216,35 +204,26 @@ class IntelligenceUseCases(GraphServiceSupport):
                 confidence=e.confidence,
             )
         ]
-        labels = {s.id: s.name for s in symbols}
-        communities = detect_communities([s.id for s in symbols], edges, labels_by_id=labels)
+        labels = {s.id: s.name for s in by_id.values()}
+        communities = detect_communities(list(by_id), edge_triples, labels_by_id=labels)
         community_map = {mid: c for c in communities for mid in c.member_ids}
         community = community_map.get(symbol.id)
-        if community is None:
-            # Seed may be file/import — try any symbol id in full map
-            all_ids = [s.id for s in list_symbols_compact(self.store, scope)]
-            all_edges = [
-                (e.source_id, e.target_id, e.rel_type)
-                for e in self.store.list_edges(scope)
-                if e.rel_type not in {RelType.CALLS.value, "CALLS"}
-                or is_blast_call_edge(
-                    target_id=e.target_id,
-                    metadata=e.metadata,
-                    confidence=e.confidence,
-                )
-            ]
-            all_labels = {s.id: s.name for s in list_symbols_compact(self.store, scope)}
-            communities = detect_communities(all_ids, all_edges, labels_by_id=all_labels)
-            community_map = {mid: c for c in communities for mid in c.member_ids}
-            community = community_map.get(symbol.id)
-            by_id = {s.id: s for s in list_symbols_compact(self.store, scope)}
         if community is None:
             payload = {
                 "symbol": self._symbol_view(symbol),
                 "community_id": None,
                 "label": None,
-                "size": 0,
-                "members": [],
+                "size": 1 if by_id else 0,
+                "members": [
+                    {
+                        "symbol_id": symbol.id,
+                        "qualified_name": symbol.qualified_name,
+                        "kind": symbol.kind.value,
+                        "file_path": symbol.file_path,
+                    }
+                ]
+                if by_id
+                else [],
                 "algorithm": last_community_algorithm(),
                 "escalate_hint": escalate_hint(sparse=True),
             }
@@ -485,20 +464,21 @@ class IntelligenceUseCases(GraphServiceSupport):
         symbol = self.store.get_symbol(symbol_id, scope)
         max_depth = max(1, min(int(max_depth), 8))
         max_nodes = max(2, min(int(max_nodes), 200))
-        symbols = {
-            s.id: s
-            for s in list_symbols_compact(self.store, scope)
-            if s.kind
-            in {SymbolKind.FUNCTION, SymbolKind.METHOD, SymbolKind.CLASS, SymbolKind.ROUTE}
-        }
-        calls_out: dict[str, list[str]] = defaultdict(list)
-        structural_rels = {
+        structural_rels = [
             RelType.CALLS.value,
             RelType.HTTP_CALLS.value,
             RelType.ASYNC_CALLS.value,
-        }
-        for edge in self.store.list_edges(scope):
-            if edge.rel_type not in structural_rels:
+        ]
+        by_id, graph_edges = self._subgraph_around_seeds(
+            scope,
+            [symbol.id],
+            max_depth=max_depth,
+            rel_types=structural_rels,
+        )
+        by_id.setdefault(symbol.id, symbol)
+        calls_out: dict[str, list[str]] = defaultdict(list)
+        for edge in graph_edges:
+            if edge.rel_type not in set(structural_rels):
                 continue
             if edge.rel_type == RelType.CALLS.value and not is_blast_call_edge(
                 target_id=edge.target_id,
@@ -507,6 +487,12 @@ class IntelligenceUseCases(GraphServiceSupport):
             ):
                 continue
             calls_out[edge.source_id].append(edge.target_id)
+        symbols = {
+            sid: s
+            for sid, s in by_id.items()
+            if s.kind
+            in {SymbolKind.FUNCTION, SymbolKind.METHOD, SymbolKind.CLASS, SymbolKind.ROUTE}
+        }
         flow_nodes = {
             i: FlowNode(
                 id=s.id,
@@ -720,10 +706,43 @@ class IntelligenceUseCases(GraphServiceSupport):
         return payload
 
     def architecture_overview(self, scope: Scope, *, top_n: int = 10) -> dict[str, Any]:
-        symbols = list(list_symbols_compact(self.store, scope))
+        rank = getattr(self.store, "rank_symbols_by_degree", None)
+        ranked_rows = None
+        if callable(rank):
+            try:
+                ranked_rows = list(rank(scope, top_k=max(int(top_n), 10) * 3) or [])
+            except Exception:
+                ranked_rows = None
+        if ranked_rows:
+            seed_ids = [
+                str(row.get("id") or row.get("symbol_id") or "")
+                for row in ranked_rows
+                if row.get("id") or row.get("symbol_id")
+            ]
+            by_id, edges = self._subgraph_around_seeds(
+                scope,
+                seed_ids,
+                max_depth=1,
+                rel_types=[
+                    RelType.CALLS.value,
+                    RelType.HTTP_CALLS.value,
+                    RelType.ASYNC_CALLS.value,
+                    RelType.TESTED_BY.value,
+                    RelType.ROUTES_TO.value,
+                    RelType.IMPORTS.value,
+                ],
+            )
+            symbols = list(by_id.values())
+        elif callable(getattr(self.store, "neighborhood_edges", None)):
+            # Neo4j scale path: never dump the catalog when hub ranking is empty.
+            symbols = []
+            edges = []
+        else:
+            symbols = list(list_symbols_compact(self.store, scope))
+            edges = list(self.store.list_edges(scope))
         edges = [
             edge
-            for edge in self.store.list_edges(scope)
+            for edge in edges
             if edge.rel_type not in {RelType.CALLS.value, "CALLS"}
             or is_blast_call_edge(
                 target_id=edge.target_id,
@@ -801,9 +820,11 @@ class IntelligenceUseCases(GraphServiceSupport):
         def resolve(token: str) -> str:
             if self._maybe_get(token, scope) is not None:
                 return token
-            for s in list_symbols_compact(self.store, scope):
-                if s.qualified_name == token or s.name == token:
-                    return s.id
+            lookup = getattr(self.store, "get_symbol_by_qualified_name", None)
+            if callable(lookup):
+                found = lookup(scope, token)
+                if found is not None:
+                    return found.id
             raise ValidationError(f"symbol not found: {token}")
 
         start = resolve(start_id)
@@ -819,7 +840,10 @@ class IntelligenceUseCases(GraphServiceSupport):
             except Exception:
                 path = []
         if not path:
-            undirected = [(e.source_id, e.target_id) for e in self.store.list_edges(scope)]
+            by_id, graph_edges = self._subgraph_around_seeds(
+                scope, [start, end], max_depth=min(max_depth, 4)
+            )
+            undirected = [(e.source_id, e.target_id) for e in graph_edges]
             path = shortest_path(start, end, undirected, max_depth=max_depth)
             method = "in_memory_bfs"
         views = []
@@ -848,9 +872,60 @@ class IntelligenceUseCases(GraphServiceSupport):
         if not changed_files:
             raise ValidationError("changed_files is required")
         changed_norm = {f.replace("\\", "/") for f in changed_files}
-        symbols = list(list_symbols_compact(self.store, scope))
-        edges = list(self.store.list_edges(scope))
-        community_map = self._community_map(scope)
+        lister = getattr(self.store, "list_symbols_for_file", None)
+        changed_syms: list[Any] = []
+        if callable(lister):
+            for path in changed_norm:
+                changed_syms.extend(lister(scope, path) or [])
+        else:
+            changed_syms = [
+                s
+                for s in list_symbols_compact(self.store, scope)
+                if s.file_path.replace("\\", "/") in changed_norm
+            ]
+        changed_syms = [
+            s
+            for s in changed_syms
+            if s.kind in {SymbolKind.FUNCTION, SymbolKind.METHOD, SymbolKind.CLASS}
+        ]
+        seed_ids = [s.id for s in changed_syms]
+        by_id, edges = self._subgraph_around_seeds(
+            scope,
+            seed_ids,
+            max_depth=2,
+            rel_types=[
+                RelType.CALLS.value,
+                RelType.HTTP_CALLS.value,
+                RelType.ASYNC_CALLS.value,
+                RelType.TESTED_BY.value,
+                RelType.ROUTES_TO.value,
+            ],
+        )
+        for sym in changed_syms:
+            by_id.setdefault(sym.id, sym)
+        labels = {
+            s.id: s.name
+            for s in by_id.values()
+            if s.kind in {SymbolKind.FUNCTION, SymbolKind.METHOD, SymbolKind.CLASS}
+        }
+        community_map = {
+            mid: c.id
+            for c in detect_communities(
+                list(labels),
+                [
+                    (e.source_id, e.target_id, e.rel_type)
+                    for e in edges
+                    if e.rel_type not in {RelType.CALLS.value, "CALLS"}
+                    or is_blast_call_edge(
+                        target_id=e.target_id,
+                        metadata=e.metadata,
+                        confidence=e.confidence,
+                    )
+                ],
+                labels_by_id=labels,
+            )
+            for mid in c.member_ids
+        }
 
         calls_out: dict[str, list[str]] = defaultdict(list)
         callers_of: dict[str, list[str]] = defaultdict(list)
@@ -869,13 +944,6 @@ class IntelligenceUseCases(GraphServiceSupport):
             elif edge.rel_type in {RelType.ROUTES_TO.value, "ROUTES_TO"}:
                 route_handlers.add(edge.target_id)
 
-        changed_syms = [
-            s
-            for s in symbols
-            if s.file_path.replace("\\", "/") in changed_norm
-            and s.kind in {SymbolKind.FUNCTION, SymbolKind.METHOD, SymbolKind.CLASS}
-        ]
-
         flow_nodes = {
             s.id: FlowNode(
                 id=s.id,
@@ -885,7 +953,7 @@ class IntelligenceUseCases(GraphServiceSupport):
                 signature=s.signature,
                 body=s.body,
             )
-            for s in symbols
+            for s in by_id.values()
             if s.kind in {SymbolKind.FUNCTION, SymbolKind.METHOD}
         }
         call_pairs = [

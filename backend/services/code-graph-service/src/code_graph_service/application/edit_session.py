@@ -13,6 +13,7 @@ from ..domain.edit_session import (
 )
 from ..domain.edit_session.servers import normalize_edit_language
 from ..domain.errors import ValidationError
+from ..domain.fs_paths import require_directory
 from ..domain.languages import detect_language_from_path
 from ..domain.models import Scope
 from ..domain.parsing_authority import SESSION_EDGE_REFERENCE_KIND
@@ -51,6 +52,7 @@ class EditSessionUseCases(GraphServiceSupport):
         character: int,
         language: str = "",
     ) -> dict[str, Any]:
+        root_path = str(require_directory(root_path, label="root_path"))
         lang = normalize_edit_language(
             language or detect_language_from_path(file_path) or "",
             file_path,
@@ -82,6 +84,7 @@ class EditSessionUseCases(GraphServiceSupport):
         character: int,
         language: str = "",
     ) -> dict[str, Any]:
+        root_path = str(require_directory(root_path, label="root_path"))
         lang = normalize_edit_language(
             language or detect_language_from_path(file_path) or "",
             file_path,
@@ -120,6 +123,7 @@ class EditSessionUseCases(GraphServiceSupport):
         idempotency_key: str = "",
         run_sync: bool = True,
     ) -> dict[str, Any]:
+        root_path = str(require_directory(root_path, label="root_path"))
         lang = normalize_edit_language(
             language or detect_language_from_path(file_path) or "",
             file_path,

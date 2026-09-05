@@ -118,7 +118,22 @@ def build_symbol_doc_coverage(
     file_id = f"file:{scope.project_id}:{seed.file_path}"
     seen_neighbor_ids: set[str] = set()
 
-    for edge in store.list_edges(scope):
+    fetch = getattr(store, "neighborhood_edges", None)
+    if callable(fetch):
+        try:
+            edges_iter = fetch(
+                scope,
+                seed.id,
+                max_depth=1,
+                direction="both",
+                rel_types=list(_AST_REL_TYPES) + [RelType.DOCUMENTED_BY.value],
+            )
+        except Exception:
+            edges_iter = []
+    else:
+        edges_iter = store.list_edges(scope)
+
+    for edge in edges_iter:
         rel = str(getattr(edge, "rel_type", "") or "")
         source_id = str(getattr(edge, "source_id", "") or "")
         target_id = str(getattr(edge, "target_id", "") or "")
