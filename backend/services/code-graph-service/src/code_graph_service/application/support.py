@@ -13,9 +13,11 @@ from ..domain.external_calls import is_external_call_id
 from ..domain.hashing import digest, now_iso
 from ..domain.models import GraphEdge, GraphSymbol, Scope
 from ..domain.parsing_authority import assert_durable_edge_metadata_allowed
-from ..domain.ports import Store
+from ..domain.ports import Store, list_file_symbols_compact
 from ..domain.rag import SEARCHABLE_SYMBOL_KINDS
 from ..postgres_side import EmbeddingIndex
+
+EMBEDDING_HEAL_PENDING = "embedding_heal_pending"
 
 
 def unresolved_symbol_id(scope: Scope, call: str) -> str:
@@ -86,6 +88,49 @@ class GraphServiceSupport:
                 pass
             return
 
+    def _stamp_embedding_heal_pending(self, scope: Scope, file_path: str) -> None:
+        """Mark a FILE so later syncs retry embeddings without a full-project heal."""
+        path = str(file_path or "").replace("\\", "/").strip()
+        if not path:
+            return
+        file_id = f"file:{scope.project_id}:{path}"
+        current = self._maybe_get(file_id, scope)
+        if current is None:
+            return
+        meta = dict(current.metadata or {})
+        if meta.get(EMBEDDING_HEAL_PENDING):
+            return
+        meta[EMBEDDING_HEAL_PENDING] = True
+        current.metadata = meta
+        self.store.put_symbol(current)
+
+    def _clear_embedding_heal_pending(self, scope: Scope, file_path: str) -> None:
+        path = str(file_path or "").replace("\\", "/").strip()
+        if not path:
+            return
+        file_id = f"file:{scope.project_id}:{path}"
+        current = self._maybe_get(file_id, scope)
+        if current is None:
+            return
+        meta = dict(current.metadata or {})
+        if not meta.get(EMBEDDING_HEAL_PENDING):
+            return
+        meta.pop(EMBEDDING_HEAL_PENDING, None)
+        current.metadata = meta
+        self.store.put_symbol(current)
+
+    def _embedding_heal_pending_paths(self, scope: Scope) -> list[str]:
+        out: list[str] = []
+        seen: set[str] = set()
+        for symbol in list_file_symbols_compact(self.store, scope):
+            if not (symbol.metadata or {}).get(EMBEDDING_HEAL_PENDING):
+                continue
+            path = str(symbol.file_path or "").replace("\\", "/").strip()
+            if path and path not in seen:
+                seen.add(path)
+                out.append(path)
+        return out
+
     def _index_embedding(
         self,
         scope: Scope,
@@ -103,6 +148,8 @@ class GraphServiceSupport:
             if callable(deleter):
                 deleter(scope, symbol_id)
             self._sync_vector_replica_delete(symbol_id)
+            return
+        if not vector:
             return
         self.embedding_index.upsert(
             scope,

@@ -31,8 +31,9 @@ related_docs:
 - as.doc.ckg.postgres-connection-pool-and-capacity-lld
 - as.doc.stack.turbovec-ann-acceleration
 - as.doc.stack.turbovec-for-rag
-doc_version: 1.4.0
-updated_at: '2026-09-03'
+- as.doc.ckg.embedding-retry-and-self-heal
+doc_version: 1.4.1
+updated_at: '2026-09-09'
 ---
 
 # 12 - LiteLLM Environment Configuration
@@ -301,6 +302,17 @@ ASTLOOM_LITELLM_DEFAULT_MODEL=gpt-4o-mini
 | **If lowered (e.g. 30)** | Hung providers fail faster; long doc generations may abort. |
 | **If raised (e.g. 600)** | Slow models finish more often; workers can block longer under load. |
 | **If ≤ 0** | Startup validation error. |
+
+### `ASTLOOM_EMBED_TIMEOUT_SECONDS`
+
+| | |
+| --- | --- |
+| **Purpose** | Wall-clock timeout (seconds) around **one** hosted embedding HTTP batch in `HybridEmbeddings`, not the whole file's `embed_many` list. |
+| **Default** | `180` (hard cap 180) |
+| **If lowered (e.g. 60)** | Large batches abort while LiteLLM's own deadline is still 180s; historically produced `embedding call timed out after 60.0s` and `files_failed`. Prefer keeping this aligned with `ASTLOOM_LITELLM_TIMEOUT_SECONDS`. |
+| **If raised** | Cannot exceed 180; raise LiteLLM timeout first if the provider is slower. |
+
+Normative retry/self-heal: [`84` embedding retry and self-heal](../07-code-knowledge-graph/84-embedding-retry-and-self-heal.md).
 
 ### `ASTLOOM_LITELLM_NUM_RETRIES`
 

@@ -216,3 +216,68 @@ def test_hybrid_embed_many_pools_chunks_without_dropping_tail(monkeypatch) -> No
     assert len(rows) == 1
     assert "".join(seen) == long
     assert len(seen) > 1
+
+
+def test_hybrid_embed_many_sends_http_sized_batches(monkeypatch) -> None:
+    monkeypatch.setenv("ASTLOOM_LITELLM_EMBEDDINGS_ENABLED", "true")
+    monkeypatch.setenv("ASTLOOM_LITELLM_MODEL_EMBED", "openrouter/baai/bge-large-en-v1.5")
+    from llm_gateway.routing import clear_routing_profile_cache
+
+    clear_routing_profile_cache()
+    sizes: list[int] = []
+
+    class _RecordBatch:
+        def embed_many(self, texts: list[str], *, model: str | None = None):
+            sizes.append(len(texts))
+            return [
+                SimpleNamespace(vector=[0.1] * 8, model=model or "embed-ok")
+                for _ in texts
+            ]
+
+    monkeypatch.setattr(
+        "code_graph_service.llm_wiring._embed_http_batch_size", lambda: 2
+    )
+    emb = HybridEmbeddings(
+        gateway=_RecordBatch(),
+        local=None,
+        stub=LocalEmbeddingStub(dims=8),
+        dims=8,
+        settings=SimpleNamespace(enabled=True, default_model="x"),
+    )
+    rows = emb.embed_many(["a", "b", "c", "d", "e"])
+    assert len(rows) == 5
+    assert sizes == [2, 2, 1]
+
+
+def test_hybrid_embed_many_splits_batch_after_timeout(monkeypatch) -> None:
+    monkeypatch.setenv("ASTLOOM_LITELLM_EMBEDDINGS_ENABLED", "true")
+    monkeypatch.setenv("ASTLOOM_LITELLM_MODEL_EMBED", "openrouter/baai/bge-large-en-v1.5")
+    from llm_gateway.routing import clear_routing_profile_cache
+
+    clear_routing_profile_cache()
+    seen: list[int] = []
+
+    class _TimeoutThenOk:
+        def embed_many(self, texts: list[str], *, model: str | None = None):
+            seen.append(len(texts))
+            if len(texts) > 1:
+                raise TimeoutError("embedding call timed out after 60.0s")
+            return [
+                SimpleNamespace(vector=[0.1] * 8, model=model or "embed-ok")
+                for _ in texts
+            ]
+
+    monkeypatch.setattr(
+        "code_graph_service.llm_wiring._embed_http_batch_size", lambda: 4
+    )
+    emb = HybridEmbeddings(
+        gateway=_TimeoutThenOk(),
+        local=None,
+        stub=LocalEmbeddingStub(dims=8),
+        dims=8,
+        settings=SimpleNamespace(enabled=True, default_model="x"),
+    )
+    rows = emb.embed_many(["a", "b"])
+    assert len(rows) == 2
+    assert seen[0] == 2
+    assert seen[1:] == [1, 1]

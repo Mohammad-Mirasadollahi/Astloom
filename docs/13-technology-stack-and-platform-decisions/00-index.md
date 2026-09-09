@@ -47,7 +47,7 @@ This section defines the preferred technology stack for Astloom. The goal is to 
 - `11-turbovec-for-rag.md` is the engineer/agent guide for using turbovec in RAG (IdMapIndex lifecycle, hybrid allowlist, bit-width, persistence, fallback).
 - `12-litellm-environment-configuration.md` is the operator reference for every LiteLLM/code-graph env variable (defaults, change impact, examples).
 - `13-storage-ownership-matrix.md` pins authoritative store and owning service per entity/event class (closes GAP-001).
-- `14-embedding-lifecycle-and-refresh.md` is the ADR for embedding regenerate triggers, model-change scoped re-embed, job states, tenant isolation, pgvector SoR (`vector(1024)`), and TurboVec replica sync after SoR write (closes GAP-T03).
+- `14-embedding-lifecycle-and-refresh.md` is the ADR for embedding regenerate triggers, model-change scoped re-embed, job states, tenant isolation, pgvector SoR (`vector(1024)`), TurboVec replica sync after SoR write (closes GAP-T03), and FILE `embedding_heal_pending` self-heal (see CKG `84`).
 
 ## Mandatory Baseline
 

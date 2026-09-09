@@ -124,25 +124,53 @@ class EmbeddingRefreshMixin:
                 reasons={"mode": 1},
             )
         if mode_norm == "full" or _env_truthy("ASTLOOM_EMBEDDING_REFRESH_FULL"):
-            return self.refresh_embeddings(
+            return self._refresh_embeddings_with_retry(
                 scope,
                 force=False,
                 on_progress=on_progress,
                 policy_path=policy_path,
             )
-        if paths:
-            return self.refresh_embeddings(
+        pending_heal = self._embedding_heal_pending_paths(scope)
+        cap = max(0, _env_int("ASTLOOM_EMBEDDING_REFRESH_MAX_PENDING", 256))
+        if cap and len(pending_heal) > cap:
+            pending_heal = sorted(pending_heal)[:cap]
+        merged: list[str] = []
+        seen: set[str] = set()
+        for path in [*paths, *pending_heal]:
+            if path not in seen:
+                seen.add(path)
+                merged.append(path)
+        if merged:
+            return self._refresh_embeddings_with_retry(
                 scope,
-                file_paths=paths,
+                file_paths=merged,
                 on_progress=on_progress,
                 policy_path=policy_path,
             )
-        return self.refresh_embeddings(
+        return self._refresh_embeddings_with_retry(
             scope,
-            max_pending=max(0, _env_int("ASTLOOM_EMBEDDING_REFRESH_MAX_PENDING", 256)),
+            max_pending=cap,
             on_progress=on_progress,
             policy_path=policy_path,
         )
+
+    def _refresh_embeddings_with_retry(self, scope: Any, **kwargs: Any) -> RefreshReport:
+        import time
+
+        from ..llm_wiring import _embed_retry_sleep_seconds, _is_transient_embed_error
+
+        last: RefreshReport | None = None
+        for attempt in range(3):
+            report = self.refresh_embeddings(scope, **kwargs)
+            last = report
+            state = str(getattr(report, "state", "complete") or "complete")
+            if state != "failed":
+                return report
+            err = RuntimeError(str(getattr(report, "error", None) or "embedding refresh failed"))
+            if not _is_transient_embed_error(err) or attempt >= 2:
+                return report
+            time.sleep(_embed_retry_sleep_seconds(attempt))
+        return last or RefreshReport(policy_id="unknown", target_model="", state="failed")
 
     def refresh_embeddings(
         self,
@@ -308,18 +336,34 @@ class EmbeddingRefreshMixin:
             ]
 
             def _embed_chunk(chunk: list[tuple[Any, str, str, str]]):
-                texts = [item[2] for item in chunk]
-                results = (
-                    list(batch(texts))
-                    if callable(batch)
-                    else [self.embeddings.embed(text) for text in texts]
+                import time
+
+                from ..llm_wiring import (
+                    _embed_retry_sleep_seconds,
+                    _is_transient_embed_error,
                 )
-                if len(results) != len(chunk):
-                    raise RuntimeError(
-                        "embedding batch returned "
-                        f"{len(results)} results for {len(chunk)} symbols"
-                    )
-                return chunk, results
+
+                last_exc: BaseException | None = None
+                for attempt in range(3):
+                    try:
+                        texts = [item[2] for item in chunk]
+                        results = (
+                            list(batch(texts))
+                            if callable(batch)
+                            else [self.embeddings.embed(text) for text in texts]
+                        )
+                        if len(results) != len(chunk):
+                            raise RuntimeError(
+                                "embedding batch returned "
+                                f"{len(results)} results for {len(chunk)} symbols"
+                            )
+                        return chunk, results
+                    except Exception as exc:  # noqa: BLE001 — retry transient per chunk
+                        last_exc = exc
+                        if not _is_transient_embed_error(exc) or attempt >= 2:
+                            break
+                        time.sleep(_embed_retry_sleep_seconds(attempt))
+                raise last_exc or RuntimeError("embedding chunk failed")
 
             try:
                 configured_workers = int(
@@ -344,13 +388,23 @@ class EmbeddingRefreshMixin:
                 report.state = "complete"
                 _progress(done=0, total=0, status="finished", workers=0)
                 return report
+            indexed_ids: set[str] = set()
+            chunk_failures = 0
             with ThreadPoolExecutor(
                 max_workers=workers,
                 thread_name_prefix="embedding-refresh",
             ) as executor:
                 futures = [executor.submit(_embed_chunk, chunk) for chunk in chunks]
-                completed = (future.result() for future in as_completed(futures))
-                for chunk, results in completed:
+                for future in as_completed(futures):
+                    try:
+                        chunk, results = future.result()
+                    except Exception as exc:  # noqa: BLE001 — keep other chunks; heal later
+                        chunk_failures += 1
+                        report.reasons["embed_chunk_retry_exhausted"] = (
+                            report.reasons.get("embed_chunk_retry_exhausted", 0) + 1
+                        )
+                        report.error = f"{type(exc).__name__}: {exc}"
+                        continue
                     for (symbol, kind, _text, reason), result in zip(
                         chunk,
                         results,
@@ -362,6 +416,7 @@ class EmbeddingRefreshMixin:
                             list(result.vector),
                             kind=kind,
                         )
+                        indexed_ids.add(str(symbol.id))
                         report.refreshed += 1
                         if reason:
                             report.reasons[reason] = report.reasons.get(reason, 0) + 1
@@ -372,7 +427,26 @@ class EmbeddingRefreshMixin:
                         workers=workers,
                         in_flight=max(0, len(futures) - sum(1 for f in futures if f.done())),
                     )
-            report.state = "complete"
+            live_models = dict(models)
+            for symbol_id in indexed_ids:
+                live_models[symbol_id] = target_model
+            for path in scoped_paths:
+                file_syms = [
+                    symbol
+                    for symbol in symbols
+                    if str(getattr(symbol, "file_path", "") or "").replace("\\", "/")
+                    == path
+                    and str(getattr(symbol.kind, "value", symbol.kind) or "")
+                    in SEARCHABLE_SYMBOL_KINDS
+                ]
+                if file_syms and all(str(symbol.id) in live_models for symbol in file_syms):
+                    self._clear_embedding_heal_pending(scope, path)
+            if chunk_failures and report.refreshed == 0:
+                report.state = "failed"
+            else:
+                report.state = "complete"
+                if chunk_failures:
+                    report.error = None
             _progress(
                 done=report.refreshed,
                 total=total_pending,

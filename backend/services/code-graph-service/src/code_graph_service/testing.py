@@ -103,11 +103,17 @@ class InMemoryStore:
         return any(self._same_project(item.scope, scope) for item in self._symbols.values())
 
     def list_file_symbols_index(self, scope: Scope) -> list[GraphSymbol]:
-        return [
-            s
-            for s in self.list_symbols_index(scope)
-            if s.kind == SymbolKind.FILE
-        ]
+        symbols = self.list_symbols(scope)
+        out: list[GraphSymbol] = []
+        for sym in symbols:
+            if sym.kind != SymbolKind.FILE:
+                continue
+            item = deepcopy(sym)
+            item.ai_documentation = ""
+            item.body = ""
+            item.embedding = []
+            out.append(item)
+        return out
 
     def content_hash_maps(self, scope: Scope) -> tuple[dict[str, str], dict[str, str]]:
         from .domain.structural_integrity import file_content_hash_publishable

@@ -36,6 +36,49 @@ class FileSymbolsMixin:
             updated += 1
         return updated
 
+    def _defer_embedding(self, exc: BaseException) -> None:
+        print(f"   !  embedding deferred ({type(exc).__name__}): {str(exc)[:160]}")
+
+    def _call_embed_with_retry(self, fn: Any) -> Any:
+        from ...llm_wiring import _embed_retry_sleep_seconds, _is_transient_embed_error
+        import time
+
+        last_exc: BaseException | None = None
+        for attempt in range(3):
+            try:
+                return fn()
+            except Exception as exc:  # noqa: BLE001 — retry transient, then caller defers
+                last_exc = exc
+                if not _is_transient_embed_error(exc) or attempt >= 2:
+                    raise
+                time.sleep(_embed_retry_sleep_seconds(attempt))
+        raise last_exc or RuntimeError("embedding retry exhausted")
+
+    def _embed_one_or_defer(self, text: str) -> list[float]:
+        try:
+            return list(self._call_embed_with_retry(lambda: self.embeddings.embed(text)).vector)
+        except Exception as exc:  # noqa: BLE001 — keep graph; refresh heals embeddings
+            self._defer_embedding(exc)
+            return []
+
+    def _embed_many_or_defer(self, texts: list[str]) -> list[Any]:
+        if not texts:
+            return []
+        batch = getattr(self.embeddings, "embed_many", None)
+
+        def _run() -> list[Any]:
+            return (
+                list(batch(texts))
+                if callable(batch)
+                else [self.embeddings.embed(text) for text in texts]
+            )
+
+        try:
+            return self._call_embed_with_retry(_run)
+        except Exception as exc:  # noqa: BLE001 — keep graph; refresh heals embeddings
+            self._defer_embedding(exc)
+            return []
+
     def _upsert_file_symbol(
         self,
         scope: Scope,
@@ -67,18 +110,25 @@ class FileSymbolsMixin:
                 else []
             )
             reused_embedding = bool(file_embedding)
+        elif reused_embedding and previous_file is not None:
+            file_embedding = list(previous_file.embedding)
         else:
-            file_embedding = (
-                list(previous_file.embedding)
-                if reused_embedding and previous_file is not None
-                else list(self.embeddings.embed(file_path).vector)
-            )
+            file_embedding = self._embed_one_or_defer(file_path)
         confidence = 0.9 if ai_documentation else 0.7
+        from ..support import EMBEDDING_HEAL_PENDING
+
+        extra_meta: dict[str, Any] = {
+            "hash_version": hash_version,
+            "parser_version": parser_version,
+        }
+        if (
+            not skip_embeddings
+            and not reused_embedding
+            and not file_embedding
+        ):
+            extra_meta[EMBEDDING_HEAL_PENDING] = True
         meta = merge_code_metadata(
-            {
-                "hash_version": hash_version,
-                "parser_version": parser_version,
-            },
+            extra_meta,
             build_file_metadata_record(
                 file_id=file_id,
                 project_id=scope.project_id,
@@ -358,24 +408,19 @@ class FileSymbolsMixin:
             _progress(symbols_done=len(changed_ids), status="documented")
 
         texts = [text for _, text in embedding_requests]
-        batch = getattr(self.embeddings, "embed_many", None)
-        results = (
-            (
-                list(batch(texts))
-                if callable(batch)
-                else [self.embeddings.embed(text) for text in texts]
+        results = self._embed_many_or_defer(texts) if texts else []
+        if results and len(results) != len(embedding_requests):
+            print(
+                "   !  embedding deferred: batch size mismatch "
+                f"({len(results)} != {len(embedding_requests)})"
             )
-            if texts
-            else []
-        )
-        if len(results) != len(embedding_requests):
-            raise RuntimeError(
-                "embedding batch returned "
-                f"{len(results)} results for {len(embedding_requests)} symbols"
-            )
-        for (symbol, _), result in zip(embedding_requests, results, strict=True):
-            symbol.embedding = list(result.vector)
-            generated_embedding_ids.add(symbol.id)
+            results = []
+        if results:
+            for (symbol, _), result in zip(embedding_requests, results, strict=True):
+                symbol.embedding = list(result.vector)
+                generated_embedding_ids.add(symbol.id)
+        elif embedding_requests:
+            self._stamp_embedding_heal_pending(scope, file_path)
         if embedding_requests:
             _progress(symbols_done=len(changed_ids), status="embedded")
 

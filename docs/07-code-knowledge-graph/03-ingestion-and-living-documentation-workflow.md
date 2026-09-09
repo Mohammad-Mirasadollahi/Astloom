@@ -25,8 +25,11 @@ linked_symbols:
 - backend/services/code-graph-service/src/code_graph_service/application/ingest/human_docs.py::HumanDocIngestMixin
 - backend/services/code-graph-service/src/code_graph_service/domain/symbol_resolve.py::resolve_linked_symbol
 - backend/services/code-graph-service/src/code_graph_service/domain/doc_discovery.py::discover_documentation_files
-doc_version: 1.1.1
-updated_at: '2026-09-03'
+related_docs:
+- as.doc.ckg.embedding-retry-and-self-heal
+- as.doc.ckg.sync-embedding-heal-runbook
+doc_version: 1.1.2
+updated_at: '2026-09-09'
 ---
 
 # Ingestion and Living Documentation Workflow
@@ -241,7 +244,10 @@ Loads a user record by ID, validates that the record exists, and returns a norma
 
 - If parsing fails, store an indexing failure and do not delete existing graph data.
 - If AI documentation fails, upsert the symbol with `doc_status = PENDING`.
-- If embedding fails, keep graph structure and schedule embedding retry.
+- If embedding fails after transient retries, keep graph structure, leave embeddings empty
+  (do not write a stub pgvector row), stamp FILE `embedding_heal_pending`, and let
+  after-ingest refresh plus later `touched` sync self-heal
+  ([`84`](./84-embedding-retry-and-self-heal.md)).
 - If relationship resolution is uncertain, store relationship with low confidence.
 - If graph upsert fails, retry idempotently using the same correlation ID.
 
@@ -265,4 +271,14 @@ Design pack: [`37`](37-rpm-session-parallel-sync-feature-specification.md) →
 [`39`](39-rpm-session-parallel-sync-low-level-design.md) →
 [`40`](40-rpm-session-parallel-sync-risks-challenges-and-acceptance.md) →
 [`50`](50-sync-cpu-budget-and-store-concurrency-lld.md) (CPU percent + store concurrency) →
-[`82`](82-sync-finalizing-and-provider-cost-runbook.md) (finalizing hang / Provider cost).
+[`82`](82-sync-finalizing-and-provider-cost-runbook.md) (finalizing hang / Provider cost) →
+[`84`](84-embedding-retry-and-self-heal.md) (embed DNS/timeout retry and FILE self-heal).
+
+## Related Documents
+
+| Document | Role |
+| --- | --- |
+| [84 - Embedding retry and self-heal](./84-embedding-retry-and-self-heal.md) | Transient embed retry and ingest fail-open |
+| [77 - Sync embedding heal](./77-sync-embedding-heal-operator-runbook.md) | Operator `sync` vs `sync heal` |
+| [14 - Embedding lifecycle](../13-technology-stack-and-platform-decisions/14-embedding-lifecycle-and-refresh.md) | pgvector SoR |
+

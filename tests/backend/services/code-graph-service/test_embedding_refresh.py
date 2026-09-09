@@ -413,6 +413,32 @@ def test_refresh_embeddings_uses_batch_api():
     assert stub.calls == calls_before_refresh + 1
 
 
+def test_refresh_retries_transient_chunk_then_completes(monkeypatch):
+    monkeypatch.setattr(
+        "code_graph_service.llm_wiring._embed_retry_sleep_seconds", lambda _attempt: 0
+    )
+
+    class FlakyBatch(LocalEmbeddingStub):
+        calls = 0
+
+        def embed_many(self, texts, *, is_query=False):
+            type(self).calls += 1
+            if type(self).calls == 1:
+                raise RuntimeError("embedding call timed out after 60.0s")
+            return super().embed_many(texts, is_query=is_query)
+
+    index = InMemoryEmbeddingIndex()
+    stub = FlakyBatch(dims=16)
+    service = CodeGraphService(InMemoryStore(), embeddings=stub, embedding_index=index)
+    _ingest(service)
+    index.wipe_scope(SCOPE)
+    report = service.refresh_embeddings(SCOPE, policy_path=POLICY)
+    assert report.state == "complete"
+    assert report.refreshed >= 1
+    assert FlakyBatch.calls >= 2
+    assert index.list_symbol_models(SCOPE)
+
+
 def test_refresh_embeddings_runs_large_batches_with_bounded_parallelism(
     monkeypatch,
 ):

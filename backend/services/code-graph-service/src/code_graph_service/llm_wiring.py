@@ -21,30 +21,110 @@ from .domain.models import EmbeddingResult, GraphSymbol
 def _embed_timeout_seconds() -> float:
     import os
 
-    # Cloud embed providers often need >10s for cold/batch calls; keep a hard cap.
-    raw = str(os.environ.get("ASTLOOM_EMBED_TIMEOUT_SECONDS", "60")).strip()
+    # Per HTTP batch, not the whole file. Align with LiteLLM gateway default (180s).
+    raw = str(os.environ.get("ASTLOOM_EMBED_TIMEOUT_SECONDS", "180")).strip()
     try:
         value = float(raw)
     except ValueError:
-        value = 60.0
+        value = 180.0
     return max(1.0, min(value, 180.0))
+
+
+def _embed_http_batch_size() -> int:
+    return 32
+
+
+def _embed_retry_sleep_seconds(attempt: int) -> float:
+    return min(8.0, 1.0 * (2 ** max(0, int(attempt))))
+
+
+def _is_transient_embed_error(exc: BaseException) -> bool:
+    name = type(exc).__name__.lower()
+    text = str(exc).lower()
+    if "timeout" in name or "timeout" in text or "timed out" in text:
+        return True
+    markers = (
+        "name resolution",
+        "temporary failure",
+        "errno -3",
+        "eai_again",
+        "nodename nor servname",
+        "connection reset",
+        "connection aborted",
+        "connection broken",
+        "broken pipe",
+        "network is unreachable",
+        "temporarily unavailable",
+        "try again",
+        "503",
+        "502",
+        "504",
+    )
+    return any(marker in text for marker in markers)
 
 
 def _run_with_timeout(fn, *args, **kwargs):
     import concurrent.futures
+    import time
 
+    timeout_retries = max(1, int(kwargs.pop("timeout_retries", 2)))
     timeout = _embed_timeout_seconds()
-    attempts = 2
     last_exc: BaseException | None = None
-    for _ in range(attempts):
+    timeout_left = timeout_retries
+    transient_attempt = 0
+    while True:
         with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
             fut = pool.submit(fn, *args, **kwargs)
             try:
                 return fut.result(timeout=timeout)
             except concurrent.futures.TimeoutError as exc:
                 last_exc = exc
+                timeout_left -= 1
+                if timeout_left <= 0:
+                    break
+                continue
+            except Exception as exc:
+                last_exc = exc
+                transient_attempt += 1
+                if not _is_transient_embed_error(exc) or transient_attempt >= 3:
+                    raise
+                time.sleep(_embed_retry_sleep_seconds(transient_attempt - 1))
                 continue
     raise RuntimeError(f"embedding call timed out after {timeout}s") from last_exc
+
+
+def _embed_gateway_many(gw_batch, chunks: list[str], *, model: str) -> list:
+    """One timed HTTP batch at a time; split on timeout/DNS instead of failing the file."""
+    out: list = []
+    size = max(1, int(_embed_http_batch_size()))
+    index = 0
+    while index < len(chunks):
+        take = min(size, len(chunks) - index)
+        piece = chunks[index : index + take]
+        try:
+            raw = list(
+                _run_with_timeout(
+                    gw_batch,
+                    piece,
+                    model=model,
+                    timeout_retries=1 if take > 1 else 2,
+                )
+            )
+        except Exception as exc:
+            if take > 1 and _is_transient_embed_error(exc):
+                size = max(1, take // 2)
+                continue
+            raise
+        out.extend(raw)
+        index += take
+    return out
+
+
+def _raise_litellm_embed_failure(exc: BaseException, *, batch: bool) -> None:
+    prefix = "LiteLLM embedding batch failed" if batch else "LiteLLM embedding failed"
+    if isinstance(exc, RuntimeError) and str(exc).startswith("LiteLLM embedding"):
+        raise exc
+    raise RuntimeError(f"{prefix}: {exc}") from exc
 
 
 class _DocGenerator(Protocol):
@@ -551,7 +631,7 @@ class HybridEmbeddings:
                 last_error: Exception | None = None
                 for model in models:
                     try:
-                        raw = list(_run_with_timeout(gw_batch, chunks, model=model))
+                        raw = _embed_gateway_many(gw_batch, chunks, model=model)
                         out = [
                             EmbeddingResult(
                                 reduce_dims(list(item.vector), self.dims),
@@ -569,9 +649,7 @@ class HybridEmbeddings:
                         last_error = exc
                         continue
                 if last_error is not None:
-                    raise RuntimeError(
-                        f"LiteLLM embedding batch failed: {last_error}"
-                    ) from last_error
+                    _raise_litellm_embed_failure(last_error, batch=True)
             last_error = None
             for model in models:
                 try:
@@ -594,7 +672,7 @@ class HybridEmbeddings:
                     last_error = exc
                     continue
             if last_error is not None and embeddings_generation_enabled():
-                raise RuntimeError(f"LiteLLM embedding failed: {last_error}") from last_error
+                _raise_litellm_embed_failure(last_error, batch=False)
         if embeddings_generation_enabled() and (
             self.gateway is None or not getattr(self.settings, "enabled", False)
         ):
@@ -640,9 +718,7 @@ class HybridEmbeddings:
                 if not _is_embed_context_error(exc):
                     break
         if last_error is not None and embeddings_generation_enabled():
-            raise RuntimeError(
-                f"LiteLLM embedding batch failed: {last_error}"
-            ) from last_error
+            _raise_litellm_embed_failure(last_error, batch=True)
         self._backend = "stub"
         return [self.stub.embed(text) for text in texts]
 

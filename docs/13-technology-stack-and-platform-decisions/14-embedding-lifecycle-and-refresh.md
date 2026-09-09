@@ -38,14 +38,15 @@ related_docs:
 - as.doc.stack.storage-ownership-matrix
 - as.doc.gap.technical-implementation-gaps
 - as.doc.ckg.sync-embedding-heal-runbook
-doc_version: 1.3.1
+- as.doc.ckg.embedding-retry-and-self-heal
+doc_version: 1.4.0
 audience:
 - engineer
 - architect
 - agent
 language: en
 security_classification: internal
-updated_at: 2026-08-10
+updated_at: '2026-09-09'
 ---
 
 # 14 - Embedding Lifecycle And Refresh
@@ -99,6 +100,9 @@ while lexical channels still work.
 3. Symbol body or living docs changed on ingest (existing Stage-1 path).
 4. Operator force refresh (`refresh_embeddings(..., force=True)`).
 5. Orphan cleanup after delete (drop embedding rows with no live symbol/memory).
+6. FILE `metadata.embedding_heal_pending` after ingest deferred a hosted embed (self-heal
+   on later `touched` refresh without a full-project job). Algorithm:
+   [`../07-code-knowledge-graph/84-embedding-retry-and-self-heal.md`](../07-code-knowledge-graph/84-embedding-retry-and-self-heal.md).
 
 Default policy sets `skip_when_model_unchanged: true` and `model_change_policy: scoped_reembed`
 (re-embed only the scoped project, not the whole cluster).
@@ -109,7 +113,7 @@ After ingest, code-graph calls `refresh_embeddings_after_ingest`:
 
 | Mode | How operators select it | Behavior |
 | --- | --- | --- |
-| `touched` | Everyday `astloom sync` (default) | Refresh embeddings for files visited this run; noop drains a capped backlog |
+| `touched` | Everyday `astloom sync` (default) | Refresh embeddings for files visited this run **and** FILE paths with `embedding_heal_pending`; noop with no pending flags drains a capped backlog |
 | `full` | `astloom sync heal`, MCP `embedding_refresh_mode=full`, or `ASTLOOM_EMBEDDING_REFRESH_FULL=1` | Whole-scope missing/mismatch + orphan cleanup, uncapped |
 
 Normative operator runbook: [`../07-code-knowledge-graph/77-sync-embedding-heal-operator-runbook.md`](../07-code-knowledge-graph/77-sync-embedding-heal-operator-runbook.md).
@@ -141,3 +145,4 @@ forbidden.
 | `13-storage-ownership-matrix.md` | Store ownership |
 | `../10-gap-analysis/03-technical-implementation-gaps.md` | GAP-T03 register |
 | `../07-code-knowledge-graph/77-sync-embedding-heal-operator-runbook.md` | Sync vs sync heal operator contract |
+| `../07-code-knowledge-graph/84-embedding-retry-and-self-heal.md` | Transient retry, ingest fail-open, FILE self-heal flag |

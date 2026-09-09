@@ -6,8 +6,8 @@ status: active
 schema_version: '1.0'
 owner: code-graph-service
 summary: 'Operator contract for scoped embedding refresh on everyday astloom sync versus
-  full-project astloom sync heal, including stats/inventory/preflight guidance, service
-  payload, MCP/pgvector env wiring, failure signals, and verification.'
+  full-project astloom sync heal, including pending-file self-heal, stats/inventory/preflight
+  guidance, service payload, MCP/pgvector env wiring, failure signals, and verification.'
 tags:
 - sync
 - embeddings
@@ -32,6 +32,7 @@ linked_symbols:
 - backend/packages/astloom_cli/parser/_core.py::peel_sync_words
 - backend/packages/astloom_cli/commands/stats/render.py::print_sync_preflight
 - backend/services/code-graph-service/src/code_graph_service/application/embedding_refresh.py::EmbeddingRefreshMixin.refresh_embeddings_after_ingest
+- backend/services/code-graph-service/src/code_graph_service/application/support.py::EMBEDDING_HEAL_PENDING
 - backend/services/code-graph-service/src/code_graph_service/bootstrap.py::Settings
 - backend/services/mcp-gateway-service/src/mcp_gateway_service/backends/code_graph/write.py::sync_repo
 related_docs:
@@ -39,10 +40,11 @@ related_docs:
 - docs/08-software-engineering-architecture/42-astloom-cli-command-reference-part-4.md
 - docs/13-technology-stack-and-platform-decisions/14-embedding-lifecycle-and-refresh.md
 - docs/13-technology-stack-and-platform-decisions/12-litellm-environment-configuration.md
+- docs/07-code-knowledge-graph/84-embedding-retry-and-self-heal.md
 - docs/07-code-knowledge-graph/75-sync-semantic-integrity-and-recovery-evidence.md
 - docs/07-code-knowledge-graph/76-post-restart-operations-verification-runbook.md
-doc_version: 1.1.1
-updated_at: 2026-08-10
+doc_version: 1.2.0
+updated_at: '2026-09-09'
 language: en
 security_classification: internal
 ---
@@ -57,7 +59,7 @@ Define how Astloom keeps the semantic index healthy after code sync: everyday `a
 
 | Command / API | File ingest | Embedding refresh |
 | --- | --- | --- |
-| `astloom sync` | Incremental: new / changed / lang-backfill / structural edge-repair only. Hash-stable healthy files are skipped. | **Touched** files from this run. On noop (no file work), drains a **capped** backlog (`ASTLOOM_EMBEDDING_REFRESH_MAX_PENDING`, default **256**). |
+| `astloom sync` | Incremental: new / changed / lang-backfill / structural edge-repair only. Hash-stable healthy files are skipped. | **Touched** files from this run **plus** FILE paths stamped `embedding_heal_pending` (self-heal after a prior embed defer; pending list capped at `ASTLOOM_EMBEDDING_REFRESH_MAX_PENDING`, default **256**). On noop (no file work and no pending flags), drains a **capped** missing-row backlog. Algorithm: [`84`](./84-embedding-retry-and-self-heal.md). |
 | `astloom sync heal` | Same incremental file pass as `sync` (never force-reparses healthy hash-stable files). | **Full** project: missing rows, model mismatch, orphan cleanup; **uncapped**. |
 | MCP `astloom_code_graph_sync` | Same as service `sync_repo`. | Optional `embedding_refresh_mode`: `"touched"` (default) or `"full"` (heal parity). |
 
@@ -95,7 +97,9 @@ Run `astloom sync heal` when any of these is true:
 3. Hybrid / semantic search returns empty or thin results while the graph already has searchable symbols.
 4. After a model change that should re-embed the project (also covered by refresh-policy model mismatch).
 
-Do **not** use heal for ordinary day-to-day code edits — plain `astloom sync` is enough for touched files.
+Do **not** use heal for ordinary day-to-day code edits — plain `astloom sync` is enough for touched files. Transient LiteLLM embed failures (DNS / timeout) **must** keep the graph and self-heal on a later sync; that is not a reason to run `sync heal`. Use `sync heal` when missing embeddings are **project-wide** (wipe, model change, or `stats` missing count that pending-file self-heal is not draining).
+
+CLI may print `embedding deferred (…)` during ingest. That is fail-open, not `files_failed`. The same run still runs after-ingest refresh; the FILE stays flagged until searchable symbols have pgvector rows.
 
 ## Operator guidance surfaces
 
@@ -142,9 +146,11 @@ astloom sync heal max-file 200
 
 Implementation: `refresh_embeddings_after_ingest(..., mode=...)`.
 
-- `touched` + non-empty `file_paths` → scoped refresh (no whole-project orphan wipe).
-- `touched` + empty paths → capped backlog.
+- `touched` + non-empty `file_paths` → scoped refresh of those paths **union** pending-heal FILE paths (no whole-project orphan wipe).
+- `touched` + empty paths and no pending-heal flags → capped missing-row backlog.
 - `full` → `refresh_embeddings` without `file_paths` / `max_pending` (orphan cleanup allowed).
+
+Transient embed errors retry inside HybridEmbeddings and again per refresh chunk. One failed chunk **must not** abort the rest of the refresh job (`reasons.embed_chunk_retry_exhausted`).
 
 Env overrides:
 
@@ -183,6 +189,7 @@ Prefer CLI `astloom sync heal` for interactive operators; MCP `full` for automat
 | --- | --- |
 | Progress | Embeddings phase uses `phase=embeddings` on the sync progress tracker |
 | Partial heal | Interrupted heal is safe to re-run; already-written rows stay; missing set shrinks |
+| Embed defer | Graph kept; `embedding_heal_pending` on FILE; later `touched` sync retries that path ([`84`](./84-embedding-retry-and-self-heal.md)) |
 | Report | `embedding_refresh.state` is `complete` or `failed`; inspect `error` / `reasons` |
 | No pgvector | `reasons.embedding_index_unavailable` / error text naming the URL envs; `scanned=0`, `refreshed=0` |
 | Hybrid search | When semantic channel is empty without an index, payload may include `semantic_error` (e.g. `embedding_index_unavailable:…`) while lexical results still return |
@@ -202,6 +209,7 @@ Prefer CLI `astloom sync heal` for interactive operators; MCP `full` for automat
 | --- | --- |
 | [36 - Astloom CLI](../08-software-engineering-architecture/36-astloom-cli.md) | Everyday operator entry |
 | [42 CLI reference — Sync vs sync heal](../08-software-engineering-architecture/42-astloom-cli-command-reference-part-4.md#sync-vs-sync-heal) | Catalog summary |
+| [84 - Embedding retry and self-heal](./84-embedding-retry-and-self-heal.md) | Transient retry, ingest fail-open, FILE heal flag |
 | [14 - Embedding lifecycle](../13-technology-stack-and-platform-decisions/14-embedding-lifecycle-and-refresh.md) | SoR / refresh-policy law |
 | [12 - LiteLLM env](../13-technology-stack-and-platform-decisions/12-litellm-environment-configuration.md) | `CODE_GRAPH_DATABASE_URL` / `DATABASE_URL` contract |
 | [75 - Semantic integrity evidence](./75-sync-semantic-integrity-and-recovery-evidence.md) | Quantitative acceptance evidence |
