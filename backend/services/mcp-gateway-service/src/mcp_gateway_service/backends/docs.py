@@ -73,9 +73,10 @@ def docs_catalog(
     scope: dict[str, str] | None = None,
 ) -> dict[str, Any]:
     """Cached docs frontmatter catalog (tags/lanes) for retrieval narrowing."""
+    import os
     from pathlib import Path
 
-    from astloom_cli.docs_catalog import filter_docs_catalog, get_docs_catalog
+    from astloom_cli.docs_catalog import filter_docs_catalog, get_docs_catalog, resolve_catalog_roots
     from astloom_cli.software_paths import software_paths_for_project
     from astloom_cli.util import repo_root
 
@@ -90,7 +91,9 @@ def docs_catalog(
         roots = [str(x).strip() for x in roots_raw if str(x).strip()]
     elif isinstance(roots_raw, str) and roots_raw.strip():
         roots = [p.strip() for p in roots_raw.split(",") if p.strip()]
-    catalog_root = Path(repo_root()).resolve()
+
+    catalog_root: Path | None = None
+    used_workspace_fallback = False
     if scope:
         pinned = software_paths_for_project(
             str(scope.get("tenant_id") or ""),
@@ -114,6 +117,79 @@ def docs_catalog(
                     "entries": [],
                     "stats": {"document_count": 0},
                 }
+        if catalog_root is None:
+            fallback = str(
+                arguments.get("repo_root")
+                or arguments.get("root_path")
+                or os.environ.get("ASTLOOM_MCP_WORKSPACE_ROOT")
+                or ""
+            ).strip()
+            if fallback:
+                fb = Path(fallback).expanduser()
+                try:
+                    if fb.is_dir() and any(fb.iterdir()):
+                        catalog_root = fb.resolve()
+                        used_workspace_fallback = True
+                    elif fb.is_dir():
+                        return {
+                            **base,
+                            "ok": False,
+                            "error": (
+                                f"workspace root exists but is empty (stub mount?): {fb}. "
+                                "Pin/mount the full software tree on the Astloom host."
+                            ),
+                            "repo": str(fb),
+                            "documents": [],
+                            "entries": [],
+                            "stats": {"document_count": 0},
+                        }
+                except OSError:
+                    catalog_root = None
+        if catalog_root is None:
+            tenant = str(scope.get("tenant_id") or "").strip()
+            workspace = str(scope.get("workspace_id") or "").strip()
+            project = str(scope.get("project_id") or "").strip()
+            remediation = (
+                f"On the Astloom host (MCP project {tenant}/{workspace}/{project}): "
+                f"`astloom paths add /path/to/app` — or pass `repo_root` / set "
+                f"`ASTLOOM_MCP_WORKSPACE_ROOT`. Catalog will not scan the Astloom install."
+            )
+            return {
+                **base,
+                "ok": False,
+                "error": f"no software paths pinned for this MCP project; {remediation}",
+                "remediation": remediation,
+                "repo": None,
+                "documents": [],
+                "entries": [],
+                "stats": {"document_count": 0},
+            }
+    else:
+        catalog_root = Path(repo_root()).resolve()
+
+    use_roots = list(resolve_catalog_roots(roots))
+    missing_roots = [
+        rel
+        for rel in use_roots
+        if not (catalog_root / rel).is_dir()
+    ]
+    if roots is not None and missing_roots and len(missing_roots) == len(use_roots):
+        return {
+            **base,
+            "ok": False,
+            "error": (
+                "requested catalog roots are not directories under the software tree "
+                f"{catalog_root}: {', '.join(missing_roots)}"
+            ),
+            "repo": str(catalog_root),
+            "roots": use_roots,
+            "missing_roots": missing_roots,
+            "documents": [],
+            "entries": [],
+            "stats": {"document_count": 0},
+            "workspace_path_fallback": used_workspace_fallback,
+        }
+
     catalog = get_docs_catalog(
         catalog_root,
         refresh=refresh or bool(roots),
@@ -131,7 +207,20 @@ def docs_catalog(
         has_linked_symbols=has_links,
         limit=limit,
     )
-    return {**base, **report}
+    out = {
+        **base,
+        **report,
+        "ok": True,
+        "repo": str(catalog_root),
+        "workspace_path_fallback": used_workspace_fallback,
+    }
+    if missing_roots:
+        out["missing_roots"] = missing_roots
+        out["warning"] = (
+            "some requested catalog roots are missing under the software tree: "
+            + ", ".join(missing_roots)
+        )
+    return out
 
 def docs_status(
     backends: PlatformBackends,
@@ -298,32 +387,93 @@ def docs_write(
     if mode == "validate":
         source = "arguments"
         frontmatter = custom_fm
-        if frontmatter is None and path:
+        # Agents often pass file_path (ingest-style) instead of path — treat as the same.
+        disk_path = path or (file_path or "")
+        file_read = False
+        if frontmatter is None and disk_path:
             from pathlib import Path
 
             from astloom_cli.markdown_frontmatter import parse_markdown_frontmatter
+            from astloom_cli.software_paths import software_paths_for_project
             from astloom_cli.util import repo_root
 
-            candidate = Path(path)
+            candidate = Path(disk_path)
             if not candidate.is_absolute():
-                candidate = Path(repo_root()) / path
-            if candidate.is_file():
-                try:
-                    text = candidate.read_text(encoding="utf-8")
-                except OSError as exc:
-                    raise ValueError(f"unable to read path for validate: {exc}") from exc
-                loaded, _body = parse_markdown_frontmatter(text)
-                if not loaded:
-                    raise ValueError(f"no YAML frontmatter found at path: {path}")
-                # Full-tier product docs often omit empty list fields; Body-tier
-                # validate still requires list keys — normalize before checking.
-                frontmatter = dict(loaded)
-                if "linked_symbols" not in frontmatter:
-                    frontmatter["linked_symbols"] = []
-                if "decision_refs" not in frontmatter:
-                    frontmatter["decision_refs"] = []
-                source = "path"
+                bases: list[Path] = []
+                pinned = software_paths_for_project(
+                    str(scope.get("tenant_id") or ""),
+                    str(scope.get("workspace_id") or ""),
+                    str(scope.get("project_id") or ""),
+                    must_exist=False,
+                )
+                for pin in pinned or []:
+                    bases.append(Path(pin).expanduser())
+                bases.append(Path(repo_root()))
+                resolved: Path | None = None
+                for root_base in bases:
+                    try:
+                        probe = (root_base / disk_path).resolve()
+                    except OSError:
+                        continue
+                    if probe.is_file():
+                        resolved = probe
+                        break
+                candidate = resolved if resolved is not None else Path(repo_root()) / disk_path
+            if not candidate.is_file():
+                return {
+                    **base,
+                    "mode": "validate",
+                    "ok": False,
+                    "errors": [f"file not read: path does not exist or is not a file: {disk_path}"],
+                    "frontmatter": None,
+                    "source": "unread",
+                    "path": disk_path,
+                    "file_path": file_path,
+                    "file_read": False,
+                    "tier": "body",
+                }
+            try:
+                text = candidate.read_text(encoding="utf-8")
+            except OSError as exc:
+                return {
+                    **base,
+                    "mode": "validate",
+                    "ok": False,
+                    "errors": [f"unable to read path for validate: {exc}"],
+                    "frontmatter": None,
+                    "source": "unread",
+                    "path": disk_path,
+                    "file_path": file_path,
+                    "file_read": False,
+                    "tier": "body",
+                }
+            loaded, _body = parse_markdown_frontmatter(text)
+            if not loaded:
+                return {
+                    **base,
+                    "mode": "validate",
+                    "ok": False,
+                    "errors": [f"no YAML frontmatter found at path: {disk_path}"],
+                    "frontmatter": None,
+                    "source": "path",
+                    "path": disk_path,
+                    "file_path": file_path,
+                    "file_read": True,
+                    "tier": "body",
+                }
+            # Full-tier product docs often omit empty list fields; Body-tier
+            # validate still requires list keys — normalize before checking.
+            frontmatter = dict(loaded)
+            if "linked_symbols" not in frontmatter:
+                frontmatter["linked_symbols"] = []
+            if "decision_refs" not in frontmatter:
+                frontmatter["decision_refs"] = []
+            source = "path"
+            file_read = True
+            if not path:
+                path = disk_path
         if frontmatter is None:
+            # No path/file_path: Body-tier stub only — never claim disk validation.
             frontmatter = build_frontmatter(
                 title=title or "Untitled",
                 owner=owner,
@@ -332,6 +482,7 @@ def docs_write(
                 linked_symbols=[symbol] if symbol else [],
             )
             source = "generated"
+            file_read = False
         errors = backends.docs.validate_frontmatter(frontmatter)
         return {
             **base,
@@ -341,6 +492,9 @@ def docs_write(
             "frontmatter": frontmatter,
             "source": source,
             "path": path or None,
+            "file_path": file_path,
+            "file_read": file_read,
+            "tier": "body",
         }
 
     if mode == "draft":

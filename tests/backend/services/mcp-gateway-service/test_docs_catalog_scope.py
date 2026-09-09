@@ -28,6 +28,40 @@ def test_docs_catalog_fail_closed_when_pin_not_visible(tmp_path: Path, monkeypat
     assert out["documents"] == []
 
 
+def test_docs_catalog_fail_closed_when_no_pin(monkeypatch):
+    monkeypatch.setattr(
+        "astloom_cli.software_paths.software_paths_for_project",
+        lambda *a, **k: [],
+    )
+    monkeypatch.setattr("astloom_cli.util.repo_root", lambda: "/opt/Astloom")
+    out = docs_catalog(
+        {"roots": ["frontend/docs"], "query": "executive"},
+        base={"maps_to": "docs_sync.catalog"},
+        scope={"tenant_id": "mir", "workspace_id": "dev", "project_id": "ThinkingSOC"},
+    )
+    assert out["ok"] is False
+    assert out.get("repo") is None
+    assert "no software paths" in str(out.get("error") or "").lower()
+    assert out["documents"] == []
+
+
+def test_docs_catalog_rejects_all_missing_roots(tmp_path: Path, monkeypatch):
+    app = tmp_path / "app"
+    app.mkdir()
+    monkeypatch.setattr(
+        "astloom_cli.software_paths.software_paths_for_project",
+        lambda *a, **k: [str(app)],
+    )
+    out = docs_catalog(
+        {"roots": ["frontend/docs"], "query": "executive"},
+        base={"maps_to": "docs_sync.catalog"},
+        scope={"tenant_id": "mir", "workspace_id": "dev", "project_id": "demo-app"},
+    )
+    assert out["ok"] is False
+    assert "frontend/docs" in (out.get("missing_roots") or [])
+    assert out["documents"] == []
+
+
 def test_docs_catalog_uses_visible_pin(tmp_path: Path, monkeypatch):
     app = tmp_path / "demo-app"
     app.mkdir()
@@ -61,4 +95,5 @@ def test_docs_catalog_uses_visible_pin(tmp_path: Path, monkeypatch):
     )
     assert captured
     assert captured[0] == app.resolve()
+    assert out.get("ok") is True
     assert "/opt/Astloom" not in str(out.get("repo") or captured[0])

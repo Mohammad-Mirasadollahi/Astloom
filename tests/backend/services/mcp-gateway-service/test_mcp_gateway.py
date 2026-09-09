@@ -36,6 +36,14 @@ def test_tools_list_is_lazy_facade():
     assert "astloom_docs_catalog" in catalog
     assert "astloom_quality_audit" in catalog
 
+    search_qa = gw.call_tool("mcp_search_tools", {"query": "quality_audit", "limit": 5})
+    qa_hit = next(
+        h for h in search_qa["structuredContent"]["results"] if h["tool_name"] == "astloom_quality_audit"
+    )
+    qa_props = qa_hit["inputSchema"]["properties"]
+    assert "repo_root" in qa_props
+    assert "root_path" in qa_props
+
 
 def test_initialize_and_tools_list_rpc():
     gw = gateway()
@@ -165,6 +173,9 @@ def test_tools_call_wired_backends(monkeypatch):
         },
     )
     assert validated["structuredContent"]["ok"] is True
+    assert validated["structuredContent"].get("tier") == "body"
+    assert validated["structuredContent"].get("file_read") is False
+    assert validated["structuredContent"].get("source") == "generated"
 
     from pathlib import Path
 
@@ -180,6 +191,30 @@ def test_tools_call_wired_backends(monkeypatch):
         assert sc["ok"] is True
         assert sc["frontmatter"]["doc_id"] == "as.doc.ckg.hybrid-documentation-coverage"
         assert sc.get("source") == "path"
+        assert sc.get("file_read") is True
+        assert sc.get("tier") == "body"
+
+        via_file_path = gw.call_tool(
+            "astloom_docs_write",
+            {
+                "mode": "validate",
+                "file_path": str(sample.relative_to(repo_root())),
+            },
+        )
+        sc2 = via_file_path["structuredContent"]
+        assert sc2["ok"] is True
+        assert sc2.get("source") == "path"
+        assert sc2.get("file_read") is True
+        assert sc2["frontmatter"]["doc_id"] == "as.doc.ckg.hybrid-documentation-coverage"
+
+        missing = gw.call_tool(
+            "astloom_docs_write",
+            {"mode": "validate", "file_path": "docs/does-not-exist-xyz.md"},
+        )
+        sc3 = missing["structuredContent"]
+        assert sc3["ok"] is False
+        assert sc3.get("file_read") is False
+        assert "file not read" in " ".join(sc3.get("errors") or []).lower()
 
     status = gw.call_tool("astloom_docs_status", {})
     assert "coverage" in status["structuredContent"]

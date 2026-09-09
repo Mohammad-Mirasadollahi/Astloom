@@ -376,6 +376,7 @@ def filter_docs_catalog(
         "invents_edges": False,
         "vocabulary_source": catalog.get("vocabulary_source") or "observed_frontmatter",
         "note": catalog.get("note"),
+        "repo": catalog.get("repo"),
         "cache_hit": catalog.get("cache_hit"),
         "cache_path": catalog.get("cache_path"),
         "generated_at": catalog.get("generated_at"),
