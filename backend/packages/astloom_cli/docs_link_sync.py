@@ -137,7 +137,9 @@ def _indexed_doc_hashes(
     hashes: dict[str, set[str]] = {}
     symbol_ids: dict[str, list[str]] = {}
     try:
-        symbols = graph_service.store.list_symbols(graph_scope)
+        from code_graph_service.domain.ports import list_symbols_compact
+
+        symbols = list_symbols_compact(graph_service.store, graph_scope)
     except Exception:  # noqa: BLE001
         return hashes, symbol_ids
     for sym in symbols:

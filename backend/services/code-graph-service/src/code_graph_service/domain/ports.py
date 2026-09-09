@@ -35,12 +35,56 @@ class Store(Protocol):
 
 
 def list_symbols_compact(store: Any, scope: Scope) -> list[GraphSymbol]:
-    """Prefer index/lean listings so MCP/sync never dump living-doc bodies."""
+    """Prefer index/lean listings so MCP/sync never dump living-doc bodies.
+
+    Never calls ``list_symbols_full`` — that path is embed-heal only.
+    """
     for name in ("list_symbols_index", "list_symbols_lean", "list_symbols"):
         fn = getattr(store, name, None)
         if callable(fn):
             return list(fn(scope))
     return []
+
+
+def list_symbols_hydrated(store: Any, scope: Scope) -> list[GraphSymbol]:
+    """Body + living-doc text for embedding refresh / rare hydrated scans."""
+    for name in ("list_symbols_full", "list_symbols_lean"):
+        fn = getattr(store, name, None)
+        if callable(fn):
+            return list(fn(scope))
+    fn = getattr(store, "list_symbols", None)
+    if callable(fn):
+        return list(fn(scope))
+    return []
+
+
+def list_symbols_for_inventory(
+    store: Any,
+    scope: Scope,
+    *,
+    file_only: bool = False,
+) -> tuple[list[GraphSymbol], dict[str, Any]]:
+    """Inventory listing with automatic self-heal to FILE-only on failure.
+
+    Returns ``(symbols, meta)`` where meta includes ``mode`` (``index``|``file``)
+    and ``healed`` when the compact index path failed and FILE listing recovered.
+    """
+    if file_only:
+        return list(list_file_symbols_compact(store, scope)), {
+            "mode": "file",
+            "healed": False,
+        }
+    try:
+        return list(list_symbols_compact(store, scope)), {
+            "mode": "index",
+            "healed": False,
+        }
+    except Exception as exc:  # noqa: BLE001 — fail open so sync/inventory still runs
+        return list(list_file_symbols_compact(store, scope)), {
+            "mode": "file",
+            "healed": True,
+            "heal_reason": f"{type(exc).__name__}: {exc}"[:240],
+        }
 
 
 def list_file_symbols_for_paths(store: Any, scope: Scope, paths: list[str]) -> list[GraphSymbol]:

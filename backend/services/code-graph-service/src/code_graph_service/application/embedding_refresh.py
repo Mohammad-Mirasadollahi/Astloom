@@ -253,7 +253,9 @@ class EmbeddingRefreshMixin:
                         by_id[str(symbol.id)] = symbol
                 symbols = list(by_id.values())
             else:
-                symbols = list(self.store.list_symbols(scope))
+                from ..domain.ports import list_symbols_hydrated
+
+                symbols = list(list_symbols_hydrated(self.store, scope))
 
             models: dict[str, str] = {}
             list_models = getattr(self.embedding_index, "list_symbol_models", None)

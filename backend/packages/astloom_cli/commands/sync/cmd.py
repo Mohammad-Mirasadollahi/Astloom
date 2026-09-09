@@ -124,6 +124,11 @@ def _cmd_sync_body(args: argparse.Namespace) -> int:
     from astloom_cli.commands.stats.render import print_sync_preflight
     from astloom_cli.parser._core import resolve_discovery_max_files
 
+    print(
+        f"   {ui.dim('note')} Building inventory "
+        f"(edited / remaining — compact graph index)…",
+        flush=True,
+    )
     inventory = build_inventory_report(
         args,
         roots=roots,

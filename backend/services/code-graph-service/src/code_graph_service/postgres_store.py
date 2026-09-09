@@ -285,7 +285,7 @@ class PostgresStore:
                 (symbol_id, scope.tenant_id, scope.workspace_id, scope.project_id),
             )
 
-    def list_symbols(self, scope: Scope) -> list[GraphSymbol]:
+    def list_symbols_full(self, scope: Scope) -> list[GraphSymbol]:
         with self._connection.cursor() as cur:
             cur.execute(
                 """
@@ -298,14 +298,18 @@ class PostgresStore:
             rows = cur.fetchall()
         return [self._symbol(row, scope) for row in rows]
 
+    def list_symbols(self, scope: Scope) -> list[GraphSymbol]:
+        """Hang-safe default: stripped index view (matches Neo4j adapter contract)."""
+        return self.list_symbols_index(scope)
+
     def list_symbols_lean(self, scope: Scope) -> list[GraphSymbol]:
-        symbols = self.list_symbols(scope)
+        symbols = self.list_symbols_full(scope)
         for sym in symbols:
             sym.ai_documentation = ""
         return symbols
 
     def list_symbols_index(self, scope: Scope) -> list[GraphSymbol]:
-        symbols = self.list_symbols(scope)
+        symbols = self.list_symbols_full(scope)
         for sym in symbols:
             sym.ai_documentation = ""
             sym.body = ""

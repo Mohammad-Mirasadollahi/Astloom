@@ -160,6 +160,15 @@ class Neo4jCrudMixin:
             )
 
     def list_symbols(self, scope: Scope) -> list[GraphSymbol]:
+        """Default bulk list is hang-safe (index): no body / living-doc on the wire.
+
+        Accidental callers (CLI inventory, status, purge scans) must not unpack
+        full Neo4j payloads. Callers that need body+docs use ``list_symbols_full``.
+        """
+        return self.list_symbols_index(scope)
+
+    def list_symbols_full(self, scope: Scope) -> list[GraphSymbol]:
+        """Hydrated bulk list (body + ai_documentation). Embed heal / rare ops only."""
         with self._driver.session(database=self._database) as session:
             rows = list(
                 session.run(

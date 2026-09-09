@@ -280,6 +280,59 @@ def test_classify_edited_pending_and_hash(tmp_path: Path):
     assert edited["src/y.py"] == "pending"
 
 
+def test_inventory_prefers_symbols_index_never_full_dump(tmp_path: Path, monkeypatch):
+    """Regression: CLI inventory must not call list_symbols (body+docs dump / Ctrl-C hang)."""
+    from astloom_cli.commands.inventory.root import inventory_one_root
+
+    app = tmp_path / "app"
+    (app / "src").mkdir(parents=True)
+    (app / "src" / "a.py").write_text("def a():\n    return 1\n", encoding="utf-8")
+    calls: list[str] = []
+
+    def _index(_scope):
+        calls.append("index")
+        return []
+
+    def _full(_scope):
+        calls.append("full")
+        return []
+
+    store = SimpleNamespace(list_symbols=_full, list_symbols_index=_index)
+    svc = SimpleNamespace(
+        store=store,
+        freshness_status=lambda _scope: {"pending_files": []},
+        embedding_index=SimpleNamespace(list_symbol_models=lambda _scope: {}),
+        embeddings=SimpleNamespace(model="stub"),
+        llm_config=lambda: {
+            "docs_enabled": False,
+            "route_docs": {"primary_model": "", "fallback_models": []},
+            "route_embed": {"primary_model": "", "fallback_models": []},
+        },
+    )
+    monkeypatch.setattr(
+        "astloom_cli.commands.inventory.root.resolve_sync_filters",
+        lambda **_k: {
+            "include_extensions": [".py"],
+            "exclude_dirs": set(),
+            "exclude_globs": [],
+            "include_paths": [],
+            "docs_enabled": False,
+            "doc_match_globs": [],
+            "doc_exclude_dirs": set(),
+            "doc_exclude_globs": [],
+            "doc_paths": [],
+            "sources": ["test"],
+        },
+    )
+    inventory_one_root(
+        svc=svc,
+        scope=SimpleNamespace(tenant_id="t", workspace_id="w", project_id="p"),
+        root_path=app,
+        max_files=50,
+    )
+    assert calls == ["index"]
+
+
 def test_inventory_one_root_classifies_with_models(tmp_path: Path, monkeypatch):
     from astloom_cli.commands import inventory as inv
     from code_graph_service.domain.hashing import content_hash, digest
@@ -353,7 +406,17 @@ def test_inventory_one_root_classifies_with_models(tmp_path: Path, monkeypatch):
             language="",
         ),
     ]
-    store = SimpleNamespace(list_symbols=lambda _scope: symbols)
+    calls = {"full": 0, "index": 0}
+
+    def _list_index(_scope):
+        calls["index"] += 1
+        return symbols
+
+    def _list_full(_scope):
+        calls["full"] += 1
+        raise AssertionError("inventory must not dump full list_symbols")
+
+    store = SimpleNamespace(list_symbols=_list_full, list_symbols_index=_list_index)
     index = SimpleNamespace(
         list_symbol_models=lambda _scope: {
             "fn:ok": "local_bge:test-model",
@@ -390,6 +453,10 @@ def test_inventory_one_root_classifies_with_models(tmp_path: Path, monkeypatch):
     )
 
     row = inv._inventory_one_root(svc=svc, scope=scope, root_path=app, max_files=2000)
+    assert calls["index"] >= 1
+    assert calls["full"] == 0
+    assert row.get("listing", {}).get("mode") == "index"
+    assert row.get("listing", {}).get("healed") is False
     assert "src/done.py" in row["code"]["done"]
     assert "src/edited.py" in row["code"]["edited"]
     assert "src/todo.py" in row["code"]["remaining"]

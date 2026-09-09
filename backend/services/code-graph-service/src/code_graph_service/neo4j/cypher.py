@@ -55,6 +55,8 @@ WHERE n.tenant_id = $tenant_id
 DETACH DELETE n
 """
 
+# Hydrated bulk dump (body + living docs). Only via Store.list_symbols_full —
+# default list_symbols uses LIST_SYMBOLS_INDEX to avoid CLI/MCP Neo4j unpack hangs.
 LIST_SYMBOLS = """
 MATCH (n:CodeSymbol)
 WHERE n.tenant_id = $tenant_id

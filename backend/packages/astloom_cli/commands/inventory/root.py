@@ -37,7 +37,7 @@ def inventory_one_root(
     import time
 
     from astloom_cli.commands.inventory.discover import discover_code_and_docs
-    from code_graph_service.domain.ports import list_file_symbols_compact
+    from code_graph_service.domain.ports import list_symbols_for_inventory
 
     root_path = root_path.expanduser().resolve()
     filters = resolve_sync_filters(root=root_path)
@@ -87,6 +87,7 @@ def inventory_one_root(
                 "top_edited": [],
                 "top_remaining": [],
             },
+            "listing": {"mode": "skipped", "healed": False},
         }
 
     discovered_code, discovered_docs = discover_code_and_docs(
@@ -99,11 +100,23 @@ def inventory_one_root(
     docs_enabled = bool(filters.get("docs_enabled")) and bool(filters.get("doc_match_globs"))
     docs_discovered = {norm_rel(item.relative_path) for item in discovered_docs} if docs_enabled else set()
 
-    if deadline_monotonic is not None:
-        # FILE nodes only — full list_symbols_index on large graphs exceeds MCP budgets.
-        symbols = list(list_file_symbols_compact(svc.store, scope))
-    else:
-        symbols = list(svc.store.list_symbols(scope))
+    # MCP deadline → FILE-only. CLI → compact index with automatic FILE self-heal.
+    symbols, listing = list_symbols_for_inventory(
+        svc.store,
+        scope,
+        file_only=deadline_monotonic is not None,
+    )
+    if listing.get("healed"):
+        try:
+            from astloom_cli import ui
+
+            print(
+                f"   {ui.warn('!')} Inventory self-healed to FILE-only listing "
+                f"({listing.get('heal_reason') or 'compact index failed'})",
+                flush=True,
+            )
+        except Exception:  # noqa: BLE001
+            pass
 
     scanned = scan_root_symbols(
         symbols=symbols,
@@ -203,6 +216,7 @@ def inventory_one_root(
 
     return {
         "path": str(root_path),
+        "listing": listing,
         "filters": {
             "sources": filters.get("sources") or [],
             "docs_enabled": docs_enabled,

@@ -54,6 +54,22 @@ def test_list_symbols_index_strips_bulky_fields() -> None:
     assert all(s.embedding == [] for s in indexed)
 
 
+def test_neo4j_list_symbols_contract_is_index_not_full() -> None:
+    """Regression: Neo4jCrudMixin.list_symbols must delegate to index (hang-safe)."""
+    from code_graph_service.neo4j.crud import Neo4jCrudMixin
+
+    src = Neo4jCrudMixin.list_symbols.__doc__ or ""
+    assert "hang-safe" in src or "index" in src.lower()
+    # Method body must call list_symbols_index (not LIST_SYMBOLS / list_symbols_full).
+    import inspect
+
+    body = inspect.getsource(Neo4jCrudMixin.list_symbols)
+    assert "list_symbols_index" in body
+    assert "LIST_SYMBOLS" not in body
+    full = inspect.getsource(Neo4jCrudMixin.list_symbols_full)
+    assert "LIST_SYMBOLS" in full
+
+
 def test_list_symbols_index_keeps_hash_fields() -> None:
     store = InMemoryStore()
     scope = _scope()

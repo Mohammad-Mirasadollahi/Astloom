@@ -68,20 +68,25 @@ class InMemoryStore:
             self.delete_symbol(symbol_id, scope)
 
     def list_symbols(self, scope: Scope) -> list[GraphSymbol]:
+        """In-memory default stays hydrated (no Neo4j wire hang). Prefer index in prod Neo4j."""
+
         def _run() -> list[GraphSymbol]:
             items = [item for item in self._symbols.values() if self._same_project(item.scope, scope)]
             return deepcopy(sorted(items, key=lambda item: (item.qualified_name, item.id)))
 
         return self._with_lock(_run)
 
+    def list_symbols_full(self, scope: Scope) -> list[GraphSymbol]:
+        return self.list_symbols(scope)
+
     def list_symbols_lean(self, scope: Scope) -> list[GraphSymbol]:
-        symbols = self.list_symbols(scope)
+        symbols = self.list_symbols_full(scope)
         for sym in symbols:
             sym.ai_documentation = ""
         return symbols
 
     def list_symbols_index(self, scope: Scope) -> list[GraphSymbol]:
-        symbols = self.list_symbols(scope)
+        symbols = self.list_symbols_full(scope)
         for sym in symbols:
             sym.ai_documentation = ""
             sym.body = ""
