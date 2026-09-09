@@ -25,6 +25,44 @@ def test_quality_audit_errors_when_project_has_no_paths(monkeypatch):
     assert out["ok"] is False
     assert out["repo"] is None
     assert "no software paths" in out["error"]
+    assert "remediation" in out
+    assert "astloom paths add" in out["remediation"]
+
+
+def test_quality_audit_accepts_repo_root_fallback(tmp_path: Path, monkeypatch):
+    app = tmp_path / "ws"
+    app.mkdir()
+    monkeypatch.setattr(
+        "astloom_cli.software_paths.software_paths_for_project",
+        lambda *a, **k: [],
+    )
+
+    def _fake_report(*, repos=None, args=None, deadline_monotonic=None, scope=None):
+        assert Path(repos[0]) == app.resolve()
+        return {
+            "ok": True,
+            "repo": str(Path(repos[0]).resolve()),
+            "repos": [str(Path(repos[0]).resolve())],
+            "generated_at": "2026-09-09T00:00:00Z",
+            "summary": {"findings_total": 0},
+            "categories": [],
+            "findings": [],
+        }
+
+    monkeypatch.setattr(
+        "astloom_cli.commands.quality_audit.collect.build_quality_audit_report",
+        _fake_report,
+    )
+    backends = SimpleNamespace(docs=None, docs_scope=lambda _s: None)
+    out = quality_audit(
+        backends,
+        {"create_tasks": False, "top_n": 3, "repo_root": str(app)},
+        scope={"tenant_id": "mir", "workspace_id": "dev", "project_id": "demo-app"},
+        correlation_id=str(uuid4()),
+        base={"maps_to": "quality.audit"},
+    )
+    assert out["ok"] is True
+    assert out.get("workspace_path_fallback") is True
 
 
 def test_quality_audit_uses_pinned_project_root(tmp_path: Path, monkeypatch):

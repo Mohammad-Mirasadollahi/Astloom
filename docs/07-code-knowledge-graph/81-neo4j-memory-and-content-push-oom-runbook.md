@@ -5,10 +5,8 @@ doc_type: runbook
 status: active
 schema_version: '1.0'
 owner: code-graph-service
-summary: >-
-  Diagnose and remediate Neo4j JVM heap OOM during multi-hour content-push /
-  ingest-push syncs that surface as Bolt handshake failures on the mapped
-  host port (default 32287).
+summary: Diagnose and remediate Neo4j JVM heap OOM during multi-hour content-push / ingest-push
+  syncs that surface as Bolt handshake failures on the mapped host port (default 32287).
 tags:
 - neo4j
 - memory
@@ -29,19 +27,20 @@ audience_lane:
 - agents
 authority: normative
 visibility: internal
+doc_version: 1.0.0
+updated_at: '2026-08-15'
 linked_symbols:
 - backend/deployments/compose/compose.yaml
 - backend/deployments/compose/neo4j.example.env
 - backend/services/code-graph-service/src/code_graph_service/api/ingest_push_stream.py::_format_push_error
 - backend/packages/astloom_cli/connect_flow/client_push.py::client_push_sync
 - backend/platform/persistence/neo4j/README.md
+- tests/backend/services/code-graph-service/test_ingest_push_stream.py::test_run_push_with_progress_annotates_neo4j_bolt_handshake_failures
 related_docs:
 - docs/07-code-knowledge-graph/12-neo4j-runtime-plugins.md
 - docs/08-software-engineering-architecture/39-local-install-runbook.md
 - docs/superpowers/specs/2026-08-05-client-push-progress-stream-design.md
 - backend/platform/persistence/neo4j/README.md
-doc_version: 1.0.0
-updated_at: 2026-08-15
 language: en
 security_classification: internal
 ---

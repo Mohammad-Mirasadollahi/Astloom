@@ -88,14 +88,48 @@ def quality_audit(
         str(scope.get("project_id") or ""),
         must_exist=False,
     )
+    used_workspace_fallback = False
     if not pinned:
+        fallback = str(
+            arguments.get("repo_root")
+            or arguments.get("root_path")
+            or os.environ.get("ASTLOOM_MCP_WORKSPACE_ROOT")
+            or ""
+        ).strip()
+        if fallback:
+            fb = Path(fallback).expanduser()
+            try:
+                if fb.is_dir():
+                    pinned = [str(fb.resolve())]
+                    used_workspace_fallback = True
+            except OSError:
+                pinned = []
+    if not pinned:
+        # One-shot remediation for Cursor MCP (project JSON paths, not CLI identity).
+        tenant = str(scope.get("tenant_id") or "").strip()
+        workspace = str(scope.get("workspace_id") or "").strip()
+        project = str(scope.get("project_id") or "").strip()
+        hint_root = str(
+            arguments.get("repo_root")
+            or arguments.get("root_path")
+            or os.environ.get("ASTLOOM_MCP_WORKSPACE_ROOT")
+            or "/path/to/app"
+        ).strip()
+        remediation = (
+            f"On the Astloom host (active identity must match MCP project "
+            f"{tenant}/{workspace}/{project}): `astloom paths add {hint_root}` "
+            f"— or `astloom init --tenant {tenant or '…'} --workspace {workspace or '…'} "
+            f"--path {hint_root}`. Optional one-shot: pass `repo_root` or set "
+            f"`ASTLOOM_MCP_WORKSPACE_ROOT`."
+        )
         return {
             **base,
             "ok": False,
             "error": (
                 "no software paths pinned for this MCP project; "
-                "run `astloom paths add /path/to/app` (or init --path) on the Astloom host"
+                f"{remediation}"
             ),
+            "remediation": remediation,
             "repo": None,
             "repos": [],
             "scope": scope,
@@ -181,6 +215,7 @@ def quality_audit(
         **base,
         "ok": True,
         **payload,
+        "workspace_path_fallback": used_workspace_fallback,
         "docs_registry_hygiene": docs_registry_hygiene,
         "tasks_created": created,
         "tasks_created_count": len(created),

@@ -15,7 +15,19 @@ def _require_visible_root(root_path: str) -> str:
     try:
         return str(require_directory(root_path, label="root_path"))
     except ValidationError as exc:
-        raise ValueError(str(exc.message)) from exc
+        msg = str(exc.message)
+        # Cursor client may see a full tree while the Astloom MCP host only has a stub mount.
+        from pathlib import Path
+
+        raw = Path(str(root_path or "").strip()).expanduser()
+        parent = raw.parent if raw.name else None
+        if parent and parent.is_dir() and not raw.exists():
+            msg = (
+                f"{msg}. Parent directory exists on this host but the requested path "
+                "does not — pin/mount the full software tree on the Astloom host "
+                "(project `paths` / remote_root), not only the Cursor client workspace."
+            )
+        raise ValueError(msg) from exc
 
 
 def _resolve_root_path(arguments: dict[str, Any], scope: dict[str, str]) -> str:
@@ -52,6 +64,11 @@ def ingest_file(
     if not source.strip():
         raise ValueError("source is required")
     idempotency_key = str(arguments.get("idempotency_key") or f"mcp-ingest:{file_path}:{correlation_id}").strip()
+    # MCP hard timeout is ~25s; embeddings on cold Neo4j routinely blow the budget.
+    # Default skip (heal later via sync); callers may set skip_embeddings=false.
+    skip_embeddings = True
+    if "skip_embeddings" in arguments:
+        skip_embeddings = bool(arguments.get("skip_embeddings"))
     try:
         result = backends.graph.ingest_file(
             backends.graph_scope(scope),
@@ -62,6 +79,7 @@ def ingest_file(
                 "file_path": file_path,
                 "language": language,
                 "source": source,
+                "skip_embeddings": skip_embeddings,
             },
         )
     except CodeGraphError as exc:
