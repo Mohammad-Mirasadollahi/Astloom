@@ -33,6 +33,9 @@ def test_programming_profile_validates_and_lists_mcp_tools():
     qa_props = qa["input_schema"]["properties"]
     assert "create_tasks" in qa_props
     assert "reconcile_tasks" in qa_props
+    assert "repo_root" in qa_props
+    assert "root_path" in qa_props
+    assert qa["input_schema"].get("additionalProperties") is False
     assert "astloom_docs_authoring_standards" in names
     assert "astloom_code_graph_ingest_file" in names
     assert "astloom_code_graph_ingest_repo" in names

@@ -870,6 +870,14 @@
               "type": "boolean",
               "default": false,
               "description": "Cancel open mcp-quality automated Tasks whose fingerprint is no longer in the active finding set; purge terminal automated Tasks older than ASTLOOM_FOLLOWUP_TASK_RETENTION_DAYS. Implied when create_tasks is true."
+            },
+            "repo_root": {
+              "type": "string",
+              "description": "One-shot software tree when no project paths are pinned (same as root_path). Prefer `astloom paths add` on the Astloom host for durable pins."
+            },
+            "root_path": {
+              "type": "string",
+              "description": "Alias of repo_root for one-shot audit when software paths are not pinned."
             }
           },
           "additionalProperties": false
@@ -926,6 +934,20 @@
               "maximum": 1,
               "default": 0.9,
               "description": "Memory confidence 0..1"
+            },
+            "supersedes": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              },
+              "description": "Memory ids to deprecate after creating this note (resource=memory)"
+            },
+            "supersede_ids": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              },
+              "description": "Alias of supersedes"
             }
           },
           "required": [
