@@ -41,7 +41,7 @@ class RetrievalCommands:
                 (self._score(item, terms, wants_history) + embedding_boosts.get(item.id, 0.0), item)
                 for item in candidates
             ),
-            key=lambda pair: (-pair[0], pair[1].created_at, pair[1].id),
+            key=lambda pair: (-pair[0], -(self._updated_at_ts(pair[1])), pair[1].id),
         )
         for score, item in scored:
             reason = self._exclude_reason(item, score, wants_history)
@@ -140,7 +140,9 @@ class RetrievalCommands:
             MemoryKind.DEPRECATED: 0.0,
         }[item.kind]
         evidence = self.profile.evidence_weight if item.evidence_refs else 0.0
-        score = (overlap * kind_weight) + evidence + (item.confidence * self.profile.recency_weight)
+        # Confidence and recency are separate: recency_weight scales age decay, not confidence.
+        score = (overlap * kind_weight) + evidence + float(item.confidence or 0.0)
+        score += self.profile.recency_weight * self._recency_factor(item)
         if item.state == MemoryState.ACTIVE and item.kind in {MemoryKind.SEMANTIC, MemoryKind.WORKING}:
             score += self.profile.current_state_boost
         if item.pinned:
@@ -150,6 +152,29 @@ class RetrievalCommands:
         if item.state == MemoryState.CANDIDATE:
             score -= 0.5
         return score
+
+    def _updated_at_ts(self, item: MemoryItem) -> float:
+        text = str(getattr(item, "updated_at", None) or getattr(item, "created_at", None) or "").strip()
+        if not text:
+            return 0.0
+        try:
+            from datetime import datetime
+
+            if text.endswith("Z"):
+                text = text[:-1] + "+00:00"
+            return datetime.fromisoformat(text).timestamp()
+        except ValueError:
+            return 0.0
+
+    def _recency_factor(self, item: MemoryItem) -> float:
+        """1.0 for fresh notes; decays toward 0 over ~30 days."""
+        import time
+
+        ts = self._updated_at_ts(item)
+        if ts <= 0:
+            return 0.0
+        age_days = max(0.0, (time.time() - ts) / 86400.0)
+        return max(0.0, 1.0 - (age_days / 30.0))
 
     def _exclude_reason(self, item: MemoryItem, score: float, wants_history: bool = False) -> str | None:
         if item.kind == MemoryKind.RESTRICTED or item.state == MemoryState.RESTRICTED:

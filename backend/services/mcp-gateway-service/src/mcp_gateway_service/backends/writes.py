@@ -64,8 +64,9 @@ def _write_memory(
         raise ValueError("memory write requires title and body")
     tags = arguments.get("tags") if isinstance(arguments.get("tags"), list) else ["cursor", "mcp"]
     confidence = float(arguments.get("confidence") if arguments.get("confidence") is not None else 0.9)
+    mem_scope = backends.memory_scope(scope)
     item = backends.memory.create_memory(
-        backends.memory_scope(scope),
+        mem_scope,
         backends.actor_id,
         correlation_id,
         f"mcp-write-memory:{correlation_id}",
@@ -80,7 +81,32 @@ def _write_memory(
             "confidence": confidence,
         },
     )
-    return {**base, "written": "memory", "memory": item.public()}
+    raw_super = arguments.get("supersedes")
+    if raw_super is None:
+        raw_super = arguments.get("supersede_ids")
+    if isinstance(raw_super, str) and raw_super.strip():
+        supersede_ids = [raw_super.strip()]
+    elif isinstance(raw_super, list):
+        supersede_ids = [str(x).strip() for x in raw_super if str(x).strip()]
+    else:
+        supersede_ids = []
+    deprecated: list[Any] = []
+    if supersede_ids:
+        deprecated = backends.memory.deprecate_memory(
+            mem_scope,
+            backends.actor_id,
+            correlation_id,
+            f"mcp-write-memory-supersede:{correlation_id}",
+            supersede_ids,
+            f"superseded by {item.id}",
+        )
+    return {
+        **base,
+        "written": "memory",
+        "memory": item.public(),
+        "superseded": [row.public() for row in deprecated],
+        "superseded_ids": [row.id for row in deprecated],
+    }
 
 
 def _write_task(
