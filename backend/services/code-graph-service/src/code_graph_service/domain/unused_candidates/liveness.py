@@ -6,7 +6,7 @@ from collections import defaultdict
 
 from ..dead_code_scoring import USE_EDGE_TYPES, is_strong_use_edge, is_weak_use_edge
 from ..enums import RelType, SymbolKind
-from ..flows import FlowNode, is_entry_point
+from ..flows import FlowNode, is_entry_point, is_framework_ui_root_path
 from ..models import GraphEdge, GraphSymbol
 
 
@@ -69,6 +69,13 @@ def live_ids_in_pool(
 
     outside = all_ids - pool_ids
     live: set[str] = set()
+    # Next.js App Router: framework mounts page.tsx / layout.tsx without CALLS.
+    # Seed those FILE nodes (usually outside the eligible pool) so IMPORTS/CALLS
+    # can flood-fill the live UI tree.
+    for sid, symbol in by_id.items():
+        if symbol.kind == SymbolKind.FILE and is_framework_ui_root_path(symbol.file_path):
+            if not is_test_path(symbol.file_path):
+                live.add(sid)
     for sid in pool_ids:
         symbol = by_id.get(sid)
         if symbol is None:
@@ -96,14 +103,33 @@ def live_ids_in_pool(
         if is_entry_point(node, inbound_call_count=any_in, is_route_handler=False):
             live.add(sid)
 
+    # FILE live ⇒ eligible exports in that file are live (CONTAINS is not a USE edge).
+    ids_by_path: dict[str, set[str]] = defaultdict(set)
+    for sid, symbol in by_id.items():
+        path = (symbol.file_path or "").replace("\\", "/")
+        if path and sid in pool_ids:
+            ids_by_path[path].add(sid)
+
     stack = list(live)
+    seen_file_expand: set[str] = set()
     while stack:
         src = stack.pop()
+        src_sym = by_id.get(src)
+        if src_sym is not None and src_sym.kind == SymbolKind.FILE:
+            path = (src_sym.file_path or "").replace("\\", "/")
+            if path and path not in seen_file_expand:
+                seen_file_expand.add(path)
+                for member in ids_by_path.get(path, ()):
+                    if member not in live:
+                        live.add(member)
+                        stack.append(member)
         for tgt in outbound.get(src, ()):
-            if tgt in pool_ids and tgt not in live:
+            if tgt not in live:
+                # Targets outside the eligible pool (FILE peers) still expand the frontier.
                 live.add(tgt)
                 stack.append(tgt)
-    return live
+    # Restrict returned live set to the pool (callers expect pool membership).
+    return live & pool_ids if pool_ids else live
 
 
 def file_has_live_importers(

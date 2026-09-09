@@ -1,0 +1,14 @@
+{
+  "http_mcp_ok": true,
+  "project_id": "nextjs-live-roots",
+  "live_safe_count": 0,
+  "dead_helper_surfaced": true,
+  "value_funnel_callers": 1,
+  "row_count": 2,
+  "index_coverage": {
+    "status": "ok",
+    "pending_count": 0,
+    "safe_absence_claims": true,
+    "note": "index looks fresh for scoped absence claims"
+  }
+}

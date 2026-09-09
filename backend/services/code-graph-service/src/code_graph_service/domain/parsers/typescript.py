@@ -6,6 +6,7 @@ from ..enums import SymbolKind
 from ..models import ParsedSymbol, ParseResult
 from .javascript import (
     _class_symbols,
+    _export_from_import_symbol,
     _function_symbol,
     _import_symbol,
     _top_level_declaration,
@@ -29,6 +30,9 @@ def parse_typescript_source(file_path: str, source: str) -> ParseResult:
         if node.type == "import_statement":
             symbols.append(_import_symbol(source_bytes, module, node, import_aliases))
         elif node.type == "export_statement":
+            reexport = _export_from_import_symbol(source_bytes, module, node, import_aliases)
+            if reexport is not None:
+                symbols.append(reexport)
             declaration = first_child_named(
                 node,
                 "function_declaration",

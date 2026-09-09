@@ -265,10 +265,34 @@ def unused_candidates(
     flag_raw = arguments.get("flag_states")
     flag_states = flag_raw if isinstance(flag_raw, dict) else None
     repo_root = str(arguments.get("repo_root") or "").strip() or None
+    verify_disk_presence = bool(arguments.get("verify_disk_presence") or False)
     if not repo_root:
         import os
 
-        repo_root = str(os.environ.get("ASTLOOM_ROOT") or "").strip() or None
+        repo_root = (
+            str(os.environ.get("ASTLOOM_MCP_WORKSPACE_ROOT") or "").strip()
+            or str(os.environ.get("ASTLOOM_ROOT") or "").strip()
+            or None
+        )
+    if not verify_disk_presence:
+        try:
+            from astloom_cli.software_paths import software_paths_for_project
+
+            pinned = software_paths_for_project(
+                str(scope.get("tenant_id") or ""),
+                str(scope.get("workspace_id") or ""),
+                str(scope.get("project_id") or ""),
+                must_exist=True,
+            )
+            if pinned:
+                # Project pin is the indexed tree — enable disk demotion against it.
+                verify_disk_presence = True
+                if not str(arguments.get("repo_root") or "").strip():
+                    repo_root = pinned[0]
+        except Exception:  # noqa: BLE001 — disk demotion is best-effort
+            pass
+    if arguments.get("verify_disk_presence") is False:
+        verify_disk_presence = False
     path_prefix = str(arguments.get("path_prefix") or "").strip() or None
     # Normative: project_scan requires a floor; discovery default is 0.50 when omitted.
     if "min_confidence" not in arguments or arguments.get("min_confidence") is None:
@@ -294,6 +318,7 @@ def unused_candidates(
             flag_states=flag_states,
             repo_root=repo_root,
             disk_search=disk_search,
+            verify_disk_presence=verify_disk_presence,
             path_prefix=path_prefix,
             deadline_monotonic=deadline,
         )
@@ -316,6 +341,7 @@ def unused_candidates(
                 flag_states=flag_states,
                 repo_root=repo_root,
                 disk_search=disk_search,
+                verify_disk_presence=verify_disk_presence,
                 path_prefix=path_prefix,
             )
         except CodeGraphError as exc2:

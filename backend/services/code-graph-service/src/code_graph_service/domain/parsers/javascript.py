@@ -31,6 +31,9 @@ def parse_javascript_source(file_path: str, source: str) -> ParseResult:
         if node.type == "import_statement":
             symbols.append(_import_symbol(source_bytes, module, node, import_aliases))
         elif node.type == "export_statement":
+            reexport = _export_from_import_symbol(source_bytes, module, node, import_aliases)
+            if reexport is not None:
+                symbols.append(reexport)
             declaration = first_child_named(
                 node, "function_declaration", "class_declaration", "lexical_declaration"
             )
@@ -152,6 +155,66 @@ def _function_symbol(source: bytes, owner: str, node, kind: SymbolKind) -> Parse
         imports=[],
         bases=[],
         visibility="private" if name.startswith("_") else "public",
+    )
+
+
+def _export_from_import_symbol(
+    source: bytes,
+    module: str,
+    node,
+    import_aliases: dict[str, str],
+) -> ParsedSymbol | None:
+    """Treat ``export … from '…'`` / ``export { default } from '…'`` as IMPORT.
+
+    Next.js App Router pages often re-export a default component with no
+    ``import`` statement; without an IMPORTS edge the re-export target looks dead.
+    """
+    source_node = node.child_by_field_name("source")
+    if source_node is None:
+        # Some grammars nest source under export_clause; walk children.
+        for child in node.named_children:
+            if child.type == "string":
+                source_node = child
+                break
+    if source_node is None:
+        return None
+    module_path = node_text(source, source_node).strip("\"'")
+    if not module_path:
+        return None
+    text = node_text(source, node).strip()
+    names: list[str] = [module_path]
+    aliases: dict[str, str] = {}
+    # Named re-exports: export { Foo as Bar } from './mod'
+    for child in node.named_children:
+        if child.type in {"export_clause", "named_exports", "export_specifier"}:
+            for spec in named_children(child, "export_specifier") or (
+                [child] if child.type == "export_specifier" else []
+            ):
+                imported = spec.child_by_field_name("name")
+                local_node = spec.child_by_field_name("alias") or imported
+                if imported is None:
+                    continue
+                imported_name = node_text(source, imported)
+                local = node_text(source, local_node) if local_node is not None else imported_name
+                target = f"{module_path}.{imported_name}"
+                names.append(target)
+                aliases[local] = target
+    # Default re-export: export { default } from './X' — also keep module stem.
+    if "default" in text:
+        stem = module_path.rsplit("/", 1)[-1]
+        if stem and stem not in {".", ".."}:
+            aliases["default"] = module_path
+    import_aliases.update(aliases)
+    return ParsedSymbol(
+        kind=SymbolKind.IMPORT,
+        name=names[0],
+        qualified_name=f"{module}::__reexport__::{digest(text)[:8]}",
+        signature=text,
+        body=text,
+        calls=[],
+        imports=names,
+        bases=[],
+        import_aliases=aliases,
     )
 
 

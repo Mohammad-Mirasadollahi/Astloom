@@ -219,6 +219,7 @@ class QueryUseCases(GraphServiceSupport):
         flag_states: dict[str, Any] | None = None,
         repo_root: str | None = None,
         disk_search: bool = False,
+        verify_disk_presence: bool = False,
         path_prefix: str | None = None,
         deadline_monotonic: float | None = None,
     ) -> dict[str, Any]:
@@ -281,6 +282,7 @@ class QueryUseCases(GraphServiceSupport):
                 flag_states=flag_states,
                 repo_root=repo_root,
                 disk_search=disk_search,
+                verify_disk_presence=verify_disk_presence,
                 path_prefix=path_prefix,
             )
         except ValueError as exc:

@@ -44,7 +44,7 @@ related_docs:
 - as.doc.awg.mcp-first-skills-rules
 - docs/09-platform-governance-operations/10-impact-reporting-and-benefit-measurement.md
 - docs/00-master-plan/01-product-scope-and-feature-catalog.md
-doc_version: 2.6.3
+doc_version: 2.6.4
 updated_at: 2026-09-09
 audience:
 - engineer
@@ -245,6 +245,8 @@ If freshness is `stale` or ingest is pending:
 | Public HTTP handlers, IAM permission strings, SDK exports | External callers outside the graph |
 | Symbols referenced only from tests | `test_only`; delete tests **with** prod code when both are dead |
 | Entrypoints (`__main__`, CLI `main`, framework `app`) | No inbound graph edges by design |
+| Next.js App Router roots (`page.tsx` / `layout.tsx` / `route.ts` / …) and default re-exports | Framework mounts these without CALLS; parsers emit IMPORTS for `export { default } from` |
+| JSX component tags (`<Foo />`) | Treated as CALLS to PascalCase identifiers |
 | User-approved `tsoc-defer:` stopgaps | Do not delete without root-cause fix |
 | Ambiguous / unresolved `CALLS` | Cap score; do not treat as proof of life or of death alone |
 
@@ -407,6 +409,9 @@ Acceptance:
 - [x] Optional `path_prefix` scopes reported candidates without dropping cross-prefix liveness; guidance forbids Memory as candidate SoT.
 - [x] Shared-package `recommendation` and structure-priority truncation are specified (see doc 79).
 - [x] MCP graph load for anchored unused is neighborhood-bounded; `project_scan` degrades under the tool budget instead of `-32001` (doc 83).
+- [x] Next.js App Router roots / default re-exports / JSX tags do not yield false `safe_to_delete` on live page trees (FILE seeds on `page.tsx` flood-fill via IMPORTS/CALLS).
+- [x] Symbol-level rows on Next.js App Router entry paths cannot stay `safe_to_delete` (`file_verdict_blocks_delete`); ordinary module siblings of an entrypoint (e.g. Python `main`) are unchanged.
+- [x] When project software root is known (`verify_disk_presence`), candidates whose file/symbol is absent on disk are demoted (`disk_file_missing` / `disk_symbol_absent`).
 
 ## Related Documents
 

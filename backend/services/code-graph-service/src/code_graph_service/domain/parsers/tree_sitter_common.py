@@ -57,8 +57,24 @@ def collect_calls(
                 raw = _normalize_call_name(node_text(source, callee).strip())
                 if raw:
                     names.add(raw)
+        elif node.type in {"jsx_self_closing_element", "jsx_opening_element"}:
+            name_node = node.child_by_field_name("name")
+            if name_node is not None:
+                raw = _normalize_jsx_name(node_text(source, name_node).strip())
+                if raw:
+                    names.add(raw)
         stack.extend(reversed(node.children))
     return sorted(names)
+
+
+def _normalize_jsx_name(name: str) -> str:
+    """Keep PascalCase / member JSX tags; drop lowercase intrinsic HTML tags."""
+    cleaned = name.replace(" ", "")
+    if not cleaned or cleaned[0].islower():
+        return ""
+    if "." in cleaned:
+        return cleaned.split(".")[-1]
+    return cleaned
 
 
 def _normalize_call_name(name: str) -> str:

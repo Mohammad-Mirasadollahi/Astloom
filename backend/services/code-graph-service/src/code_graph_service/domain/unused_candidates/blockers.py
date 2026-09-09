@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from ..enums import SymbolKind
-from ..flows import FlowNode, is_entry_point
+from ..flows import FlowNode, is_entry_point, is_framework_ui_root_path
 from ..models import GraphSymbol
 from .constants import PUBLIC_HTTP_HINT, STRING_REGISTRY_HINT, TSOC_DEFER
 from .liveness import is_test_path
@@ -22,6 +22,8 @@ def blockers_for(symbol: GraphSymbol, *, inbound_any: int) -> list[str]:
     )
     if is_entry_point(node, inbound_call_count=inbound_any, is_route_handler=False):
         blockers.append("entrypoint")
+        if is_framework_ui_root_path(symbol.file_path):
+            blockers.append("framework_ui_root")
     if PUBLIC_HTTP_HINT.search(blob):
         blockers.append("public_http_handler")
     if STRING_REGISTRY_HINT.search(blob) or "__getattr__" in blob:

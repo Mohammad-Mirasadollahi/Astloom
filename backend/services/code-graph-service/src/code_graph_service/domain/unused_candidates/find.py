@@ -18,6 +18,7 @@ from ..dead_code_scoring import (
 from ..models import GraphEdge, GraphSymbol
 from .blockers import blockers_for
 from .constants import ELIGIBLE_KINDS, SCOPE_MODES
+from .disk_presence import demote_rows_missing_on_disk
 from .findings import (
     runtime_dead_candidates,
     unreachable_file_candidates,
@@ -51,6 +52,7 @@ def find_unused_candidates(
     flag_states: dict[str, Any] | None = None,
     repo_root: str | None = None,
     disk_search: bool = False,
+    verify_disk_presence: bool = False,
     path_prefix: str | None = None,
 ) -> dict[str, Any]:
     """Return unused-candidate payload for MCP / service callers."""
@@ -251,6 +253,44 @@ def find_unused_candidates(
 
     candidates.sort(key=lambda r: (-float(r.get("score") or 0), str(r.get("symbol") or "")))
     skipped.sort(key=lambda r: (-float(r.get("score") or 0), str(r.get("symbol") or "")))
+
+    # App Router entry files are live roots: no symbol on that path may be safe_to_delete.
+    # Do NOT demote siblings merely because another symbol in the same module is an
+    # entrypoint (e.g. Python ``main`` next to a true orphan helper).
+    from ..flows import is_framework_ui_root_path
+
+    blocked_paths = {
+        str(s.file_path or "").replace("\\", "/")
+        for s in symbols
+        if is_framework_ui_root_path(s.file_path or "")
+    }
+    if blocked_paths:
+        for row in candidates:
+            path = str(row.get("path") or "").replace("\\", "/")
+            if path in blocked_paths and row.get("safe_to_delete"):
+                row["safe_to_delete"] = False
+                blockers = list(row.get("blockers") or [])
+                blockers = list(dict.fromkeys([*blockers, "file_verdict_blocks_delete"]))
+                row["blockers"] = blockers
+        still_safe: list[dict[str, Any]] = []
+        for row in candidates:
+            if row.get("safe_to_delete"):
+                still_safe.append(row)
+            else:
+                skipped.append(row)
+        candidates = still_safe
+        candidates.sort(key=lambda r: (-float(r.get("score") or 0), str(r.get("symbol") or "")))
+        skipped.sort(key=lambda r: (-float(r.get("score") or 0), str(r.get("symbol") or "")))
+
+    if verify_disk_presence and repo_root:
+        candidates, skipped = demote_rows_missing_on_disk(
+            candidates,
+            skipped,
+            repo_root=repo_root,
+            include_uncertain=include_uncertain,
+        )
+        candidates.sort(key=lambda r: (-float(r.get("score") or 0), str(r.get("symbol") or "")))
+        skipped.sort(key=lambda r: (-float(r.get("score") or 0), str(r.get("symbol") or "")))
 
     def _take_with_structure_priority(rows: list[dict[str, Any]], limit: int) -> list[dict[str, Any]]:
         """Keep package/file findings visible when symbol noise fills max_results."""

@@ -135,6 +135,7 @@ Code evidence anchor: `backend/services/code-graph-service/src/code_graph_servic
 
 ## History
 
+- 2026-09-09: Doc `36` v2.6.4 — Next.js App Router live roots, symbol≤file triage, disk-absence demotion. Doc `83` v1.1 — `unused_candidates` neighborhood load vs `project_scan` soft `degraded`; live ThinkingSOC dump timings.
 - 2026-09-09: Doc `83` v1.1 — `unused_candidates` neighborhood load vs `project_scan` soft `degraded`; live ThinkingSOC dump timings. Doc `36` v2.6.3 — MCP budget fields and agent loop.
 - 2026-09-05: Added `83-mcp-tool-budget-and-small-batch-sync.md` (MCP hard/soft budgets, FILE-index small-batch sync, quality_audit scope).
 - 2026-09-03: Adaptive living-docs packing for large files (`pack_docs_batches` + split-on-timeout); human docs already window-embed.

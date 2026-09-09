@@ -31,8 +31,39 @@ _ENTRY_NAME = re.compile(
     r"^(main|__main__|handler|lambda_handler|lifespan|get_db|"
     r"middleware|errorHandler|"
     r"on_[a-z].*|handle_[a-z].*|"
-    r"test_.*|Test[A-Z].*)$"
+    r"test_.*|Test[A-Z].*|"
+    r"Page|Layout|Default|Template|Loading|Error|NotFound|generateMetadata|"
+    r"generateStaticParams|generateViewport|GET|POST|PUT|PATCH|DELETE|HEAD|OPTIONS)$"
 )
+
+# Next.js App Router special files (basename without extension).
+_APP_ROUTER_BASENAMES = frozenset(
+    {
+        "page",
+        "layout",
+        "route",
+        "default",
+        "template",
+        "loading",
+        "error",
+        "not-found",
+        "forbidden",
+        "unauthorized",
+        "global-error",
+    }
+)
+
+
+def is_framework_ui_root_path(file_path: str) -> bool:
+    """True for Next.js App Router entry files (page.tsx / layout.tsx / …)."""
+    path = (file_path or "").replace("\\", "/").rsplit("/", 1)[-1].lower()
+    if "." not in path:
+        return False
+    stem, ext = path.rsplit(".", 1)
+    if ext not in {"tsx", "ts", "jsx", "js"}:
+        return False
+    return stem in _APP_ROUTER_BASENAMES
+
 
 _DECORATOR_HINT = re.compile(
     r"@(?:app|router|blueprint)\.(?:get|post|put|delete|patch|route|websocket)\b|"
@@ -70,6 +101,8 @@ def is_entry_point(
     is_route_handler: bool = False,
 ) -> bool:
     if is_route_handler:
+        return True
+    if is_framework_ui_root_path(node.file_path):
         return True
     if inbound_call_count == 0 and node.name not in {"__init__", "__new__"}:
         # Leaf modules still qualify when named conventionally or decorated
