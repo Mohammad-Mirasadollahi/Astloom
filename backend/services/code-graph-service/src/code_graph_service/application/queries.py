@@ -72,6 +72,139 @@ class QueryUseCases(GraphServiceSupport):
             ids.add(edge.target_id)
         return self._symbols_for_ids(scope, ids), edges
 
+    def _resolve_unused_seed_ids(
+        self,
+        scope: Scope,
+        anchor_symbols: list[str] | None,
+        anchor_paths: list[str] | None,
+    ) -> list[str]:
+        """Resolve anchors to symbol ids without listing the whole project."""
+        ids: list[str] = []
+        seen: set[str] = set()
+
+        def _add(sid: str) -> None:
+            if sid and sid not in seen:
+                seen.add(sid)
+                ids.append(sid)
+
+        for token in anchor_symbols or []:
+            raw = str(token or "").strip()
+            if not raw:
+                continue
+            if self._maybe_get(raw, scope) is not None:
+                _add(raw)
+                continue
+            lookup = getattr(self.store, "get_symbol_by_qualified_name", None)
+            if callable(lookup):
+                found = lookup(scope, raw)
+                if found is not None:
+                    _add(found.id)
+                    continue
+            constructed = f"sym:{scope.project_id}:{raw}"
+            if self._maybe_get(constructed, scope) is not None:
+                _add(constructed)
+                continue
+            # Short-name match without full dump when the store supports it.
+            matcher = getattr(self.store, "find_symbols_by_name", None)
+            if callable(matcher):
+                for hit in matcher(scope, raw) or []:
+                    _add(getattr(hit, "id", "") or "")
+                continue
+            # Do not fall back to list_symbols_compact — that reintroduces MCP -32001.
+
+        for path in anchor_paths or []:
+            path_n = str(path or "").replace("\\", "/").strip()
+            if not path_n:
+                continue
+            lister = getattr(self.store, "list_symbols_for_file", None)
+            if callable(lister):
+                for sym in lister(scope, path_n) or []:
+                    _add(sym.id)
+                continue
+            # Prefix path anchors: optional store helper; otherwise skip (no full dump).
+            prefix_lister = getattr(self.store, "list_symbols_for_path_prefix", None)
+            if callable(prefix_lister):
+                for sym in prefix_lister(scope, path_n) or []:
+                    _add(sym.id)
+        return ids
+
+    def _load_unused_anchored_graph(
+        self,
+        scope: Scope,
+        *,
+        anchor_symbols: list[str] | None,
+        anchor_paths: list[str] | None,
+        scope_mode: str = "changed_symbols",
+    ) -> tuple[list[Any], list[Any], list[str], dict[str, Any]]:
+        """Neighborhood load for changed_symbols / task_neighborhood / explicit_paths."""
+        seed_ids = self._resolve_unused_seed_ids(scope, anchor_symbols, anchor_paths)
+        if not seed_ids:
+            return [], [], [], {"graph_load": "anchored_empty"}
+        # One hop covers inbound callers (changed_symbols) and task neighborhood pool.
+        by_id, edges = self._subgraph_around_seeds(
+            scope, seed_ids, max_depth=1
+        )
+        return (
+            list(by_id.values()),
+            edges,
+            seed_ids,
+            {"graph_load": "anchored_neighborhood", "seed_count": len(seed_ids)},
+        )
+
+    def _load_unused_project_scan_graph(
+        self,
+        scope: Scope,
+        *,
+        deadline_monotonic: float | None,
+    ) -> tuple[list[Any], list[Any], dict[str, Any]]:
+        """Full compact listing with optional soft deadline (MCP hard-timeout headroom)."""
+        import time
+        from concurrent.futures import ThreadPoolExecutor
+        from concurrent.futures import TimeoutError as FuturesTimeout
+
+        def _dump() -> tuple[list[Any], list[Any]]:
+            return list_symbols_compact(self.store, scope), self.store.list_edges(scope)
+
+        if deadline_monotonic is None:
+            symbols, edges = _dump()
+            return symbols, edges, {"graph_load": "project_scan_full"}
+
+        remaining = float(deadline_monotonic) - time.monotonic()
+        if remaining <= 0.05:
+            return (
+                [],
+                [],
+                {
+                    "graph_load": "project_scan_skipped",
+                    "degraded": True,
+                    "truncated_phases": ["graph_load"],
+                    "note": "unused_candidates_soft_budget_exhausted_before_graph_load",
+                },
+            )
+        # Do not use `with ThreadPoolExecutor`: on timeout its __exit__ waits for the
+        # worker (Neo4j dump) and burns the hard MCP budget before degraded can reply.
+        pool = ThreadPoolExecutor(max_workers=1)
+        future = pool.submit(_dump)
+        try:
+            symbols, edges = future.result(timeout=max(0.05, remaining))
+        except FuturesTimeout:
+            pool.shutdown(wait=False, cancel_futures=True)
+            return (
+                [],
+                [],
+                {
+                    "graph_load": "project_scan_timeout",
+                    "degraded": True,
+                    "truncated_phases": ["graph_load"],
+                    "note": (
+                        "unused_candidates_soft_budget_exhausted; "
+                        "retry with changed_symbols anchors or smaller project"
+                    ),
+                },
+            )
+        pool.shutdown(wait=False)
+        return symbols, edges, {"graph_load": "project_scan_full"}
+
     def unused_candidates(
         self,
         scope: Scope,
@@ -87,6 +220,7 @@ class QueryUseCases(GraphServiceSupport):
         repo_root: str | None = None,
         disk_search: bool = False,
         path_prefix: str | None = None,
+        deadline_monotonic: float | None = None,
     ) -> dict[str, Any]:
         banner = (
             self.freshness_status(scope)
@@ -112,12 +246,26 @@ class QueryUseCases(GraphServiceSupport):
             env_root = str(__import__("os").environ.get("ASTLOOM_ROOT") or "").strip()
             repo_root = env_root or None
         mode = (scope_mode or "").strip()
+        load_meta: dict[str, Any] = {"graph_load": "none"}
         if mode != "project_scan" and not (anchor_symbols or anchor_paths):
             symbols: list[Any] = []
             edges: list[Any] = []
+        elif mode == "project_scan":
+            # Full project listing — required for correct liveness under path_prefix.
+            # MCP soft-budget may interrupt via deadline_monotonic (see gateway).
+            symbols, edges, load_meta = self._load_unused_project_scan_graph(
+                scope, deadline_monotonic=deadline_monotonic
+            )
         else:
-            symbols = list_symbols_compact(self.store, scope)
-            edges = self.store.list_edges(scope)
+            # Anchored modes must stay O(neighborhood) like callers — never dump.
+            symbols, edges, resolved_ids, load_meta = self._load_unused_anchored_graph(
+                scope,
+                anchor_symbols=anchor_symbols,
+                anchor_paths=anchor_paths,
+                scope_mode=mode,
+            )
+            if resolved_ids:
+                anchor_symbols = list(resolved_ids)
         try:
             payload = find_unused_candidates(
                 symbols,
@@ -137,6 +285,20 @@ class QueryUseCases(GraphServiceSupport):
             )
         except ValueError as exc:
             raise ValidationError(str(exc)) from exc
+        if load_meta.get("degraded"):
+            payload["degraded"] = True
+            payload["truncated_phases"] = list(
+                dict.fromkeys(
+                    [
+                        *(payload.get("truncated_phases") or []),
+                        *(load_meta.get("truncated_phases") or []),
+                    ]
+                )
+            )
+            note = str(load_meta.get("note") or "").strip()
+            if note:
+                payload["note"] = note
+            payload["graph_load"] = load_meta.get("graph_load")
         payload["freshness"] = "ok" if safe_absence else process_freshness
         payload["freshness_detail"] = {
             "pending_files": pending if isinstance(pending, list) else [],
@@ -395,7 +557,7 @@ class QueryUseCases(GraphServiceSupport):
         direction: str,
         rel_types: list[str] | None,
     ) -> list[Any]:
-        """Prefer Neo4j Cypher neighborhood when available; else full in-memory edge list."""
+        """Prefer Neo4j Cypher neighborhood; never fall back to a full-graph edge dump."""
         fetch = getattr(self.store, "neighborhood_edges", None)
         if callable(fetch):
             try:
@@ -411,7 +573,67 @@ class QueryUseCases(GraphServiceSupport):
                 )
             except Exception:
                 pass
-        return list(self.store.list_edges(scope))
+        return self._adjacency_edges_for_seed(
+            scope,
+            seed_id,
+            max_depth=max_depth,
+            direction=direction,
+            rel_types=rel_types,
+        )
+
+    def _adjacency_edges_for_seed(
+        self,
+        scope: Scope,
+        seed_id: str,
+        *,
+        max_depth: int,
+        direction: str,
+        rel_types: list[str] | None,
+    ) -> list[Any]:
+        """Bounded BFS via list_edges(source_id|target_id) — O(neighborhood), not O(project)."""
+        allowed = {r.upper() for r in rel_types} if rel_types else None
+        direction_l = (direction or "both").strip().lower() or "both"
+        depth = max(1, int(max_depth or 1))
+        collected: list[Any] = []
+        seen_edge: set[str] = set()
+        frontier = {seed_id}
+        visited_nodes = {seed_id}
+
+        def _one_hop(node_id: str) -> list[Any]:
+            hops: list[Any] = []
+            specs: list[dict[str, str]] = []
+            if direction_l in {"both", "downstream", "out", "outbound"}:
+                specs.append({"source_id": node_id})
+            if direction_l in {"both", "upstream", "in", "inbound"}:
+                specs.append({"target_id": node_id})
+            if not specs:
+                specs = [{"source_id": node_id}, {"target_id": node_id}]
+            for kwargs in specs:
+                for edge in self.store.list_edges(scope, **kwargs):
+                    if allowed is not None and str(edge.rel_type or "").upper() not in allowed:
+                        continue
+                    hops.append(edge)
+            return hops
+
+        for _ in range(depth):
+            nxt: set[str] = set()
+            for node_id in frontier:
+                for edge in _one_hop(node_id):
+                    eid = getattr(edge, "id", None) or (
+                        f"{edge.source_id}:{edge.rel_type}:{edge.target_id}"
+                    )
+                    if str(eid) in seen_edge:
+                        continue
+                    seen_edge.add(str(eid))
+                    collected.append(edge)
+                    other = edge.target_id if edge.source_id == node_id else edge.source_id
+                    if other and other not in visited_nodes:
+                        visited_nodes.add(other)
+                        nxt.add(other)
+            frontier = nxt
+            if not frontier:
+                break
+        return collected
 
     def semantic_search(
         self,

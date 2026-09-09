@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import os
+import time
 from typing import Any
 
 from code_graph_service.domain.confidence_policy import DEFAULT_IMPACT_MIN_CONFIDENCE
@@ -9,6 +11,26 @@ from code_graph_service.domain.errors import CodeGraphError, NotFoundError
 
 from ..platform import PlatformBackends
 from ._resolve import resolve_symbol_id
+
+
+def _unused_candidates_budget_seconds() -> float:
+    """Soft collect budget — leave headroom under the HTTP MCP tool timeout."""
+    raw = str(os.environ.get("ASTLOOM_MCP_UNUSED_CANDIDATES_BUDGET_SECONDS", "18")).strip()
+    try:
+        value = float(raw)
+    except ValueError:
+        value = 18.0
+    if value <= 0:
+        value = 18.0
+    tool_raw = str(os.environ.get("ASTLOOM_MCP_TOOL_TIMEOUT_SECONDS", "25")).strip()
+    try:
+        tool_timeout = float(tool_raw)
+    except ValueError:
+        tool_timeout = 25.0
+    if tool_timeout <= 0:
+        tool_timeout = 25.0
+    return max(3.0, min(value, max(3.0, tool_timeout - 6.0)))
+
 
 def search(
     backends: PlatformBackends,
@@ -258,6 +280,7 @@ def unused_candidates(
     if requested and requested != scope.get("project_id"):
         raise ValueError("project_id does not match the active MCP project scope")
     backends.ensure_graph_seed(scope)
+    deadline = time.monotonic() + _unused_candidates_budget_seconds()
     try:
         payload = backends.graph.unused_candidates(
             backends.graph_scope(scope),
@@ -272,9 +295,31 @@ def unused_candidates(
             repo_root=repo_root,
             disk_search=disk_search,
             path_prefix=path_prefix,
+            deadline_monotonic=deadline,
         )
     except CodeGraphError as exc:
         raise ValueError(str(getattr(exc, "message", exc))) from exc
+    except TypeError as exc:
+        # Only fall back when this build rejects deadline_monotonic — not any TypeError.
+        if "deadline_monotonic" not in str(exc):
+            raise
+        try:
+            payload = backends.graph.unused_candidates(
+                backends.graph_scope(scope),
+                scope_mode=scope_mode,
+                anchor_symbols=[str(x) for x in (anchors or [])],
+                anchor_paths=[str(x) for x in (paths or [])],
+                max_results=max_results,
+                include_uncertain=include_uncertain,
+                min_confidence=min_confidence,
+                coverage_hits=coverage_hits,
+                flag_states=flag_states,
+                repo_root=repo_root,
+                disk_search=disk_search,
+                path_prefix=path_prefix,
+            )
+        except CodeGraphError as exc2:
+            raise ValueError(str(getattr(exc2, "message", exc2))) from exc2
     if triage:
         try:
             from code_graph_service.domain.dead_code_scoring import llm_triage_port

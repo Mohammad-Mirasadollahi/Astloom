@@ -27,7 +27,7 @@ Exposes Astloom capabilities to IDE clients (Cursor) over the Model Context Prot
 | `astloom_code_graph_callers` | read | Ranked inbound callers (fan-in) |
 | `astloom_code_graph_community` | read | Community membership for one symbol |
 | `astloom_code_graph_call_path` | read | Compact outbound call-path pack |
-| `astloom_code_graph_unused_candidates` | read | Scored dead-code candidates (`score`/`evidence`/`finding_kind`; includes `unwired_shared_package` with `recommendation` wire\|keep_public\|retire; default `task_neighborhood`; optional `path_prefix` + `repo_root`; anchors required except `project_scan`; never deletes) |
+| `astloom_code_graph_unused_candidates` | read | Scored dead-code candidates; anchored modes use 1-hop load; `project_scan` may `degraded` under MCP soft budget (doc 83); never deletes |
 | `astloom_code_graph_explore` | read | **Primary** surgical context: seeds + call path + budgeted source |
 | `astloom_code_graph_detect_changes` | read | Risk-scored review context for changed files |
 | `astloom_code_graph_architecture_overview` | read | Communities, hubs, bridges, gaps, surprises |
@@ -88,10 +88,13 @@ Responses include `store_mode` and `graph_mode`.
 | --- | --- | --- |
 | `ASTLOOM_MCP_TOOL_TIMEOUT_SECONDS` | `25` | Hard JSON-RPC timeout; `-32001` names the tool when known |
 | `ASTLOOM_MCP_QUALITY_AUDIT_BUDGET_SECONDS` | `18` (capped to tool timeout − 6s) | Soft collect deadline for `astloom_quality_audit` |
+| `ASTLOOM_MCP_UNUSED_CANDIDATES_BUDGET_SECONDS` | `18` (capped to tool timeout − 6s) | Soft graph-load deadline for `astloom_code_graph_unused_candidates` |
 
 **`astloom_code_graph_sync`:** Prefer small `max_files` under MCP. When `max_files` is below the ingest default, the gateway sets `embedding_refresh_mode=off` if unset (`max_files < 50`), and code-graph uses FILE-only lookups + empty shared resolution indexes so Neo4j full-graph dumps cannot burn the hard timeout. Re-run while `truncated=true`.
 
 **`astloom_quality_audit`:** Uses the MCP project graph scope (not CLI defaults), runs code inventory before docs under the soft deadline, caps discovery under deadline, and returns `degraded` / `truncated_phases` only when the soft budget is exhausted.
+
+**`astloom_code_graph_unused_candidates`:** Anchored modes (`changed_symbols` / `task_neighborhood` / `explicit_paths`) load a 1-hop neighborhood (same class as `callers`), not a full-project dump. `project_scan` still needs the full graph for liveness; MCP passes a soft deadline and returns `degraded` / `truncated_phases=["graph_load"]` before the hard `-32001`.
 
 Normative runbook: `docs/07-code-knowledge-graph/83-mcp-tool-budget-and-small-batch-sync.md`.
 

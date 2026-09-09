@@ -12,6 +12,8 @@ Repeatable MCP HTTP probes against a running Astloom MCP gateway (`:32500`).
 | `test_mcp_read_tools_matrix_live.py` | Same | Listed tools (including `quality_audit` + `sync` `max_files=1`) return without `-32001` and under ~24s on `demo-app` scope when that pin exists |
 | `test_mcp_tool_payload_quality_live.py` | Same + `/opt/Astloom` pin | Semantic payload checks on **astloom**: scope, search hits/scores, sync mode, `quality_audit` not degraded + correct repo pin, architecture/detect/neighbors shape, memory write→retrieve |
 
+ThinkingSOC-sized `unused_candidates` (`changed_symbols` vs `project_scan` degrade) is specified and live-measured in `docs/07-code-knowledge-graph/83-mcp-tool-budget-and-small-batch-sync.md`. Tiny-fixture scoring live: `tests/live/code-graph-service/test_unused_candidates_mcp_http_live.py`.
+
 TLS: default URL is `https://127.0.0.1:32500` with verify off for local self-signed certs. Set `ASTLOOM_MCP_HTTP_TLS_VERIFY=1` when using a trusted CA.
 
 Normative contracts: `docs/07-code-knowledge-graph/83-mcp-tool-budget-and-small-batch-sync.md`.

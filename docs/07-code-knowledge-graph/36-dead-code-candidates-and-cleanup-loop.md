@@ -31,17 +31,21 @@ linked_symbols:
 - backend/services/code-graph-service/src/code_graph_service/domain/unused_candidates/
 - backend/services/code-graph-service/src/code_graph_service/domain/unused_candidates/package_class.py
 - backend/services/code-graph-service/src/code_graph_service/domain/dead_code_scoring.py
+- backend/services/code-graph-service/src/code_graph_service/application/queries.py::QueryUseCases.unused_candidates
+- backend/services/mcp-gateway-service/src/mcp_gateway_service/backends/code_graph/query.py::unused_candidates
 related_docs:
 - as.doc.ckg.index
 - docs/07-code-knowledge-graph/02-neo4j-schema-design.md
 - docs/07-code-knowledge-graph/09-context-pack-retrieval-and-agent-workflow.md
+- docs/07-code-knowledge-graph/83-mcp-tool-budget-and-small-batch-sync.md
 - as.doc.ckg.stale-documentation-candidates-and-cleanup-loop
 - as.doc.ckg.shared-package-wiring-and-unwired-findings
 - as.doc.ckg.phased-problematic-code-findings
 - as.doc.awg.mcp-first-skills-rules
 - docs/09-platform-governance-operations/10-impact-reporting-and-benefit-measurement.md
 - docs/00-master-plan/01-product-scope-and-feature-catalog.md
-doc_version: 2.6.2
+doc_version: 2.6.3
+updated_at: 2026-09-09
 audience:
 - engineer
 - architect
@@ -63,6 +67,8 @@ relations_declared:
 - type: complements
   target: as.doc.ckg.phased-problematic-code-findings
 - type: complements
+  target: docs/07-code-knowledge-graph/83-mcp-tool-budget-and-small-batch-sync.md
+- type: complements
   target: docs/09-platform-governance-operations/10-impact-reporting-and-benefit-measurement.md
 chunk_hints:
   strategy: heading_h2
@@ -70,7 +76,6 @@ chunk_hints:
   overlap_tokens: 64
 language: en
 security_classification: internal
-updated_at: 2026-08-10
 ---
 
 # 36 - Dead-Code Candidates And Cleanup Loop
@@ -257,7 +262,7 @@ Tool name: `astloom_code_graph_unused_candidates`
 | `scope_mode` | enum | yes | `task_neighborhood` \| `changed_symbols` \| `explicit_paths` \| `project_scan` |
 | `anchor_symbols` | string[] | no | Required effectively for non-`project_scan` modes |
 | `anchor_paths` | string[] | no | Repo-relative paths |
-| `path_prefix` | string | no | Repo-relative directory/file prefix; **report** candidates only under this path. Liveness still uses the full project graph (cross-prefix callers keep callees live). Prefer for `project_scan` on large repos |
+| `path_prefix` | string | no | Repo-relative directory/file prefix; **report** candidates only under this path. Liveness still uses the full project graph (cross-prefix callers keep callees live). Does **not** make `project_scan` cheap on large Neo4j (doc 83) |
 | `max_results` | int | no | Default 50; max 200 |
 | `include_uncertain` | bool | no | Default false |
 | `min_confidence` | number | no | Floor 0.0–1.0; default 0.0 for task modes; `project_scan` omits → `0.50`; agents acting on deletes should pass 0.80 |
@@ -318,29 +323,37 @@ Tool name: `astloom_code_graph_unused_candidates`
       "safe_to_delete": false
     }
   ],
-  "skipped_uncertain": []
+  "skipped_uncertain": [],
+  "degraded": false,
+  "truncated_phases": [],
+  "graph_load": "anchored_neighborhood",
+  "note": "optional; set when graph_load timed out"
 }
 ```
 
 **Status:** Tool is implemented and advertised on `programming-cursor-mcp` (`maps_to: code_graph.unused_candidates`). MCP default `scope_mode` is `task_neighborhood`; `project_scan` is opt-in discovery. Finding kinds include `zombie_package`, `unwired_shared_package` (with `recommendation`), and optional `runtime_dead` / `flag_controlled_dead`.
 
+**MCP graph-load budget (normative ops in doc 83):** HTTP MCP hard timeout is 25s. Anchored modes must load a 1-hop neighborhood (same class as `callers`), not a full-project dump. `project_scan` may return `degraded=true` with `truncated_phases=["graph_load"]` and `graph_load=project_scan_timeout` instead of JSON-RPC `-32001`. Empty `candidates` in that case is **not** a whole-prefix absence proof.
+
 **`max_results` structure priority:** When truncating scored rows, prefer `unwired_shared_package` / `zombie_package`, then `unreachable_file`, then other kinds so package findings are not drowned by equal-score symbol noise. Details: doc 79.
 
 ## Configuration
 
-Tuning is **per MCP call**, not via dedicated `.env` knobs:
+Tuning is **per MCP call** for scoring. Graph-load headroom under HTTP MCP is an operator env (doc 83):
 
 | Knob | Where | Notes |
 | --- | --- | --- |
 | `min_confidence` | MCP request | Floor for returned rows; agents deleting should pass `0.8`. For `project_scan`, omitting the field applies discovery default `0.50`; an explicit `0.0` opts out of that floor. |
 | `max_results` | MCP request | Hard cap (1–200) |
 | `scope_mode` | MCP request | Task modes vs opt-in `project_scan` |
-| `path_prefix` | MCP request | Report-only path filter; keep full-graph liveness |
+| `path_prefix` | MCP request | Report-only path filter; keep full-graph liveness; does not shrink Neo4j dump for `project_scan` |
 | `include_uncertain` / `triage` | MCP request | Uncertain rows / advisory triage (`local_rules` engine) |
 | `disk_search` + `repo_root` | MCP request | Disk string-name soft-blocker; `repo_root` also drives shared-package wire/retire classification (doc 79) |
 | `coverage_hits` / `flag_states` | MCP request | Optional coverage / Piranha flag inputs |
+| `ASTLOOM_MCP_UNUSED_CANDIDATES_BUDGET_SECONDS` | MCP process env | Soft graph-load deadline (default 18, capped to tool timeout − 6s). Not a scoring floor. |
+| `ASTLOOM_MCP_TOOL_TIMEOUT_SECONDS` | MCP process env | Hard JSON-RPC timeout (default 25). `-32001` must not be the unused-candidates success path. |
 
-Infrastructure env vars (`ASTLOOM_MCP_GRAPH_MODE`, Neo4j/Postgres URLs) already select the graph store. Do **not** add `ASTLOOM_DEAD_CODE_*` defaults unless an operator policy later requires org-wide floors without per-call args (YAGNI for v1).
+Infrastructure env vars (`ASTLOOM_MCP_GRAPH_MODE`, Neo4j/Postgres URLs) already select the graph store. Do **not** add `ASTLOOM_DEAD_CODE_*` scoring defaults unless an operator policy later requires org-wide floors without per-call args.
 
 ## Phase roadmap (research-aligned)
 
@@ -352,7 +365,7 @@ Scores only decrease via caps (monotonic). Agent MCP default scope is `task_neig
 
 ## Agent Workflow (with guidance)
 
-1. After replacing or retiring behavior, call unused-candidates **in the same change** (or `project_scan` with `min_confidence` and preferably `path_prefix` for discovery).
+1. After replacing or retiring behavior, call unused-candidates **in the same change** with `changed_symbols` or `task_neighborhood` and `anchor_symbols`. On ThinkingSOC-sized graphs do **not** default to `project_scan` (doc 83). If `degraded` / `graph_load` timeout, retry with anchors — empty candidates is not a prefix-wide proof.
 2. Prefer `safe_to_delete` and `score ≥ 0.80`; read `evidence` before acting.
 3. Prove with repo search and non-Python callers (gateway, OpenAPI, frontend, deploy).
 4. Delete symbol **and** exclusive tests / re-exports / docs that only described it.
@@ -380,6 +393,7 @@ Blind deletes without tests/acceptance must not count as positive benefit.
 | Stale graph after local edits | Freshness caps; pending-sync banners |
 | Agent deletes public API | Public/export/HTTP exclusions; score floors |
 | Scope creep to whole repo | Default task/changed scope; `project_scan` opt-in only |
+| MCP `-32001` on large graphs | Neighborhood load for anchored modes; soft budget + `degraded` for `project_scan` (doc 83) |
 | LLM triage hallucination | Triage cannot raise `safe_to_delete`; graph remains SoT |
 
 Acceptance:
@@ -392,9 +406,11 @@ Acceptance:
 - [x] Impact KPIs name cleanup metrics; MCP returns `kpi_hints` including `dead_code_candidates_resolved` placeholder.
 - [x] Optional `path_prefix` scopes reported candidates without dropping cross-prefix liveness; guidance forbids Memory as candidate SoT.
 - [x] Shared-package `recommendation` and structure-priority truncation are specified (see doc 79).
+- [x] MCP graph load for anchored unused is neighborhood-bounded; `project_scan` degrades under the tool budget instead of `-32001` (doc 83).
 
 ## Related Documents
 
+- [`83-mcp-tool-budget-and-small-batch-sync.md`](83-mcp-tool-budget-and-small-batch-sync.md) — HTTP MCP hard/soft budgets; unused graph-load contract and live ThinkingSOC evidence.
 - [`80-phased-problematic-code-findings.md`](80-phased-problematic-code-findings.md) — future phased smell/risk findings on existing MCP hosts (docs-only until implemented).
 - [`79-shared-package-wiring-and-unwired-findings.md`](79-shared-package-wiring-and-unwired-findings.md) — wiring `code-metadata` / `common-context` and package `recommendation` rules.
 - [`78-stale-documentation-candidates-and-cleanup-loop.md`](78-stale-documentation-candidates-and-cleanup-loop.md) — sister stale-documentation loop.

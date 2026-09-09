@@ -22,8 +22,8 @@ authority: informative
 visibility: internal
 linked_symbols:
 - backend/services/code-graph-service/src/code_graph_service/application/service.py::CodeGraphService
-doc_version: 1.1.17
-updated_at: '2026-09-05'
+doc_version: 1.1.19
+updated_at: '2026-09-09'
 ---
 
 # 07 - Code-Knowledge Graph Index
@@ -50,7 +50,8 @@ This design extends the existing Docs-as-Code and Technical Logic sections. It f
 - `12-neo4j-runtime-plugins.md` defines required APOC and Graph Data Science plugins for Neo4j (and Compose JVM heap / pagecache env defaults).
 - `81-neo4j-memory-and-content-push-oom-runbook.md` diagnoses Bolt handshake failures from Neo4j heap OOM during long content-push / `ingest-push` syncs.
 - `82-sync-finalizing-and-provider-cost-runbook.md` diagnoses sync stuck at 100% (`status=finalizing`), batched CALL relink, compact `file-hashes` / `list_symbols_index`, pending-edge finalize filters, living-docs file-batch Provider cost, and deferred finalize on multi-batch content-push.
-- `83-mcp-tool-budget-and-small-batch-sync.md` HTTP MCP hard/soft tool budgets, small-batch `sync` (`max_files`), FILE-index change detection, and `quality_audit` scope/deadline contracts (large Neo4j / sshfs).
+- `83-mcp-tool-budget-and-small-batch-sync.md` HTTP MCP hard/soft tool budgets, small-batch `sync` (`max_files`), FILE-index change detection, `quality_audit` scope/deadline, and `unused_candidates` neighborhood load / `project_scan` soft degrade (large Neo4j / ThinkingSOC).
+- `84-embedding-retry-and-self-heal.md` hosted embed DNS/timeout retry, ingest fail-open, FILE `embedding_heal_pending`, and after-ingest self-heal without full-project re-embed.
 - `13-codesymbol-projection-adr.md` accepts `CodeSymbol` + `CODE_REL` as the canonical Neo4j runtime projection.
 - `14-repository-code-wiki-feature-specification.md` defines Repository Code Wiki (holistic repo-level wiki generation; CodeWiki / Google Code Wiki–inspired).
 - `15-call-graph-confidence-and-runtime-traces.md` defines CALL evidence classes, confidence caps/boosts, impact eligibility, and runtime-trace reconciliation (GAP-T02).
@@ -89,7 +90,7 @@ This design extends the existing Docs-as-Code and Technical Logic sections. It f
 - `74-verification-test-matrix-and-results.md` records focused, aggregate, CLI, live, and operational test results.
 - `75-sync-semantic-integrity-and-recovery-evidence.md` records graph counts, semantic completeness, failed runs, and recovery evidence.
 - `76-post-restart-operations-verification-runbook.md` defines the repeatable restart and acceptance procedure.
-- `77-sync-embedding-heal-operator-runbook.md` defines scoped everyday sync vs `astloom sync heal`, operator guidance surfaces (`stats` / `inventory` / preflight), MCP/pgvector URL fallback (`CODE_GRAPH_DATABASE_URL` → `DATABASE_URL`), `embedding_index_unavailable` / `semantic_error` signals, and verification.
+- `77-sync-embedding-heal-operator-runbook.md` defines scoped everyday sync vs `astloom sync heal`, pending-file self-heal, operator guidance surfaces (`stats` / `inventory` / preflight), MCP/pgvector URL fallback (`CODE_GRAPH_DATABASE_URL` → `DATABASE_URL`), `embedding_index_unavailable` / `semantic_error` signals, and verification.
 
 ## Live remediation verification (current)
 
@@ -134,11 +135,12 @@ Code evidence anchor: `backend/services/code-graph-service/src/code_graph_servic
 
 ## History
 
+- 2026-09-09: Doc `83` v1.1 — `unused_candidates` neighborhood load vs `project_scan` soft `degraded`; live ThinkingSOC dump timings. Doc `36` v2.6.3 — MCP budget fields and agent loop.
+- 2026-09-05: Added `83-mcp-tool-budget-and-small-batch-sync.md` (MCP hard/soft budgets, FILE-index small-batch sync, quality_audit scope).
 - 2026-09-03: Adaptive living-docs packing for large files (`pack_docs_batches` + split-on-timeout); human docs already window-embed.
 - 2026-09-03: LiteLLM hard deadline + heuristic docs fallback on Provider hang (`ASTLOOM_LITELLM_TIMEOUT_SECONDS`); docs batch chunk size 8 (`82`/`03`/`39`/`40`).
 - 2026-09-03: Extended `82`/`50`/`03` for constants-only FILE hash publish (`ingest_complete` **or** code children via `file_content_hash_publishable`); live-verified client `unchanged_skip` on `.130`.
 - 2026-09-03: Extended `82`/`50`/`03`/`40` for Neo4j index/hash fast path (`list_symbols_index`, `content_hash_maps`, pending `target_id_prefixes`) after large-repo content-push timing on `.130`.
-- 2026-09-05: Added `83-mcp-tool-budget-and-small-batch-sync.md` (MCP hard/soft budgets, FILE-index small-batch sync, quality_audit scope).
 - 2026-09-03: Added `82-sync-finalizing-and-provider-cost-runbook.md`; updated `03`/`40`/`50` for batched living docs, LLM-hot `RPM // 2`, batched finalize, and content-push `finalize_cross_file`.
 - 2026-08-15: Added `81-neo4j-memory-and-content-push-oom-runbook.md` (Compose heap defaults 4G / pagecache 1G; content-push Bolt OOM remediation).
 - 2026-08-02: Extended `77` with MCP/pgvector URL fallback and operator failure signals (`embedding_index_unavailable`, hybrid `semantic_error`).
@@ -176,7 +178,7 @@ Holistic, architecture-aware repository documentation (overview, module pages, d
 
 ## Dead-code cleanup loop (current)
 
-Unused-symbol candidates, MCP contract, live-until-proven exclusions, and closed-loop guidance + KPIs. Reading order: `36` → `79` (shared-package wiring / unwired findings).
+Unused-symbol candidates, MCP contract, live-until-proven exclusions, closed-loop guidance + KPIs, and MCP tool-budget graph load. Reading order: `36` → `79` (shared-package wiring / unwired findings) → `83` (MCP hard/soft timeout; unused neighborhood vs `project_scan` degrade).
 
 ## Problematic code findings (future)
 
