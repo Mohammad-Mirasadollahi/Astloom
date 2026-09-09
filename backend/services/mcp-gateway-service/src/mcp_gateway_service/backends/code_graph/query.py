@@ -398,7 +398,134 @@ def explore(
         )
     except CodeGraphError as exc:
         raise ValueError(str(exc.message)) from exc
+    payload = _apply_disk_freshness_to_explore(backends, scope, payload)
     return {**base, "graph_mode": backends.graph_mode, **payload}
+
+
+def _apply_disk_freshness_to_explore(
+    backends: PlatformBackends,
+    scope: dict[str, str],
+    payload: dict[str, Any],
+) -> dict[str, Any]:
+    """Refuse stale/missing-on-disk bodies so agents cannot treat Neo4j as current law."""
+    from pathlib import Path
+
+    from astloom_cli.commands.inventory.edited import disk_content_hash
+    from astloom_cli.software_paths import software_paths_for_project
+    from code_graph_service.domain.ports import list_file_symbols_for_paths
+
+    sections = payload.get("sections")
+    if not isinstance(sections, list) or not sections:
+        return payload
+
+    pinned = software_paths_for_project(
+        str(scope.get("tenant_id") or ""),
+        str(scope.get("workspace_id") or ""),
+        str(scope.get("project_id") or ""),
+        must_exist=False,
+    )
+    if not pinned:
+        return payload
+    root = Path(pinned[0]).expanduser()
+    try:
+        if not root.is_dir():
+            return payload
+    except OSError:
+        return payload
+
+    paths = sorted(
+        {
+            str(sec.get("file_path") or "").replace("\\", "/").strip()
+            for sec in sections
+            if isinstance(sec, dict) and str(sec.get("file_path") or "").strip()
+        }
+    )
+    if not paths:
+        return payload
+
+    graph_scope = backends.graph_scope(scope)
+    try:
+        file_syms = list_file_symbols_for_paths(backends.graph.store, graph_scope, paths)
+    except Exception:  # noqa: BLE001 — freshness is best-effort overlay
+        return payload
+    hash_by_path = {
+        str(sym.file_path or "").replace("\\", "/"): str(getattr(sym, "hash_value", "") or "").strip()
+        for sym in file_syms
+        if sym.file_path
+    }
+
+    stale_paths: list[str] = []
+    missing_paths: list[str] = []
+    for rel in paths:
+        abs_path = root / rel
+        if not abs_path.is_file():
+            missing_paths.append(rel)
+            continue
+        stored = hash_by_path.get(rel) or ""
+        if not stored:
+            continue
+        disk = disk_content_hash(abs_path, "")
+        if disk and disk != stored:
+            stale_paths.append(rel)
+
+    bad = set(stale_paths) | set(missing_paths)
+    if not bad:
+        return payload
+
+    # Redact bodies for stale/missing paths — keep structure, force Read/sync.
+    for sec in sections:
+        if not isinstance(sec, dict):
+            continue
+        rel = str(sec.get("file_path") or "").replace("\\", "/").strip()
+        if rel not in bad:
+            continue
+        symbols = sec.get("symbols")
+        if isinstance(symbols, list):
+            redacted = []
+            for row in symbols:
+                if not isinstance(row, dict):
+                    redacted.append(row)
+                    continue
+                clone = dict(row)
+                clone["body"] = ""
+                clone["body_redacted"] = True
+                clone["freshness_status"] = (
+                    "MISSING_ON_DISK" if rel in missing_paths else "STALE"
+                )
+                redacted.append(clone)
+            sec["symbols"] = redacted
+        sec["skeletonized"] = True
+        sec["disk_freshness"] = (
+            "missing_on_disk" if rel in missing_paths else "content_changed"
+        )
+
+    freshness = dict(payload.get("freshness") or {})
+    parts = []
+    if missing_paths:
+        parts.append("missing on disk: " + ", ".join(missing_paths[:8]))
+    if stale_paths:
+        parts.append("content changed since ingest: " + ", ".join(stale_paths[:8]))
+    banner = (
+        "⚠️ Graph stale vs disk — "
+        + "; ".join(parts)
+        + ". Bodies redacted; run scoped sync / Read the file before editing."
+    )
+    freshness.update(
+        {
+            "status": "stale_content" if stale_paths else "missing_on_disk",
+            "is_stale": True,
+            "must_sync": True,
+            "banner": banner,
+            "stale_files": stale_paths[:50],
+            "missing_files": missing_paths[:50],
+            "bodies_redacted": True,
+        }
+    )
+    payload["freshness"] = freshness
+    notes = list(payload.get("notes") or [])
+    notes.insert(0, banner)
+    payload["notes"] = notes
+    return payload
 
 
 def detect_changes(

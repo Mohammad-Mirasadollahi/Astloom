@@ -37,14 +37,18 @@ def classify_edited_paths(
     indexed: set[str],
     pending_rels: set[str],
     file_meta: dict[str, dict[str, str]],
+    force_hash: bool = True,
 ) -> dict[str, str]:
     """Return relative_path → edit_reason for files that need re-sync.
 
     Reasons:
     - ``pending`` — marked pending by freshness / watch
     - ``content_changed`` — on-disk hash differs from stored FILE symbol hash
+    - ``missing_on_disk`` — indexed path no longer exists on disk
 
-    Fast path: skip hashing when file mtime is not newer than symbol ``updated_at``.
+    By default always compare content hashes when a stored hash exists (mtime
+    skip caused false negatives on sshfs / copy / clock skew). Set
+    ``force_hash=False`` only for cheap CLI previews.
     """
     edited: dict[str, str] = {}
     for rel in indexed:
@@ -54,18 +58,26 @@ def classify_edited_paths(
         meta = file_meta.get(rel) or {}
         stored = str(meta.get("hash") or "").strip()
         abs_path = root_path / rel
-        if stored:
-            try:
-                mtime = abs_path.stat().st_mtime
-            except OSError:
-                mtime = None
-            updated = _parse_updated_at(str(meta.get("updated_at") or ""))
-            # Only read+hash when mtime is missing/newer, or updated_at unknown.
-            needs_hash = mtime is None or updated is None or mtime > (updated + 1.0)
+        if not abs_path.is_file():
+            reasons.append("missing_on_disk")
+        elif stored:
+            needs_hash = True
+            if not force_hash:
+                try:
+                    mtime = abs_path.stat().st_mtime
+                except OSError:
+                    mtime = None
+                updated = _parse_updated_at(str(meta.get("updated_at") or ""))
+                needs_hash = mtime is None or updated is None or mtime > (updated + 1.0)
             if needs_hash:
                 disk = disk_content_hash(abs_path, str(meta.get("language") or ""))
                 if disk and disk != stored:
                     reasons.append("content_changed")
         if reasons:
-            edited[rel] = "content_changed" if "content_changed" in reasons else reasons[0]
+            if "missing_on_disk" in reasons:
+                edited[rel] = "missing_on_disk"
+            elif "content_changed" in reasons:
+                edited[rel] = "content_changed"
+            else:
+                edited[rel] = reasons[0]
     return edited

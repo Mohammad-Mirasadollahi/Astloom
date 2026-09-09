@@ -260,9 +260,11 @@ def test_classify_edited_pending_and_hash(tmp_path: Path):
 
     root = tmp_path / "app"
     (root / "src").mkdir(parents=True)
+    (root / "src" / "y.py").write_text("def y():\n    return 2\n", encoding="utf-8")
     path = root / "src" / "x.py"
     path.write_text("def x():\n    return 1\n", encoding="utf-8")
     good_hash = str(content_hash(path.read_text(encoding="utf-8"), "python")["hash"])
+    y_hash = str(content_hash((root / "src" / "y.py").read_text(encoding="utf-8"), "python")["hash"])
     assert disk_content_hash(path, "python") == good_hash
 
     edited = classify_edited_paths(
@@ -271,7 +273,7 @@ def test_classify_edited_pending_and_hash(tmp_path: Path):
         pending_rels={"src/y.py"},
         file_meta={
             "src/x.py": {"hash": "stale-hash", "language": "python"},
-            "src/y.py": {"hash": good_hash, "language": "python"},
+            "src/y.py": {"hash": y_hash, "language": "python"},
         },
     )
     assert edited["src/x.py"] == "content_changed"
